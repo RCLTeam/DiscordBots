@@ -1,0 +1,78 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments (uv, venv, virtualenv)
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# uv artifacts
+.uv/
+
+# Pytest & test cache
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+
+# Ruff & Linter cache
+.ruff_cache/
+.mypy_cache/
+
+# PGlite & Database artifacts
+.pglite/
+*.pglite
+pglite_data/
+pgdata/
+*.sqlite
+*.sqlite3
+*.db
+node_modules/
+
+# Alembic artifacts
+alembic.log
+
+# Environment variables & secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# IDEs and OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
