@@ -35,6 +35,9 @@ packages = ["src/liga_bot"]
 asyncio_mode = "auto"
 pythonpath = ["src"]
 testpaths = ["tests"]
+filterwarnings = [
+    "ignore:'audioop' is deprecated:DeprecationWarning:discord.player",
+]
 
 [tool.ruff]
 line-length = 100
