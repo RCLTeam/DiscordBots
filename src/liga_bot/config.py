@@ -24,6 +24,33 @@ DEFAULT_TICKETS_CATEGORY_NAMES: Final[tuple[str, ...]] = (
 DEFAULT_TICKET_REVISION_HOURS: Final[int] = 24
 DEFAULT_TICKET_AVISO_MARCADOR: Final[str] = "⚠️ TICKET_SIN_RESPUESTA"
 
+# Constantes canónicas de equipos oficiales de la liga
+TEAMS_PREMIER: tuple[str, ...] = (
+    "Vanguard Gaming",
+    "Nexus Esports",
+    "Aegis Club",
+    "Eclipse Gaming",
+    "Apex Predators",
+    "Storm Legion",
+    "Titan Gaming",
+    "Ironclad Esports",
+    "Shadow Guard",
+    "Valiant Esports",
+)
+TEAMS_ASCEND: tuple[str, ...] = (
+    "Frostbite Esports",
+    "Infernal Gaming",
+    "Thunder Squad",
+    "Venomous Club",
+    "Quantum Gaming",
+    "Zephyr Esports",
+    "Nova Core",
+    "Crimson Tide",
+    "Spectre Gaming",
+    "Blaze Syndicate",
+)
+TEAMS_ALL: tuple[str, ...] = TEAMS_PREMIER + TEAMS_ASCEND
+
 
 class Settings(BaseSettings):
     """
@@ -63,6 +90,22 @@ class Settings(BaseSettings):
     ceo_ascend_role_id: int = Field(
         default=1548795784655405087,
         description="ID del rol de CEO de la división Ascend.",
+    )
+    ceo_role_id: int = Field(
+        default=0,
+        description="ID del rol de CEO general.",
+    )
+    sin_verificar_role_id: int = Field(
+        default=0,
+        description="ID del rol Sin Verificar asignado a nuevos miembros.",
+    )
+    ticket_rol_category_id: int = Field(
+        default=0,
+        description="ID de categoría de Discord para tickets de verificación de rol.",
+    )
+    free_role_name: str = Field(
+        default="Libre",
+        description="Nombre del rol asignado a agentes libres.",
     )
 
     # Persistencia y Motores Duales

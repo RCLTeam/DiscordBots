@@ -681,7 +681,7 @@ async def test_cli_seed_teams_idempotency_multiple_executions(
     stats4 = await seed_teams(session_factory, modified_teams)
     assert stats4["created"] == 0
     assert stats4["updated"] == 2
-    assert stats4["skipped"] == 6
+    assert stats4["skipped"] == len(CANONICAL_DEFAULT_TEAMS) - 2
     assert await repo.count() == len(CANONICAL_DEFAULT_TEAMS)
 
 
