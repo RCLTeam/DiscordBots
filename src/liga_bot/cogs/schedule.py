@@ -75,6 +75,7 @@ class ScheduleCog(commands.Cog, name="Schedule"):
         fecha="Fecha del partido en formato DD/MM/YYYY (opcional)",
         hora="Hora del partido en formato HH:MM (opcional)",
     )
+    @app_commands.default_permissions(manage_guild=True)
     async def crear_partido(
         self,
         interaction: discord.Interaction,
@@ -274,6 +275,7 @@ class ScheduleCog(commands.Cog, name="Schedule"):
         jornada="Número de jornada",
         archivo="Archivo CSV con columnas: equipo1,equipo2,fecha,hora",
     )
+    @app_commands.default_permissions(manage_guild=True)
     async def importar_jornada(
         self,
         interaction: discord.Interaction,
@@ -291,6 +293,7 @@ class ScheduleCog(commands.Cog, name="Schedule"):
         jornada="Número de jornada",
         archivo="Archivo CSV con columnas: equipo1,equipo2,fecha,hora",
     )
+    @app_commands.default_permissions(manage_guild=True)
     async def crear_jornada(
         self,
         interaction: discord.Interaction,

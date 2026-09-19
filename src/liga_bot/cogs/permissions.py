@@ -21,20 +21,27 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-async def resolve_member(interaction: discord.Interaction) -> discord.Member | None:
+async def resolve_member(
+    interaction: discord.Interaction | discord.Member,
+) -> discord.Member | None:
     """
-    Resuelve la entidad discord.Member a partir de interaction.user.
+    Resuelve la entidad discord.Member a partir de interaction o miembro directo.
 
-    1. Si ya es una instancia de discord.Member, la retorna directamente.
+    1. Si ya es una instancia de discord.Member (o mock con roles), la retorna directamente.
     2. Si interaction.guild existe, consulta la caché local (guild.get_member).
     3. Si no está en caché, intenta obtenerla mediante la API de red (guild.fetch_member).
     4. Si falla la resolución o se ejecuta en mensajes directos (DM), retorna None.
     """
-    user = interaction.user
+    if isinstance(interaction, discord.Member) or (
+        hasattr(interaction, "roles") and not hasattr(interaction, "user")
+    ):
+        return interaction
+
+    user = getattr(interaction, "user", None)
     if isinstance(user, discord.Member):
         return user
 
-    guild = interaction.guild
+    guild = getattr(interaction, "guild", None)
     if guild is not None and user is not None:
         cached_member = guild.get_member(user.id)
         if cached_member is not None:
@@ -54,19 +61,39 @@ async def resolve_member(interaction: discord.Interaction) -> discord.Member | N
 
 
 async def is_staff(
-    interaction: discord.Interaction,
+    member: discord.Interaction | discord.Member,
     settings: Settings | None = None,
+    *,
+    interaction: discord.Interaction | None = None,
 ) -> bool:
-    """Verifica si el usuario posee rol de Staff o permisos de Administrador."""
-    member = await resolve_member(interaction)
-    if member is None:
+    """
+    Verifica si el miembro o interacción posee rol de Staff, rol de CEO,
+    o permisos nativos de Administrador o Administrar Servidor (manage_guild).
+    """
+    target = member if member is not None else interaction
+    if target is None:
         return False
-    if getattr(getattr(member, "guild_permissions", None), "administrator", False):
-        return True
+
+    actual_member = await resolve_member(target)
+    if actual_member is None:
+        return False
+
+    perms = getattr(actual_member, "guild_permissions", None)
+    if perms is not None:
+        admin = getattr(perms, "administrator", False)
+        manage_guild = getattr(perms, "manage_guild", False)
+        if (admin is True or (isinstance(admin, bool) and admin)) or (
+            manage_guild is True or (isinstance(manage_guild, bool) and manage_guild)
+        ):
+            return True
 
     app_settings = settings or get_settings()
-    user_roles = {r.id for r in getattr(member, "roles", [])}
-    return app_settings.staff_role_id in user_roles
+    user_roles = {r.id for r in getattr(actual_member, "roles", [])}
+    if app_settings.staff_role_id in user_roles:
+        return True
+    if app_settings.ceo_role_id > 0 and app_settings.ceo_role_id in user_roles:
+        return True
+    return False
 
 
 async def is_admin(

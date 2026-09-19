@@ -17,6 +17,7 @@ from discord.ext import commands, tasks
 from liga_bot.__main__ import main, run_bot, setup_logging
 from liga_bot.bot import DEFAULT_EXTENSIONS, LigaBot
 from liga_bot.config import Settings
+from liga_bot.services.role_service import RoleService
 from liga_bot.services.schedule_service import ScheduleService
 from liga_bot.services.ticket_service import TicketService
 
@@ -33,6 +34,7 @@ async def test_bot_initialization_defaults():
     assert bot.session_factory is None
     assert bot.schedule_service is None
     assert bot.ticket_service is None
+    assert bot.role_service is None
     assert bot.extensions_to_load == DEFAULT_EXTENSIONS
 
     await bot.close()
@@ -72,8 +74,10 @@ async def test_bot_setup_hook_initialization():
         assert bot.session_factory is mock_session_factory
         assert isinstance(bot.schedule_service, ScheduleService)
         assert isinstance(bot.ticket_service, TicketService)
+        assert isinstance(bot.role_service, RoleService)
         assert bot.schedule_service.bot is bot
         assert bot.ticket_service.bot is bot
+        assert bot.role_service.bot is bot
 
         await bot.close()
 

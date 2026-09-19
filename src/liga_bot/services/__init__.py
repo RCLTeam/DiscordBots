@@ -1,5 +1,6 @@
 """Módulo de servicios de dominio de LigaBot."""
 
+from liga_bot.services.role_service import RoleService
 from liga_bot.services.schedule_service import (
     JornadaResult,
     MatchError,
@@ -19,6 +20,7 @@ __all__ = [
     "JornadaResult",
     "MatchError",
     "MatchResult",
+    "RoleService",
     "ScheduleService",
     "TicketAuditResult",
     "TicketService",
