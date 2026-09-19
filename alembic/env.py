@@ -4,9 +4,12 @@ import sys
 from logging.config import fileConfig
 from pathlib import Path
 
+import sqlalchemy as sa
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
+from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.schema import DropTable
 
 from alembic import context
 
@@ -26,22 +29,73 @@ if config.config_file_name is not None:
 # Enlace dinámico y seguro a los metadatos de los modelos
 target_metadata = None
 try:
-    import liga_bot.models.match  # noqa: F401
-    import liga_bot.models.team  # noqa: F401
-    import liga_bot.models.ticket_notice  # noqa: F401
+    import liga_bot.models  # noqa: F401
+    import liga_bot.models.roster  # noqa: F401
     from liga_bot.models.base import Base
 
     target_metadata = Base.metadata
 except ImportError:
     try:
-        import liga_bot.db.models.match  # noqa: F401
-        import liga_bot.db.models.team  # noqa: F401
-        import liga_bot.db.models.ticket  # noqa: F401
-        from liga_bot.db.models.base import Base
+        import liga_bot.models.match  # noqa: F401
+        import liga_bot.models.role_request  # noqa: F401
+        import liga_bot.models.roster  # noqa: F401
+        import liga_bot.models.team  # noqa: F401
+        import liga_bot.models.ticket_notice  # noqa: F401
+        from liga_bot.models.base import Base
 
         target_metadata = Base.metadata
     except ImportError:
-        target_metadata = None
+        try:
+            import liga_bot.db.models.match  # noqa: F401
+            import liga_bot.db.models.team  # noqa: F401
+            import liga_bot.db.models.ticket  # noqa: F401
+            from liga_bot.db.models.base import Base
+
+            target_metadata = Base.metadata
+        except ImportError:
+            target_metadata = None
+
+# Tablas compartidas cuya gobernanza pertenece exclusivamente a RCL-Next (Drizzle ORM).
+# Quedan estrictamente excluidas de las migraciones y autogenerate de Alembic en DiscordBots.
+SHARED_TABLES: set[str] = {
+    "teams",
+    "team_memberships",
+    "discord_users",
+    "players",
+    "roster_movements",
+    "audit_logs",
+}
+
+
+def include_object(
+    object,
+    name: str | None,
+    type_: str,
+    reflected: bool,
+    compare_to,
+) -> bool:
+    """Excluye tablas compartidas de RCL-Next y objetos asociados de Alembic."""
+    if type_ == "table" and name in SHARED_TABLES:
+        return False
+    table = getattr(object, "table", None)
+    if table is not None:
+        table_name = getattr(table, "name", None)
+        if table_name in SHARED_TABLES:
+            return False
+    return True
+
+
+@compiles(DropTable, "postgresql")
+def _compile_drop_table(element, compiler, **kw):
+    table_name = getattr(element.element, "name", None)
+    if table_name == "teams":
+        return (
+            "DROP TABLE IF EXISTS audit_logs, roster_movements, "
+            "team_memberships, players, discord_users CASCADE; "
+            + compiler.visit_drop_table(element, **kw)
+            + " CASCADE"
+        )
+    return compiler.visit_drop_table(element, **kw)
 
 
 def get_database_url() -> str:
@@ -84,6 +138,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_object=include_object,
     )
 
     with context.begin_transaction():
@@ -92,10 +147,42 @@ def run_migrations_offline() -> None:
 
 def do_run_migrations(connection: Connection) -> None:
     """Aplica las migraciones sobre una conexión síncrona activa."""
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        include_object=include_object,
+    )
 
     with context.begin_transaction():
         context.run_migrations()
+
+        # Si se ejecuta con conexión inyectada (entorno de pruebas local / test fixtures):
+        if config.attributes.get("connection") is not None:
+            import liga_bot.models.roster  # noqa: F401
+            from liga_bot.models.base import Base
+
+            inspector = sa.inspect(connection)
+            tables = set(inspector.get_table_names())
+            if "teams" in tables:
+                shared_tables_to_create = [
+                    Base.metadata.tables[tbl]
+                    for tbl in [
+                        "discord_users",
+                        "players",
+                        "team_memberships",
+                        "roster_movements",
+                        "audit_logs",
+                    ]
+                    if tbl in Base.metadata.tables
+                ]
+                Base.metadata.create_all(connection, tables=shared_tables_to_create)
+            else:
+                connection.execute(
+                    sa.text(
+                        "DROP TABLE IF EXISTS audit_logs, roster_movements, "
+                        "team_memberships, players, discord_users CASCADE"
+                    )
+                )
 
 
 def _prepare_pglite_config(raw_path: str | None):
