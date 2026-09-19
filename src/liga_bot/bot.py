@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from liga_bot.config import Settings, get_settings
 from liga_bot.database import close_engine, get_engine, get_session_factory
+from liga_bot.services.role_service import RoleService
 from liga_bot.services.schedule_service import ScheduleService
 from liga_bot.services.ticket_service import TicketService
 
@@ -28,6 +29,7 @@ logger = logging.getLogger("liga_bot.bot")
 
 DEFAULT_EXTENSIONS: Final[tuple[str, ...]] = (
     "liga_bot.cogs.admin",
+    "liga_bot.cogs.roles",
     "liga_bot.cogs.schedule",
     "liga_bot.cogs.teams",
     "liga_bot.cogs.tickets",
@@ -74,6 +76,7 @@ class LigaBot(commands.Bot):
         self.session_factory: async_sessionmaker[AsyncSession] | None = None
         self.schedule_service: ScheduleService | None = None
         self.ticket_service: TicketService | None = None
+        self.role_service: RoleService | None = None
 
     async def setup_hook(self) -> None:
         """
@@ -81,7 +84,7 @@ class LigaBot(commands.Bot):
 
         1. Inicializa el motor de base de datos dual (PostgreSQL o PGlite).
         2. Inicializa la factoría de sesiones asíncronas.
-        3. Instancia los servicios de dominio (ScheduleService, TicketService).
+        3. Instancia los servicios de dominio (ScheduleService, TicketService, RoleService).
         4. Carga de forma asíncrona todas las extensiones / Cogs configuradas.
         """
         logger.info("Ejecutando setup_hook de LigaBot...")
@@ -104,6 +107,13 @@ class LigaBot(commands.Bot):
 
         if self.ticket_service is None:
             self.ticket_service = TicketService(
+                session_factory=self.session_factory,
+                settings=self.settings,
+                bot=self,
+            )
+
+        if self.role_service is None:
+            self.role_service = RoleService(
                 session_factory=self.session_factory,
                 settings=self.settings,
                 bot=self,
