@@ -174,6 +174,7 @@ class TicketsCog(commands.Cog, name="Tickets"):
         name="revisar-tickets",
         description="Fuerza la revisión inmediata de tickets inactivos sin esperar a las 24h",
     )
+    @app_commands.default_permissions(manage_guild=True)
     async def revisar_tickets(self, interaction: discord.Interaction) -> None:
         """Comando slash para ejecutar la auditoría manual de tickets."""
         if interaction.guild is None:
@@ -202,6 +203,15 @@ class TicketsCog(commands.Cog, name="Tickets"):
                 f"❌ Ocurrió un error inesperado al revisar los tickets: `{exc}`",
                 ephemeral=True,
             )
+
+    @app_commands.command(
+        name="revisar-tickets-manual",
+        description="Alias manual para forzar la revisión inmediata de tickets inactivos",
+    )
+    @app_commands.default_permissions(manage_guild=True)
+    async def revisar_tickets_manual(self, interaction: discord.Interaction) -> None:
+        """Alias de /revisar-tickets para forzar la revisión manual."""
+        await self.revisar_tickets.callback(self, interaction)
 
     async def cog_load(self) -> None:
         """Inicia el bucle si no estaba activo."""
