@@ -39,7 +39,7 @@ class TestMetadataAndParity:
 
     def test_metadata_table_registry(self):
         """Verifica que Base.metadata contenga exactamente las tablas esperadas."""
-        expected_tables = {"teams", "matches", "ticket_notices"}
+        expected_tables = {"teams", "matches", "ticket_notices", "role_requests"}
         assert expected_tables.issubset(set(Base.metadata.tables.keys()))
 
     @pytest.mark.asyncio

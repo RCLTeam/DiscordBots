@@ -17,3 +17,18 @@ class MatchStatus(str, enum.Enum):
     CANAL_CREADO = "CANAL_CREADO"
     JUGADO = "JUGADO"
     CANCELADO = "CANCELADO"
+
+
+class RoleRequestStatus(str, enum.Enum):
+    """Ciclo de vida y estado operativo de una solicitud de rol de equipo."""
+
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    DENIED = "DENIED"
+
+
+__all__ = [
+    "Division",
+    "MatchStatus",
+    "RoleRequestStatus",
+]
