@@ -16,6 +16,28 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from liga_bot.models import Base, Division, Match, MatchStatus, Team, TicketNotice
 
+# Conjunto canónico de tablas compartidas gobernadas por RCL-Next
+SHARED_TABLES: set[str] = {
+    "teams",
+    "team_memberships",
+    "discord_users",
+    "players",
+    "roster_movements",
+    "audit_logs",
+}
+
+
+def include_object(object, name: str | None, type_: str, reflected: bool, compare_to) -> bool:
+    """Excluye tablas compartidas gobernadas por RCL-Next de las migraciones y comparación."""
+    if type_ == "table" and name in SHARED_TABLES:
+        return False
+    table = getattr(object, "table", None)
+    if table is not None:
+        table_name = getattr(table, "name", None)
+        if table_name in SHARED_TABLES:
+            return False
+    return True
+
 
 @pytest_asyncio.fixture
 async def session(migrated_db: AsyncEngine) -> AsyncGenerator[AsyncSession, None]:
@@ -39,8 +61,19 @@ class TestMetadataAndParity:
 
     def test_metadata_table_registry(self):
         """Verifica que Base.metadata contenga exactamente las tablas esperadas."""
-        expected_tables = {"teams", "matches", "ticket_notices"}
+        expected_tables = {"teams", "matches", "ticket_notices", "role_requests"}
         assert expected_tables.issubset(set(Base.metadata.tables.keys()))
+
+    def test_include_object_filters_shared_tables(self):
+        """Verifica que include_object excluya correctamente las 6 tablas compartidas."""
+        for table_name in SHARED_TABLES:
+            assert include_object(None, table_name, "table", False, None) is False
+            assert include_object(None, table_name, "table", True, None) is False
+
+        # Tablas gestionadas por LigaBot deben incluirse
+        for table_name in ["matches", "ticket_notices", "role_requests"]:
+            assert include_object(None, table_name, "table", False, None) is True
+            assert include_object(None, table_name, "table", True, None) is True
 
     @pytest.mark.asyncio
     async def test_alembic_schema_diff_is_empty(self, migrated_db: AsyncEngine):
@@ -50,7 +83,11 @@ class TestMetadataAndParity:
             def do_compare(sync_conn):
                 mc = MigrationContext.configure(
                     sync_conn,
-                    opts={"compare_type": True, "compare_server_default": True},
+                    opts={
+                        "compare_type": True,
+                        "compare_server_default": True,
+                        "include_object": include_object,
+                    },
                 )
                 return compare_metadata(mc, Base.metadata)
 

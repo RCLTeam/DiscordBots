@@ -42,55 +42,127 @@ class TeamSeedData(TypedDict):
 
 
 CANONICAL_DEFAULT_TEAMS: Final[tuple[TeamSeedData, ...]] = (
-    # División PREMIER
+    # División PREMIER (10 equipos oficiales)
     {
-        "name": "Planar Shock Pingus",
-        "tag": "PSP",
+        "name": "Vanguard Gaming",
+        "tag": "VAN",
         "division": Division.PREMIER,
         "discord_role_id": 1547729760384319501,
     },
     {
-        "name": "Fnix Esports",
-        "tag": "FNX",
+        "name": "Nexus Esports",
+        "tag": "NEX",
         "division": Division.PREMIER,
         "discord_role_id": 1547729760384319502,
     },
     {
-        "name": "Lobos",
-        "tag": "LOB",
+        "name": "Aegis Club",
+        "tag": "AEG",
         "division": Division.PREMIER,
         "discord_role_id": 1547729760384319503,
     },
     {
-        "name": "Cuervos",
-        "tag": "CRV",
+        "name": "Eclipse Gaming",
+        "tag": "ECL",
         "division": Division.PREMIER,
         "discord_role_id": 1547729760384319504,
     },
-    # División ASCEND
     {
-        "name": "Dragones",
-        "tag": "DRG",
+        "name": "Apex Predators",
+        "tag": "APX",
+        "division": Division.PREMIER,
+        "discord_role_id": 1547729760384319505,
+    },
+    {
+        "name": "Storm Legion",
+        "tag": "STM",
+        "division": Division.PREMIER,
+        "discord_role_id": 1547729760384319506,
+    },
+    {
+        "name": "Titan Gaming",
+        "tag": "TTN",
+        "division": Division.PREMIER,
+        "discord_role_id": 1547729760384319507,
+    },
+    {
+        "name": "Ironclad Esports",
+        "tag": "ICL",
+        "division": Division.PREMIER,
+        "discord_role_id": 1547729760384319508,
+    },
+    {
+        "name": "Shadow Guard",
+        "tag": "SHD",
+        "division": Division.PREMIER,
+        "discord_role_id": 1547729760384319509,
+    },
+    {
+        "name": "Valiant Esports",
+        "tag": "VAL",
+        "division": Division.PREMIER,
+        "discord_role_id": 1547729760384319510,
+    },
+    # División ASCEND (10 equipos oficiales)
+    {
+        "name": "Frostbite Esports",
+        "tag": "FRB",
         "division": Division.ASCEND,
         "discord_role_id": 1548795784655405001,
     },
     {
-        "name": "Fenix Ascend",
-        "tag": "FXA",
+        "name": "Infernal Gaming",
+        "tag": "INF",
         "division": Division.ASCEND,
         "discord_role_id": 1548795784655405002,
     },
     {
-        "name": "Kraken Esports",
-        "tag": "KRK",
+        "name": "Thunder Squad",
+        "tag": "THN",
         "division": Division.ASCEND,
         "discord_role_id": 1548795784655405003,
     },
     {
-        "name": "Viper Gaming",
-        "tag": "VIP",
+        "name": "Venomous Club",
+        "tag": "VNM",
         "division": Division.ASCEND,
         "discord_role_id": 1548795784655405004,
+    },
+    {
+        "name": "Quantum Gaming",
+        "tag": "QNT",
+        "division": Division.ASCEND,
+        "discord_role_id": 1548795784655405005,
+    },
+    {
+        "name": "Zephyr Esports",
+        "tag": "ZPH",
+        "division": Division.ASCEND,
+        "discord_role_id": 1548795784655405006,
+    },
+    {
+        "name": "Nova Core",
+        "tag": "NVC",
+        "division": Division.ASCEND,
+        "discord_role_id": 1548795784655405007,
+    },
+    {
+        "name": "Crimson Tide",
+        "tag": "CRD",
+        "division": Division.ASCEND,
+        "discord_role_id": 1548795784655405008,
+    },
+    {
+        "name": "Spectre Gaming",
+        "tag": "SPC",
+        "division": Division.ASCEND,
+        "discord_role_id": 1548795784655405009,
+    },
+    {
+        "name": "Blaze Syndicate",
+        "tag": "BLZ",
+        "division": Division.ASCEND,
+        "discord_role_id": 1548795784655405010,
     },
 )
 
