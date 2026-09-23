@@ -24,7 +24,9 @@ from liga_bot.database import close_engine, get_engine, get_session_factory
 from liga_bot.services.role_service import RoleService
 from liga_bot.services.roster_sync_service import RosterSyncService
 from liga_bot.services.schedule_service import ScheduleService
+from liga_bot.services.suggestion_service import SuggestionService
 from liga_bot.services.ticket_service import TicketService
+from liga_bot.services.websocket_bridge_service import WebsocketBridgeService
 
 logger = logging.getLogger("liga_bot.bot")
 
@@ -52,6 +54,9 @@ class LigaBot(commands.Bot):
         command_prefix: str = "!",
         intents: discord.Intents | None = None,
         extensions: Sequence[str] | None = None,
+        *,
+        suggestion_service: SuggestionService | None = None,
+        websocket_bridge_service: WebsocketBridgeService | None = None,
         **kwargs: Any,
     ) -> None:
         resolved_settings = settings or get_settings()
@@ -80,6 +85,8 @@ class LigaBot(commands.Bot):
         self.ticket_service: TicketService | None = None
         self.role_service: RoleService | None = None
         self.roster_sync_service: RosterSyncService | None = None
+        self.suggestion_service: SuggestionService | None = suggestion_service
+        self.websocket_bridge_service: WebsocketBridgeService | None = websocket_bridge_service
 
     async def setup_hook(self) -> None:
         """
@@ -88,8 +95,9 @@ class LigaBot(commands.Bot):
         1. Inicializa el motor de base de datos dual (PostgreSQL o PGlite).
         2. Inicializa la factoría de sesiones asíncronas.
         3. Instancia los servicios de dominio (ScheduleService, TicketService,
-           RoleService, RosterSyncService).
+           RoleService, RosterSyncService, SuggestionService, WebsocketBridgeService).
         4. Carga de forma asíncrona todas las extensiones / Cogs configuradas.
+        5. Inicia el servidor WebSocket Bridge si está habilitado por configuración.
         """
         logger.info("Ejecutando setup_hook de LigaBot...")
 
@@ -130,6 +138,19 @@ class LigaBot(commands.Bot):
                 bot=self,
             )
 
+        if self.suggestion_service is None:
+            self.suggestion_service = SuggestionService(
+                bot=self,
+                settings=self.settings,
+            )
+
+        if self.websocket_bridge_service is None:
+            self.websocket_bridge_service = WebsocketBridgeService(
+                bot=self,
+                settings=self.settings,
+                suggestion_service=self.suggestion_service,
+            )
+
         # 3. Carga de Cogs / Extensiones
         for extension in self.extensions_to_load:
             try:
@@ -139,19 +160,41 @@ class LigaBot(commands.Bot):
                 logger.error("Error cargando extensión '%s': %s", extension, exc, exc_info=True)
                 raise
 
+        # 4. Servidor WebSocket Bridge
+        if self.settings.bridge_enabled and self.websocket_bridge_service is not None:
+            logger.info(
+                "Iniciando WebSocket Bridge en ws://%s:%s/ws/bridge...",
+                self.settings.bridge_host,
+                self.settings.bridge_port,
+            )
+            await self.websocket_bridge_service.start()
+        else:
+            logger.info("WebSocket Bridge deshabilitado por configuración (bridge_enabled=False).")
+
         logger.info("setup_hook completado con éxito.")
 
     async def close(self) -> None:
         """
         Cierre ordenado y liberación segura de recursos de LigaBot.
 
-        1. Cancela cualquier tarea en segundo plano (tasks.Loop) en los Cogs.
-        2. Cierra y libera el motor de base de datos y conexiones activas.
-        3. Invoca super().close() para cerrar la sesión HTTP y websocket de Discord.
+        1. Detiene y desconecta de forma atómica el servidor WebSocket Bridge si está activo.
+        2. Cancela cualquier tarea en segundo plano (tasks.Loop) en los Cogs.
+        3. Cierra y libera el motor de base de datos y conexiones activas.
+        4. Invoca super().close() para cerrar la sesión HTTP y websocket de Discord.
         """
         logger.info("Iniciando secuencia de cierre ordenado de LigaBot...")
 
-        # 1. Cancelar bucles en segundo plano en los Cogs
+        # 1. Detener WebSocket Bridge si está activo
+        if self.websocket_bridge_service is not None:
+            logger.info("Deteniendo WebSocket Bridge...")
+            bridge = self.websocket_bridge_service
+            self.websocket_bridge_service = None
+            try:
+                await bridge.stop()
+            except Exception as exc:
+                logger.warning("Error deteniendo WebSocket Bridge: %s", exc)
+
+        # 2. Cancelar bucles en segundo plano en los Cogs
         for cog_name, cog in list(self.cogs.items()):
             if hasattr(cog, "stop_loops") and callable(cog.stop_loops):
                 try:
@@ -170,14 +213,14 @@ class LigaBot(commands.Bot):
                         "Error inspeccionando bucles en %s.%s: %s", cog_name, attr_name, exc
                     )
 
-        # 2. Cerrar motor de base de datos
+        # 3. Cerrar motor de base de datos
         if self.engine is not None:
             logger.info("Cerrando motor de base de datos...")
             await close_engine(self.engine)
             self.engine = None
             self.session_factory = None
 
-        # 3. Cerrar cliente de Discord
+        # 4. Cerrar cliente de Discord
         logger.info("Cerrando conexión de Discord...")
         await super().close()
         logger.info("LigaBot cerrado completamente.")

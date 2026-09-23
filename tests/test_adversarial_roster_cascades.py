@@ -1118,11 +1118,23 @@ class TestHighVolumeEmpiricalStressHarness:
         movements = []
         users = []
 
+        # NOTA DE ENTORNO (Node.js 24+ / PGlite):
+        # En versiones recientes de Node.js (24+), la gestión de fragmentación de buffers
+        # sobre sockets UNIX en @electric-sql/pglite-socket sufre desbordamientos al recibir
+        # consultas INSERT multi-fila con RETURNING superiores a 16KB (~97+ registros de golpe),
+        # cerrando el socket y tumbando la instancia efímera de la base de datos para el resto
+        # de la sesión de tests. Para evitar este fallo de infraestructura, creamos los 100
+        # usuarios en lotes de 25, preservando íntegra la volumetría del test de estrés sin
+        # saturar el socket.
         # Create 100 users
-        for i in range(100):
-            users.append(DiscordUser(discord_id=f"stress_u_{i:03d}", username=f"stress_user_{i}"))
-        session.add_all(users)
-        await session.flush()
+        for chunk in range(4):
+            batch = [
+                DiscordUser(discord_id=f"stress_u_{i:03d}", username=f"stress_user_{i}")
+                for i in range(chunk * 25, (chunk + 1) * 25)
+            ]
+            session.add_all(batch)
+            await session.flush()
+            users.extend(batch)
 
         roles = [
             RosterRole.TOP,
@@ -1145,7 +1157,9 @@ class TestHighVolumeEmpiricalStressHarness:
             session.add(t)
             await session.flush()
 
-            # 5 memberships per team
+            # 5 memberships y 5 movements por equipo
+            team_m = []
+            team_mov = []
             for m_idx in range(5):
                 u = users[t_idx * 5 + m_idx]
                 m = TeamMembership(
@@ -1160,11 +1174,13 @@ class TestHighVolumeEmpiricalStressHarness:
                     action=RosterMovementAction.JOINED,
                     role=roles[m_idx],
                 )
+                team_m.append(m)
+                team_mov.append(mov)
                 memberships.append(m)
                 movements.append(mov)
 
-        session.add_all(memberships + movements)
-        await session.flush()
+            session.add_all(team_m + team_mov)
+            await session.flush()
 
         # Delete first 10 teams via raw SQL
         deleted_team_ids = [t.id for t in teams[:10]]
