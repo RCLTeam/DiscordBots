@@ -1,7 +1,4 @@
-"""Adversarial stress tests for SuggestionService.
-
-Testing edge cases, boundary conditions, malicious payloads, and failure modes.
-"""
+"""Pruebas de resiliencia, casos límite y condiciones de borde para SuggestionService."""
 
 from __future__ import annotations
 

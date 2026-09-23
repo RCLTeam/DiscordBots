@@ -1,12 +1,4 @@
-"""Empirical challenge tests for WebsocketBridgeService.
-
-Adversarial stress-testing of:
-1. Pre-login silence under high-volume malformed/invalid frame flooding (50+ frames).
-2. Auth timeout enforcement (code 4001).
-3. Empty supertoken bypass prevention.
-4. Two-phase delivery under abrupt client disconnection and transport errors.
-5. Multi-client rate limit concurrency with shared global sliding window.
-"""
+"""Pruebas de concurrencia, desconexiones y estrés para WebsocketBridgeService."""
 
 from __future__ import annotations
 

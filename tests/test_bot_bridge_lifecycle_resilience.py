@@ -1,14 +1,4 @@
-"""
-Suite de pruebas adversariales y fuzzer de concurrencia para el ciclo de vida de LigaBot.
-
-Desafía empíricamente:
-1. Ciclos rápidos de inicio/parada (20 iteraciones con mocks y con sockets reales efímeros).
-2. Concurrencia masiva en bot.close() con retardo simulado en bridge.stop() (cero carreras).
-3. Resiliencia ante fallos y excepciones arbitrarias durante bridge.stop() (cierre de DB y bot).
-4. Resiliencia ante fallo en bridge.start() seguido de close() en bloque finally.
-5. Inyección de mocks combinatoria sobre los 4 servicios de dominio + 2 servicios del bridge.
-6. Cierre ordenado de múltiples websockets activos durante parada con código 1000.
-"""
+"""Pruebas de resiliencia y concurrencia para el ciclo de vida de LigaBot."""
 
 from __future__ import annotations
 
@@ -34,7 +24,7 @@ from liga_bot.services.websocket_bridge_service import WebsocketBridgeService
 
 
 @pytest.mark.asyncio
-async def test_adversarial_rapid_start_stop_cycling_20_instances():
+async def test_resilience_rapid_start_stop_cycling_20_instances():
     """
     Stress-test: 20 ciclos consecutivos de instanciación, setup_hook() y close().
     Verifica que no hay fugas de referencias, estados residuales ni degradación de rendimiento.
@@ -82,7 +72,7 @@ async def test_adversarial_rapid_start_stop_cycling_20_instances():
 
 
 @pytest.mark.asyncio
-async def test_adversarial_rapid_start_stop_real_ephemeral_sockets_20_cycles():
+async def test_resilience_rapid_start_stop_real_ephemeral_sockets_20_cycles():
     """
     Stress-test empírico con la pila de red real:
     Abre y cierra el servidor WebSocket Bridge real 20 veces en puertos efímeros (port=0).
@@ -93,7 +83,7 @@ async def test_adversarial_rapid_start_stop_real_ephemeral_sockets_20_cycles():
         settings = Settings(
             bridge_enabled=True,
             bridge_port=0,
-            discord_bot_supertoken="adversarial-token-xyz",
+            discord_bot_supertoken="resilience-token-xyz",
         )
         bot = LigaBot(settings=settings, extensions=())
 
@@ -132,7 +122,7 @@ async def test_adversarial_rapid_start_stop_real_ephemeral_sockets_20_cycles():
 
 
 @pytest.mark.asyncio
-async def test_adversarial_rapid_cycling_with_active_websockets():
+async def test_resilience_rapid_cycling_with_active_websockets():
     """
     Stress-test: Cierra el bot mientras múltiples conexiones WebSocket activas (autenticadas
     y no autenticadas) están conectadas simultáneamente.
@@ -205,7 +195,7 @@ async def test_adversarial_rapid_cycling_with_active_websockets():
 
 
 @pytest.mark.asyncio
-async def test_adversarial_massive_concurrent_close_with_delayed_bridge_stop():
+async def test_resilience_massive_concurrent_close_with_delayed_bridge_stop():
     """
     Stress-test de concurrencia: 30 tareas invocando bot.close() simultáneamente mientras
     bridge.stop(), close_engine() y super().close() experimentan retardos asíncronos.
@@ -277,7 +267,7 @@ async def test_adversarial_massive_concurrent_close_with_delayed_bridge_stop():
     ],
 )
 @pytest.mark.asyncio
-async def test_adversarial_bridge_stop_exceptions_do_not_leak_or_block_teardown(
+async def test_resilience_bridge_stop_exceptions_do_not_leak_or_block_teardown(
     hostile_exception: Exception,
 ):
     """
@@ -318,7 +308,7 @@ async def test_adversarial_bridge_stop_exceptions_do_not_leak_or_block_teardown(
 
 
 @pytest.mark.asyncio
-async def test_adversarial_bridge_start_failure_followed_by_close():
+async def test_resilience_bridge_start_failure_followed_by_close():
     """
     Stress-test: Si bridge.start() falla durante setup_hook() (ej. puerto ocupado),
     el llamador debe recibir la excepción y ejecutar bot.close() en un bloque de limpieza.
@@ -364,7 +354,7 @@ async def test_adversarial_bridge_start_failure_followed_by_close():
 
 
 @pytest.mark.asyncio
-async def test_adversarial_mock_injection_all_6_services_constructor_and_attributes():
+async def test_resilience_mock_injection_all_6_services_constructor_and_attributes():
     """
     Stress-test DI: Inyección de mocks para los 4 servicios de dominio + 2 servicios de bridge.
     Verifica que NINGÚN mock inyectado es sobrescrito por setup_hook(), que bridge.start()
@@ -428,7 +418,7 @@ async def test_adversarial_mock_injection_all_6_services_constructor_and_attribu
 
 
 @pytest.mark.asyncio
-async def test_adversarial_mock_injection_cross_wiring_custom_suggestion_service():
+async def test_resilience_mock_injection_cross_wiring_custom_suggestion_service():
     """
     Stress-test DI: Inyección ÚNICAMENTE de suggestion_service personalizado.
     setup_hook() DEBE auto-instanciar WebsocketBridgeService y conectarlo
@@ -467,7 +457,7 @@ async def test_adversarial_mock_injection_cross_wiring_custom_suggestion_service
 
 
 @pytest.mark.asyncio
-async def test_adversarial_mock_injection_cross_wiring_custom_bridge_service():
+async def test_resilience_mock_injection_cross_wiring_custom_bridge_service():
     """
     Stress-test DI: Inyección ÚNICAMENTE de websocket_bridge_service personalizado.
     setup_hook() DEBE auto-instanciar SuggestionService y conservar el bridge intacto
@@ -504,7 +494,7 @@ async def test_adversarial_mock_injection_cross_wiring_custom_bridge_service():
 
 
 @pytest.mark.asyncio
-async def test_adversarial_rapid_start_stop_same_instance_10_cycles():
+async def test_resilience_rapid_start_stop_same_instance_10_cycles():
     """
     Stress-test: Ejecuta setup_hook() y close() 10 veces sobre la MISMA instancia de LigaBot.
     Verifica que la re-inicialización del bridge y engine se produce limpiamente en cada ciclo.
@@ -542,7 +532,7 @@ async def test_adversarial_rapid_start_stop_same_instance_10_cycles():
 
 
 @pytest.mark.asyncio
-async def test_adversarial_cancellation_during_bridge_stop_allows_clean_second_close():
+async def test_resilience_cancellation_during_bridge_stop_allows_clean_second_close():
     """
     Stress-test: Si la primera llamada a bot.close() es cancelada (asyncio.CancelledError)
     mientras se detiene el bridge, el atributo bot.websocket_bridge_service ya fue desacoplado.
@@ -590,7 +580,7 @@ async def test_adversarial_cancellation_during_bridge_stop_allows_clean_second_c
 
 
 @pytest.mark.asyncio
-async def test_adversarial_concurrent_close_stress_50_tasks():
+async def test_resilience_concurrent_close_stress_50_tasks():
     """
     Stress-test masivo: 50 corrutinas concurrentes llamando a bot.close() simultáneamente
     con retardos asíncronos en el cierre del bridge y del engine.
