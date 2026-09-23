@@ -114,6 +114,32 @@ class Settings(BaseSettings):
         description="URL de conexión SQLAlchemy (PGlite o PostgreSQL).",
     )
 
+    # WebSocket Bridge y Sugerencias
+    bridge_enabled: bool = Field(
+        default=True,
+        description="Habilita o deshabilita el servidor WebSocket interno de comandos.",
+    )
+    bridge_host: str = Field(
+        default="127.0.0.1",
+        description="Host local donde escucha el servidor WebSocket.",
+    )
+    bridge_port: int = Field(
+        default=8765,
+        description="Puerto para el servidor WebSocket de integración.",
+    )
+    discord_bot_supertoken: str = Field(
+        default="",
+        description="Supertoken secreto requerido para autenticar el WebSocket.",
+    )
+    suggestions_channel_id: int = Field(
+        default=0,
+        description="ID del canal de Discord donde se publicarán las sugerencias.",
+    )
+    suggestions_rate_limit_per_minute: int = Field(
+        default=10,
+        description="Máximo número de sugerencias admitidas por minuto a través del bridge.",
+    )
+
     # Diagnóstico y Logging
     log_level: str = Field(
         default="INFO",
