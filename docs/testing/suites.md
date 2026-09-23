@@ -6,7 +6,7 @@
 
 ## 1. Inventario General de la Suite
 
-El repositorio `DiscordBots` cuenta con un total de **1.138 pruebas automatizadas** distribuidas a lo largo de **49 archivos de test** más el módulo raíz de fixtures (`tests/conftest.py`), sumando un volumen de **33.981 líneas totales de test** (27.014 líneas efectivas de código excluyendo comentarios y blancos) en 50 archivos y 1.138 tests.
+El repositorio `DiscordBots` cuenta con un total de **1.138 pruebas automatizadas** distribuidas a lo largo de **49 archivos de test** más el módulo raíz de fixtures (`tests/conftest.py`), sumando un volumen de **33.982 líneas totales de test** (27.014 líneas efectivas de código excluyendo comentarios y blancos) en 50 archivos y 1.138 tests.
 
 La recolección completa de casos de prueba con `uv run pytest --collect-only -q` toma **0.49 segundos**, y la ejecución íntegra de la suite insume aproximadamente **~35.8 segundos** en una estación Linux x86_64 estándar.
 
@@ -16,7 +16,7 @@ La recolección completa de casos de prueba con `uv run pytest --collect-only -q
 |---|---|
 | **Total de Archivos de Test** | 49 archivos (`tests/test_*.py`) + `tests/conftest.py` (50 archivos en total) |
 | **Total de Casos de Prueba** | 1.138 tests recolectados |
-| **Líneas de Código de Pruebas (LoC)** | 33.981 LoC totales (27.014 LoC netas) |
+| **Líneas de Código de Pruebas (LoC)** | 33.982 LoC totales (27.014 LoC netas) |
 | **Tiempo de Recolección (pytest collect)** | ~0.49 s |
 | **Tiempo de Ejecución Completa** | ~35.8 s |
 | **Tasa de Aprobación** | 100% (1.138 pasados, 0 fallos, 0 errores) |
@@ -25,7 +25,7 @@ La recolección completa de casos de prueba con `uv run pytest --collect-only -q
 
 ## 2. Catálogo Exhaustivo por Nivel de la Pirámide
 
-### 2.1 Nivel 1: Unit Suites (22 archivos | 524 tests | 11.985 LoC)
+### 2.1 Nivel 1: Unit Suites (22 archivos | 524 tests | 11.986 LoC)
 
 Pruebas en memoria con mocks puros, tiempo submilisegundo por test, sin interacción con bases de datos ni sockets de red.
 
@@ -43,7 +43,7 @@ Pruebas en memoria con mocks puros, tiempo submilisegundo por test, sin interacc
 | `tests/test_suggestion_service.py` | 14 | 306 | Generación de embeds para sugerencias y despacho de reacciones de votación (`✅`, `❌`). |
 | `tests/test_role_service.py` | 37 | 1.212 | Creación, aprobación y rechazo de solicitudes de rol, asignación de apodos y cálculo de diferencias de roles. |
 | `tests/test_roster_sync_service.py` | 29 | 1.013 | Sincronización lógica de eventos de Discord con altas, bajas y transferencias en plantillas deportivas. |
-| `tests/test_bridge_config.py` | 18 | 146 | Validación de parámetros para WebSocket Bridge (`bridge_host`, `bridge_port`, tokens de autenticación). |
+| `tests/test_bridge_config.py` | 18 | 147 | Validación de parámetros para WebSocket Bridge (`bridge_host`, `bridge_port`, `bridge_rate_limit_per_minute`, tokens de autenticación). |
 | `tests/test_bridge_protocol.py` | 46 | 238 | Validación de tramas JSON, formato UUID v4 RFC 4122 y discriminadores polimórficos de comandos entrantes. |
 | `tests/test_rate_limiter.py` | 7 | 141 | Algoritmo de limitación de tasa por ventana deslizante en memoria (`SlidingWindowRateLimiter`). |
 | `tests/test_websocket_bridge_service.py` | 19 | 590 | Autenticación bifásica, silencio pre-autenticación, código de cierre por timeout 4001 y despacho de sugerencias. |
@@ -53,7 +53,7 @@ Pruebas en memoria con mocks puros, tiempo submilisegundo por test, sin interacc
 | `tests/test_role_config_permissions.py` | 18 | 294 | Verificación de permisos de staff (`staff_role_id`, `ceo_role_id`) para aprobación de roles. |
 | `tests/test_roles_ui.py` | 25 | 614 | Vistas interactivas de Discord (`RoleVerificationView`) y modales de entrada de datos. |
 | `tests/test_roster_ui.py` | 30 | 870 | Vistas interactivas de plantillas (`GestionarPosicionView`) y menús de selección de roles competitivos. |
-| **Subtotal Unit** | **524** | **11.985** | |
+| **Subtotal Unit** | **524** | **11.986** | |
 
 ---
 
@@ -112,7 +112,7 @@ Pruebas destructivas diseñadas para vulnerar restricciones de base de datos, co
 | `tests/test_adversarial_cogs.py` | 14 | 878 | Comportamientos ante fallos de permisos perimetrales y guild desincronizado. |
 | `tests/conftest.py` | - | 80 | Módulo raíz de fixtures globales: sesión PGlite, mocks de Discord, factory de sesiones y limpieza de tablas. |
 | **Subtotal Adversarial** | **333** | **12.758** | |
-| **TOTAL GENERAL** | **1.138** | **33.981** | **49 archivos de test (33.901 LoC) + conftest.py (80 LoC) = 50 archivos** |
+| **TOTAL GENERAL** | **1.138** | **33.982** | **49 archivos de test (33.902 LoC) + conftest.py (80 LoC) = 50 archivos** |
 
 ---
 

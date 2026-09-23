@@ -1,16 +1,18 @@
 # Seguridad e Invariantes de Protección en WebSocket Bridge
 
+[⬅️ Volver a WebSocket Bridge](./README.md)
+
 Este documento detalla las medidas de seguridad perimetral, las invariantes criptográficas, la validación estricta de identificadores y las políticas de desconexión aplicadas en el servicio `WebsocketBridgeService` de **LigaBot**.
 
 ---
 
 ## 1. Validación y Normalización de UUID (RFC 4122)
 
-Cada mensaje entrante procesado por el puente WebSocket requiere un identificador de correlación único que cumpla estrictamente con el estándar **RFC 4122**. La extracción y verificación se implementa en `extract_request_id` (`src/liga_bot/services/bridge_protocol.py:10-50`).
+Cada mensaje entrante procesado por el puente WebSocket requiere un identificador de correlación único que cumpla estrictamente con el estándar **RFC 4122**. La extracción y verificación se implementa en `extract_request_id` (`src/liga_bot/services/bridge_protocol.py:10-44`).
 
 ### Invariantes de Validación
 
-1. **Aislamiento de tipos:** El identificador extraído (`data.content.id` o `data.id`) debe ser estrictamente una cadena de texto (`isinstance(raw_id, str)`). Cualquier tipo numérico, booleano, lista u objeto anidado es rechazado inmediatamente devolviendo `None`.
+1. **Aislamiento de tipos:** El identificador extraído exclusivamente desde `data.id` debe ser estrictamente una cadena de texto (`isinstance(raw_id, str)`). Cualquier tipo numérico, booleano, lista u objeto anidado es rechazado inmediatamente devolviendo `None`.
 2. **Sanitización de espacios en blanco:** Se aplica `raw_id.strip()`. Si la cadena resultante está vacía, se descarta sin evaluar.
 3. **Compatibilidad de formatos:** Se pasa la cadena a `uuid.UUID(cleaned_id)`, lo que valida y permite:
    - Formatos estándar de 36 caracteres con guiones (ej. `123e4567-e89b-12d3-a456-426614174000`).
@@ -18,9 +20,9 @@ Cada mensaje entrante procesado por el puente WebSocket requiere un identificado
    - Caracteres en mayúsculas o minúsculas.
 4. **Normalización canónica determinista:** La salida se obtiene mediante `str(parsed_uuid)`, garantizando que el identificador retornado esté siempre normalizado al formato **8-4-4-4-12 en minúsculas con guiones**.
 
-### Resistencia Frente a Degradación de Esquema
+### Validación Canónica de Envoltura (`data.id`)
 
-Si el cliente envía un diccionario de contenido con un campo `"id"` corrupto o no válido:
+El identificador de correlación se sitúa en la envoltura de transporte de red (`data.id`):
 
 ```json
 {
@@ -28,14 +30,16 @@ Si el cliente envía un diccionario de contenido con un campo `"id"` corrupto o 
   "data": {
     "id": "123e4567-e89b-12d3-a456-426614174000",
     "content": {
-      "id": "valor-invalido-no-uuid",
       "token": "secret"
     }
   }
 }
 ```
 
-La regla de precedencia en `bridge_protocol.py:33` establece que al existir `content["id"]`, este toma precedencia absoluta sobre `data["id"]`. Dado que `"valor-invalido-no-uuid"` no es un UUID válido, la función **no realiza fallback** a `data["id"]` y devuelve `None`. Esto previene ataques de confusión de campos o envenenamiento de identificadores.
+La función `extract_request_id` (`bridge_protocol.py`) valida de forma determinista el campo `data.id`:
+- **`data.id`**: UUID RFC 4122 obligatorio para la correlación asíncrona de tramas en la pasarela.
+- **`data.content`**: Contenedor exclusivo para los parámetros de negocio del comando.
+- Si `data.id` está ausente, no es de tipo `str` o no cumple con la especificación RFC 4122, la trama se rechaza devolviendo `None`.
 
 ---
 
@@ -64,7 +68,7 @@ Para mitigar ataques de reconocimiento de puertos, escaneo de vulnerabilidades y
 
 ## 3. Verificación de Token en Tiempo Constante y Protección de Supertoken Vacío
 
-La comprobación del secreto de integración se realiza en `_validate_token` (`websocket_bridge_service.py:182-190`):
+La comprobación del secreto de integración se realiza en `_validate_token` (`src/liga_bot/services/websocket_bridge_service.py:182-190`):
 
 ```python
 def _validate_token(self, token: str | None) -> bool:
@@ -90,7 +94,7 @@ def _validate_token(self, token: str | None) -> bool:
 
 ## 4. Timeout de Autenticación (Código de Cierre 4001)
 
-Para prevenir el agotamiento de recursos o descriptores de archivos (*File Descriptors*) mediante conexiones inactivas (*Slowloris / Idle Sockets*), se ejecuta una tarea vigilante en segundo plano (`websocket_bridge_service.py:192-205`):
+Para prevenir el agotamiento de recursos o descriptores de archivos (*File Descriptors*) mediante conexiones inactivas (*Slowloris / Idle Sockets*), se ejecuta una tarea vigilante en segundo plano (`src/liga_bot/services/websocket_bridge_service.py:192-205`):
 
 ```python
 async def _auth_timeout(
@@ -118,7 +122,7 @@ async def _auth_timeout(
 
 ## 5. Cierre Ordenado y Limpieza de Recursos (Código 1000)
 
-Durante la detención del bot o la parada explícita del servicio (`WebsocketBridgeService.stop()`), el sistema ejecuta un protocolo de parada en tres etapas consecutivas (`websocket_bridge_service.py:108-140`):
+Durante la detención del bot o la parada explícita del servicio (`WebsocketBridgeService.stop()`), el sistema ejecuta un protocolo de parada en tres etapas consecutivas (`src/liga_bot/services/websocket_bridge_service.py:108-140`):
 
 ```
                        WebsocketBridgeService.stop()

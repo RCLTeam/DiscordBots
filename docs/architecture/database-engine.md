@@ -144,7 +144,7 @@ async def transactional_session(
   - Si se propaga una excepción, emite `ROLLBACK` y re-lanza el error.
   - Adquiere preventivamente el `asyncio.Lock` solo si `_requires_serialization()` es `True`.
 
-### 4.2 `get_session` (`src/liga_bot/database.py:216-248`)
+### 4.2 `get_session` (`src/liga_bot/database.py:216-247`)
 Diseñado como inyector de dependencias para comandos y servicios donde se requiere control explícito del ciclo `try...commit / except...rollback`:
 
 ```python

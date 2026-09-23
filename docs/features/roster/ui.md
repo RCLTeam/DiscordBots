@@ -1,5 +1,7 @@
 # Componentes de Interfaz: GestionarPosicionView y Selectores
 
+[⬅️ Volver a Gestión de Plantillas](./README.md)
+
 Este módulo describe los componentes visuales interactivos de Discord (vistas, selectores, botones y embeds) utilizados para la administración de plantillas de clubes deportivos.
 
 - **Ubicación en código:** `src/liga_bot/ui/roster.py`

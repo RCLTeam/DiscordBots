@@ -1,5 +1,7 @@
 # Tipos Enumerados del Dominio (Enums)
 
+[⬅️ Volver a Base de Datos](./README.md)
+
 Este documento describe las 6 enumeraciones del dominio implementadas en `src/liga_bot/models/enums.py` para tipar estados operativos, categorías competitivas, roles de usuario y movimientos de plantilla en `DiscordBots`.
 
 Todas las enumeraciones heredan de `(str, enum.Enum)`, lo que permite comparaciones directas por igualdad con literales de cadena, serialización transparente a JSON y compatibilidad estricta con los tipos ENUM nativos de PostgreSQL.

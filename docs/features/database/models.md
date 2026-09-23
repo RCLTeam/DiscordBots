@@ -1,5 +1,7 @@
 # Modelos Relacionales de Base de Datos
 
+[⬅️ Volver a Base de Datos](./README.md)
+
 Este documento detalla los 9 modelos relacionales declarativos implementados con SQLAlchemy 2.0 en `DiscordBots`. Los modelos definen tanto las entidades operativas del bot de Discord como las entidades compartidas con la plataforma central RCL-Next.
 
 ---

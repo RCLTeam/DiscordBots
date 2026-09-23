@@ -6,7 +6,7 @@
 
 ## Resumen Ejecutivo
 
-El subsistema de pruebas de `DiscordBots` proporciona una infraestructura de verificación exhaustiva, determinista y de alta fidelidad relacional. Con un total de **1.138 casos de prueba** distribuidos en **50 archivos** (49 archivos de test más `tests/conftest.py`), sumando **33.981 líneas totales de test** (27.014 líneas efectivas de código excluyendo comentarios y blancos), el conjunto valida desde la lógica pura en memoria hasta condiciones extremas de concurrencia y límites del kernel del sistema operativo.
+El subsistema de pruebas de `DiscordBots` proporciona una infraestructura de verificación exhaustiva, determinista y de alta fidelidad relacional. Con un total de **1.138 casos de prueba** distribuidos en **50 archivos** (49 archivos de test más `tests/conftest.py`), sumando **33.982 líneas totales de test** (27.014 líneas efectivas de código excluyendo comentarios y blancos), el conjunto valida desde la lógica pura en memoria hasta condiciones extremas de concurrencia y límites del kernel del sistema operativo.
 
 El stack de pruebas se ejecuta de forma hermética utilizando **PGlite** (`py-pglite[sqlalchemy]`), una compilación WebAssembly/C de PostgreSQL sobre sockets UNIX locales, eliminando la necesidad de contenedores Docker externos o servicios de base de datos remotos y garantizando compatibilidad 100% con tipos y restricciones nativas de PostgreSQL.
 

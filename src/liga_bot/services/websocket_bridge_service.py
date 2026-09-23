@@ -40,7 +40,7 @@ class WebsocketBridgeService:
         self.settings = settings
         self.suggestion_service = suggestion_service
         self.rate_limiter = rate_limiter or SlidingWindowRateLimiter(
-            limit=settings.suggestions_rate_limit_per_minute,
+            limit=settings.bridge_rate_limit_per_minute,
             window_seconds=60.0,
         )
         self.auth_timeout_seconds = max(0.01, float(auth_timeout_seconds))

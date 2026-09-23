@@ -97,10 +97,10 @@ async def test_challenge_pre_login_silence_flood(mock_bot, mock_suggestion_servi
                             {
                                 "type": "SUGGESTION_CREATED",
                                 "data": {
+                                    "id": valid_u,
                                     "content": {
-                                        "id": valid_u,
                                         "suggestion": "pre-auth suggestion",
-                                    }
+                                    },
                                 },
                             }
                         )
@@ -114,10 +114,10 @@ async def test_challenge_pre_login_silence_flood(mock_bot, mock_suggestion_servi
                             {
                                 "type": "LOG IN",
                                 "data": {
+                                    "id": valid_u,
                                     "content": {
-                                        "id": valid_u,
                                         "token": "wrong-secret",
-                                    }
+                                    },
                                 },
                             }
                         )
@@ -139,10 +139,10 @@ async def test_challenge_pre_login_silence_flood(mock_bot, mock_suggestion_servi
                     {
                         "type": "LOG IN",
                         "data": {
+                            "id": legit_u,
                             "content": {
-                                "id": legit_u,
                                 "token": "super-secret-pass",
-                            }
+                            },
                         },
                     }
                 )
@@ -221,10 +221,10 @@ async def test_challenge_auth_timeout_not_postponed_by_invalid_traffic(
                         {
                             "type": "LOG IN",
                             "data": {
+                                "id": str(uuid.uuid4()),
                                 "content": {
-                                    "id": str(uuid.uuid4()),
                                     "token": "bad-token",
-                                }
+                                },
                             },
                         }
                     )
@@ -285,10 +285,10 @@ async def test_challenge_empty_supertoken_bypass_prevention(
                 payload = {
                     "type": "LOG IN",
                     "data": {
+                        "id": str(uuid.uuid4()),
                         "content": {
-                            "id": str(uuid.uuid4()),
                             "token": client_token,
-                        }
+                        },
                     },
                 }
                 await ws.send_json(payload)
@@ -348,10 +348,10 @@ async def test_challenge_disconnect_immediately_after_suggestion_queued(
                     {
                         "type": "LOG IN",
                         "data": {
+                            "id": str(uuid.uuid4()),
                             "content": {
-                                "id": str(uuid.uuid4()),
                                 "token": "test-secret",
-                            }
+                            },
                         },
                     }
                 )
@@ -363,12 +363,12 @@ async def test_challenge_disconnect_immediately_after_suggestion_queued(
                     {
                         "type": "SUGGESTION_CREATED",
                         "data": {
+                            "id": req_id,
                             "content": {
-                                "id": req_id,
                                 "author_id": "123",
                                 "author_username": "Racer",
                                 "suggestion": "Race condition test",
-                            }
+                            },
                         },
                     }
                 )
@@ -415,10 +415,10 @@ async def test_challenge_disconnect_with_discord_error_in_flight(mock_bot, mock_
                     {
                         "type": "LOG IN",
                         "data": {
+                            "id": str(uuid.uuid4()),
                             "content": {
-                                "id": str(uuid.uuid4()),
                                 "token": "test-secret",
-                            }
+                            },
                         },
                     }
                 )
@@ -428,10 +428,10 @@ async def test_challenge_disconnect_with_discord_error_in_flight(mock_bot, mock_
                     {
                         "type": "SUGGESTION_CREATED",
                         "data": {
+                            "id": str(uuid.uuid4()),
                             "content": {
-                                "id": str(uuid.uuid4()),
                                 "suggestion": "Fail test",
-                            }
+                            },
                         },
                     }
                 )
@@ -463,7 +463,7 @@ async def test_challenge_multi_client_rate_limiter_concurrency(mock_bot, mock_su
         bridge_enabled=True,
         bridge_port=0,
         discord_bot_supertoken="multi-client-secret",
-        suggestions_rate_limit_per_minute=6,
+        bridge_rate_limit_per_minute=6,
     )
     service = WebsocketBridgeService(
         bot=mock_bot,
@@ -486,10 +486,10 @@ async def test_challenge_multi_client_rate_limiter_concurrency(mock_bot, mock_su
                     {
                         "type": "LOG IN",
                         "data": {
+                            "id": str(uuid.uuid4()),
                             "content": {
-                                "id": str(uuid.uuid4()),
                                 "token": "multi-client-secret",
-                            }
+                            },
                         },
                     }
                 )
@@ -502,12 +502,12 @@ async def test_challenge_multi_client_rate_limiter_concurrency(mock_bot, mock_su
                     {
                         "type": "SUGGESTION_CREATED",
                         "data": {
+                            "id": req_id,
                             "content": {
-                                "id": req_id,
                                 "author_id": str(1000 + client_id),
                                 "author_username": f"User_{client_id}",
                                 "suggestion": f"Suggestion from client {client_id}",
-                            }
+                            },
                         },
                     }
                 )
@@ -568,7 +568,7 @@ async def test_challenge_single_socket_pipelining(mock_bot, mock_suggestion_serv
         bridge_enabled=True,
         bridge_port=0,
         discord_bot_supertoken="pipeline-secret",
-        suggestions_rate_limit_per_minute=20,
+        bridge_rate_limit_per_minute=20,
     )
     service = WebsocketBridgeService(
         bot=mock_bot,
@@ -586,10 +586,10 @@ async def test_challenge_single_socket_pipelining(mock_bot, mock_suggestion_serv
                     {
                         "type": "LOG IN",
                         "data": {
+                            "id": str(uuid.uuid4()),
                             "content": {
-                                "id": str(uuid.uuid4()),
                                 "token": "pipeline-secret",
-                            }
+                            },
                         },
                     }
                 )
@@ -603,12 +603,12 @@ async def test_challenge_single_socket_pipelining(mock_bot, mock_suggestion_serv
                         {
                             "type": "SUGGESTION_CREATED",
                             "data": {
+                                "id": rid,
                                 "content": {
-                                    "id": rid,
                                     "author_id": "777",
                                     "author_username": "Pipeliner",
                                     "suggestion": f"Pipelined suggestion {rid}",
-                                }
+                                },
                             },
                         }
                     )
@@ -676,10 +676,10 @@ async def test_challenge_stop_drains_and_cancels_hanging_tasks(mock_bot, mock_su
         {
             "type": "LOG IN",
             "data": {
+                "id": str(uuid.uuid4()),
                 "content": {
-                    "id": str(uuid.uuid4()),
                     "token": "stop-secret",
-                }
+                },
             },
         }
     )
@@ -689,10 +689,10 @@ async def test_challenge_stop_drains_and_cancels_hanging_tasks(mock_bot, mock_su
         {
             "type": "SUGGESTION_CREATED",
             "data": {
+                "id": str(uuid.uuid4()),
                 "content": {
-                    "id": str(uuid.uuid4()),
                     "suggestion": "Hang",
-                }
+                },
             },
         }
     )

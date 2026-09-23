@@ -334,7 +334,7 @@ A continuación se muestra la matriz completa de las 18 variables sincronizada c
 | `BRIDGE_PORT` | `int` | `8765` | No | Puerto TCP de escucha para la pasarela WebSocket. |
 | `DISCORD_BOT_SUPERTOKEN` | `str` | `""` | No | Clave secreta compartida requerida para autenticar conexiones WebSocket. |
 | `SUGGESTIONS_CHANNEL_ID` | `int` | `0` | No | Snowflake del canal de Discord donde se publican sugerencias web. |
-| `SUGGESTIONS_RATE_LIMIT_PER_MINUTE` | `int` | `10` | No | Máximo de sugerencias aceptadas por minuto a través del bridge. |
+| `BRIDGE_RATE_LIMIT_PER_MINUTE` | `int` | `10` | No | Límite máximo global de peticiones por minuto admitidas a través de la pasarela WebSocket. |
 | `LOG_LEVEL` | `str` | `"INFO"` | No | Nivel de logging (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`). |
 
 Para un desglose pormenorizado de las propiedades computadas y validadores, consulta [docs/architecture/configuration.md](docs/architecture/configuration.md).

@@ -1,5 +1,7 @@
 # Servicios de Dominio: Vigilancia de Tickets y Ciclo de Vida de Canales
 
+[⬅️ Volver a Tickets y Moderación](./README.md)
+
 Este documento detalla la arquitectura y lógica operativa del servicio de dominio `TicketService`, responsable de la supervisión de canales de tickets, control de inactividad, despacho de avisos y coordinación con la base de datos relacional. Asimismo, se documentan las garantías anti-huérfanos y la normalización de canales en `DiscordBots`.
 
 ---
@@ -8,7 +10,7 @@ Este documento detalla la arquitectura y lógica operativa del servicio de domin
 
 El servicio `TicketService` opera como centinela pasivo y activo del estado de los tickets de soporte.
 
-- **Ubicación en código:** `src/liga_bot/services/ticket_service.py:97-381`
+- **Ubicación en código:** `src/liga_bot/services/ticket_service.py:97-380`
 - **Principio de No Destrucción:**
   `TicketService` **NO** elimina, archiva ni cierra canales de tickets automáticamente bajo ninguna circunstancia. Su responsabilidad se limita a:
   1. Auditar los canales de texto ubicados en las categorías de tickets configuradas.

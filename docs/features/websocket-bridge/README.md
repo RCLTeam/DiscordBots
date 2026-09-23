@@ -41,7 +41,7 @@ El comportamiento del puente WebSocket se controla mediante las siguientes varia
 | `BRIDGE_PORT` | `bridge_port` | `int` | `8765` | Puerto TCP de escucha (admite `0` para asignación de puerto efímero). |
 | `DISCORD_BOT_SUPERTOKEN` | `discord_bot_supertoken` | `str` | `""` | Secreto maestro para autenticar sesiones WebSocket entrantes. |
 | `SUGGESTIONS_CHANNEL_ID` | `suggestions_channel_id` | `int` | `0` | Identificador del canal de Discord donde se publican las sugerencias. |
-| `SUGGESTIONS_RATE_LIMIT_PER_MINUTE` | `suggestions_rate_limit_per_minute` | `int` | `10` | Capacidad máxima de sugerencias admitidas por minuto por el limitador. |
+| `BRIDGE_RATE_LIMIT_PER_MINUTE` | `bridge_rate_limit_per_minute` | `int` | `10` | Límite máximo global de peticiones por minuto admitidas a través de la pasarela WebSocket. |
 
 ---
 

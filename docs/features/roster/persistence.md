@@ -1,5 +1,7 @@
 # Persistencia Relacional: Modelos SQLAlchemy y Repositorios de Plantilla
 
+[⬅️ Volver a Gestión de Plantillas](./README.md)
+
 Este documento describe la arquitectura de persistencia, esquemas relacionales, restricciones DDL y repositorios de datos que dan soporte al subsistema de gestión de plantillas.
 
 - **Ubicación en código:** 

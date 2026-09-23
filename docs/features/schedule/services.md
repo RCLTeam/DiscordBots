@@ -1,5 +1,7 @@
 # Servicios de Dominio de Calendario (`ScheduleService`)
 
+[⬅️ Volver a Calendario y Partidos](./README.md)
+
 El servicio de dominio para el aprovisionamiento, validación y gestión de calendario en LigaBot está implementado en `src/liga_bot/services/schedule_service.py` a través de la clase `ScheduleService`, complementado por las utilidades de formateo y plantillas en `src/liga_bot/utils/formatting.py`.
 
 ---
@@ -114,7 +116,7 @@ sequenceDiagram
 
 ### 3.2 Desglose de Fases
 
-#### Fase 1: Validación Transaccional en Base de Datos (`schedule_service.py:123-201`)
+#### Fase 1: Validación Transaccional en Base de Datos (`src/liga_bot/services/schedule_service.py:123-201`)
 Se abre una sesión corta mediante `async with transactional_session(self.session_factory) as session:`.
 1. **Existencia de equipos**: Valida que tanto `team1` como `team2` existan en la base de datos. Si alguno falta, retorna `MatchResult(success=False, error=...)`.
 2. **Auto-enfrentamiento**: Valida `team1.id != team2.id`. Si coinciden, aborta con `"Un equipo no puede enfrentarse a sí mismo ('{team1.name}')."`.
@@ -122,17 +124,17 @@ Se abre una sesión corta mediante `async with transactional_session(self.sessio
 4. **Detección simétrica de duplicados**: Invoca `match_repo.get_by_jornada_and_teams(jornada, team1.id, team2.id, exact_order=False)`. Si ya existe un enfrentamiento previo entre ambos equipos en cualquier orden (`t1 vs t2` O `t2 vs t1`), retorna inmediatamente `is_duplicate=True` sin interactuar con Discord.
 5. **Aislamiento de conexión**: Extrae en variables locales escalares los datos necesarios (`division`, `role_ids`, `slugs`, `ids`, `names`) y **cierra inmediatamente la sesión de base de datos**. Esto previene el acaparamiento de conexiones del pool mientras se realizan llamadas de red a la API de Discord.
 
-#### Fase 2: Validación de Roles en Discord (`schedule_service.py:203-227`)
+#### Fase 2: Validación de Roles en Discord (`src/liga_bot/services/schedule_service.py:203-227`)
 Obtiene `role1 = guild.get_role(team1_role_id)` y `role2 = guild.get_role(team2_role_id)`. Si alguno de los roles configurados en la base de datos no existe en el servidor de Discord, aborta la operación reportando el ID de rol faltante.
 
-#### Fase 3: Resolución de Categoría (`schedule_service.py:229-251`)
+#### Fase 3: Resolución de Categoría (`src/liga_bot/services/schedule_service.py:229-251`)
 Determina el nombre canónico de la categoría según la división deportiva:
 - `PREMIER`: `"PREMIER - JORNADA {jornada}"`
 - `ASCEND`: `"ASCENSO - JORNADA {jornada}"` (acepta alternativamente `"ASCEND - JORNADA {jornada}"`)
 
 Busca la categoría en memoria sobre `guild.categories`. Si no existe, la crea mediante `await guild.create_category(category_name)`.
 
-#### Fase 4: Matriz de Permisos (*Overwrites*) (`schedule_service.py:254-286`)
+#### Fase 4: Matriz de Permisos (*Overwrites*) (`src/liga_bot/services/schedule_service.py:254-286`)
 Aplica una política de mínimo privilegio para garantizar la confidencialidad de la coordinación:
 
 | Entidad / Rol | `view_channel` | `send_messages` | `embed_links` | Justificación |
@@ -145,14 +147,14 @@ Aplica una política de mínimo privilegio para garantizar la confidencialidad d
 | `ceo_premier_role` / `ceo_ascend_role` | `True` | `True` | — | Segregado estrictamente según la división del partido. |
 | Bot (`guild.me`) | `True` | `True` | `True` | Envío de embeds y gestión del canal. |
 
-#### Fase 5: Aprovisionamiento de Canal y Mensajes de Coordinación (`schedule_service.py:288-323`)
+#### Fase 5: Aprovisionamiento de Canal y Mensajes de Coordinación (`src/liga_bot/services/schedule_service.py:288-323`)
 1. Genera el nombre del canal mediante `format_match_channel_name(jornada, team1_slug, team2_slug)` (formato `j{jornada}-{slug1}-vs-{slug2}`, limitado a 100 caracteres).
 2. Crea el canal de texto en Discord: `await guild.create_text_channel(channel_name, category=category, overwrites=overwrites)`.
 3. Construye los textos oficiales mediante `format_mensaje_1` y `format_mensaje_2`.
 4. Envía el **Mensaje 1** mencionando activamente a los dos roles de equipo (`content=f"{role1.mention} {role2.mention}"`) con un embed (`discord.Color.blurple()`) que contiene las instrucciones de acuerdo de horario, plazos y penalizaciones de convocatoria.
 5. Envía el **Mensaje 2** con un embed que detalla las reglas de preparación, uso de Fearless Draft en `https://lol.draftcore.net/` y enlace al canal de reglamento oficial.
 
-#### Fase 6: Persistencia Atómica en Base de Datos (`schedule_service.py:324-336`)
+#### Fase 6: Persistencia Atómica en Base de Datos (`src/liga_bot/services/schedule_service.py:324-336`)
 Abre una segunda transacción corta en base de datos para registrar la entidad `Match`:
 - `jornada`: Jornada indicada.
 - `division`: División del partido.
@@ -161,7 +163,7 @@ Abre una segunda transacción corta en base de datos para registrar la entidad `
 - `discord_channel_id`: ID numérico del canal creado en Discord (`created_channel.id`).
 - `status`: `MatchStatus.CANAL_CREADO`.
 
-#### Fase 7: Garantía Anti-Canales Huérfanos (*Rollback Defensivo*) (`schedule_service.py:347-366`)
+#### Fase 7: Garantía Anti-Canales Huérfanos (*Rollback Defensivo*) (`src/liga_bot/services/schedule_service.py:347-366`)
 Si se produce cualquier excepción durante el posteo de mensajes en Discord o durante la inserción en base de datos:
 1. El bloque `except Exception as exc:` captura el fallo.
 2. Si el canal de Discord fue creado (`created_channel is not None`), se ejecuta inmediatamente:
@@ -196,12 +198,12 @@ El método `create_jornada_from_csv` (`src/liga_bot/services/schedule_service.py
 
 `ScheduleService` incluye dos métodos alias para garantizar compatibilidad con interfaces definidas en la arquitectura:
 
-- **`create_single_match`** (`schedule_service.py:368-384`): Reenvía sus argumentos a `create_match`.
-- **`process_schedule_csv`** (`schedule_service.py:483-493`): Reenvía a `create_jornada_from_csv` retornando directamente la lista `j_res.matches`.
+- **`create_single_match`** (`src/liga_bot/services/schedule_service.py:368-384`): Reenvía sus argumentos a `create_match`.
+- **`process_schedule_csv`** (`src/liga_bot/services/schedule_service.py:482-492`): Reenvía a `create_jornada_from_csv` retornando directamente la lista `j_res.matches`.
 
 ---
 
-## 6. Utilidades de Formateo y Plantillas Oficiales (`formatting.py`)
+## 6. Utilidades de Formateo y Plantillas Oficiales (`src/liga_bot/utils/formatting.py`)
 
 Ubicadas en `src/liga_bot/utils/formatting.py`:
 
@@ -212,8 +214,8 @@ Ubicadas en `src/liga_bot/utils/formatting.py`:
 - **`normalize_name(name: str) -> str`**: Normaliza nombres para comparaciones insensibles a caracteres tipográficos o emojis decorativos.
 
 ### 6.2 Plantillas Oficiales Verbatim
-- **`MENSAJE_1`** (`formatting.py:24-43`): Texto reglamentario de acuerdo de horario (plazo límite jueves 23:59h) y convocatoria de alineaciones OP.GG (4 horas previas, penalizaciones de -1 BAN, 0 BANS y Abandono).
-- **`MENSAJE_2`** (`formatting.py:45-62`): Texto reglamentario de Fearless Draft (`https://lol.draftcore.net/`, fallback a `https://drafter.lol/`) y referencia al canal de normas (`DEFAULT_REGLAMENTO_CHANNEL` = `<#1414343806297374780>`).
+- **`MENSAJE_1`** (`src/liga_bot/utils/formatting.py:24-43`): Texto reglamentario de acuerdo de horario (plazo límite jueves 23:59h) y convocatoria de alineaciones OP.GG (4 horas previas, penalizaciones de -1 BAN, 0 BANS y Abandono).
+- **`MENSAJE_2`** (`src/liga_bot/utils/formatting.py:45-62`): Texto reglamentario de Fearless Draft (`https://lol.draftcore.net/`, fallback a `https://drafter.lol/`) y referencia al canal de normas (`DEFAULT_REGLAMENTO_CHANNEL` = `<#1414343806297374780>`).
 - **`format_mensaje_1(...) -> str`**: Interpola `jornada`, `fecha`, `hora`, `equipo1` y `equipo2` admitiendo firmas flexibles por palabras clave o posicionales.
 - **`format_mensaje_2(reglamento=...) -> str`**: Interpola la mención al canal de reglamento.
 

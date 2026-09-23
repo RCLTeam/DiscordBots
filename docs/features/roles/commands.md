@@ -1,5 +1,7 @@
 # Comandos de Roles e Incorporación (Roles & Onboarding)
 
+[⬅️ Volver a Roles e Incorporación](./README.md)
+
 El subsistema de comandos de roles está implementado en `src/liga_bot/cogs/roles.py` a través de la clase `RolesCog`. Gestiona el flujo interactivo de solicitud de roles para nuevos jugadores, la asignación directa por parte del equipo de administración (Staff) y la publicación de paneles interactivos persistentes en los canales del servidor de Discord.
 
 ---

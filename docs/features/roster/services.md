@@ -1,5 +1,7 @@
 # Servicios de Dominio: RosterSyncService e Invariantes Deportivas
 
+[⬅️ Volver a Gestión de Plantillas](./README.md)
+
 Este documento detalla la lógica de negocio y las reglas deportivas implementadas en el servicio central de plantillas, `RosterSyncService`, responsable de coordinar las altas, bajas, cambios de posición y auditoría de los miembros de los equipos de la liga.
 
 - **Ubicación en código:** `src/liga_bot/services/roster_sync_service.py`

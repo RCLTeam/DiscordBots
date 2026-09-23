@@ -17,8 +17,8 @@ VALID_UUID_ALT = "c7a8b9d0-1111-4222-9333-abcdef012345"
 # --- Casos canónicos del plan de referencia ---
 
 
-def test_extract_request_id_valid_uuid_in_content() -> None:
-    """Extrae UUID válido ubicado en data.content.id."""
+def test_extract_request_id_content_id_alone_returns_none() -> None:
+    """Retorna None si el UUID está únicamente en data.content.id (aislamiento estricto)."""
     payload = {
         "type": "SUGGESTION_CREATED",
         "data": {
@@ -28,11 +28,11 @@ def test_extract_request_id_valid_uuid_in_content() -> None:
             }
         },
     }
-    assert extract_request_id(payload) == VALID_UUID_V4
+    assert extract_request_id(payload) is None
 
 
 def test_extract_request_id_valid_uuid_in_data() -> None:
-    """Extrae UUID válido ubicado en data.id como fallback (típico en LOG IN)."""
+    """Extrae UUID válido ubicado en data.id de forma canónica."""
     payload = {
         "type": "LOG IN",
         "data": {
@@ -50,8 +50,8 @@ def test_extract_request_id_missing_uuid() -> None:
 
 
 def test_extract_request_id_invalid_uuid() -> None:
-    """Descarta silenciosamente retornando None si el UUID no tiene formato válido."""
-    payload = {"type": "SUGGESTION_CREATED", "data": {"content": {"id": "not-a-uuid"}}}
+    """Descarta silenciosamente retornando None si data.id no tiene formato válido."""
+    payload = {"type": "SUGGESTION_CREATED", "data": {"id": "not-a-uuid"}}
     assert extract_request_id(payload) is None
 
 
@@ -89,22 +89,22 @@ def test_extract_request_id_raw_json_string() -> None:
     assert extract_request_id(raw_str.encode("utf-8")) == VALID_UUID_V1
 
 
-# --- Casos de precedencia y fallback ---
+# --- Casos de aislamiento de data.id e indiferencia ante data.content ---
 
 
-def test_extract_request_id_precedence_content_over_data() -> None:
-    """Prioriza data.content.id sobre data.id si ambos están presentes."""
+def test_extract_request_id_ignores_id_in_content_when_data_id_present() -> None:
+    """Demuestra que un campo id dentro de data.content es ignorado y solo data.id es procesado."""
     payload = {
         "data": {
             "content": {"id": VALID_UUID_V4},
             "id": VALID_UUID_V1,
         }
     }
-    assert extract_request_id(payload) == VALID_UUID_V4
+    assert extract_request_id(payload) == VALID_UUID_V1
 
 
-def test_extract_request_id_fallback_when_content_id_is_none() -> None:
-    """Usa data.id si content.id es explícitamente None."""
+def test_extract_request_id_ignores_none_id_in_content() -> None:
+    """Usa data.id independientemente de si content.id es explícitamente None."""
     payload = {
         "data": {
             "content": {"id": None, "text": "foo"},
@@ -114,8 +114,8 @@ def test_extract_request_id_fallback_when_content_id_is_none() -> None:
     assert extract_request_id(payload) == VALID_UUID_V1
 
 
-def test_extract_request_id_fallback_when_content_is_string() -> None:
-    """Usa data.id si content no es un diccionario sino una cadena de texto."""
+def test_extract_request_id_ignores_string_content_uses_data_id() -> None:
+    """Usa data.id cuando content no es un diccionario sino una cadena de texto."""
     payload = {
         "data": {
             "content": "secret-supertoken",
@@ -125,8 +125,8 @@ def test_extract_request_id_fallback_when_content_is_string() -> None:
     assert extract_request_id(payload) == VALID_UUID_ALT
 
 
-def test_extract_request_id_fallback_when_content_has_no_id_key() -> None:
-    """Usa data.id si content es un diccionario pero carece de la clave id."""
+def test_extract_request_id_content_without_id_uses_data_id() -> None:
+    """Usa data.id cuando content es un diccionario sin clave id."""
     payload = {
         "data": {
             "content": {"suggestion": "Añadir emojis"},
@@ -136,15 +136,15 @@ def test_extract_request_id_fallback_when_content_has_no_id_key() -> None:
     assert extract_request_id(payload) == VALID_UUID_ALT
 
 
-def test_extract_request_id_invalid_content_id_does_not_fallback() -> None:
-    """Si content.id fue provisto pero es inválido, no hace fallback a data.id."""
+def test_extract_request_id_invalid_content_id_ignored_uses_data_id() -> None:
+    """Si content.id es inválido pero data.id es válido, extrae data.id exitosamente."""
     payload = {
         "data": {
             "content": {"id": "not-a-valid-uuid"},
             "id": VALID_UUID_V1,
         }
     }
-    assert extract_request_id(payload) is None
+    assert extract_request_id(payload) == VALID_UUID_V1
 
 
 # --- Casos de borde adversariales y tipos no válidos ---
