@@ -1,5 +1,7 @@
 # Componentes de Interfaz de Usuario (UI): Roles & Onboarding
 
+[⬅️ Volver a Roles e Incorporación](./README.md)
+
 Los componentes interactivos de Discord para la solicitud y gestión de roles residen en `src/liga_bot/ui/roles.py`. Utilizan las primitivas modernas de la API de Discord: modales nativos (`Modal`), selectores (`Select`), vistas efímeras y persistentes (`View`), y elementos dinámicos deserializables tras reinicio (`DynamicItem`).
 
 ---

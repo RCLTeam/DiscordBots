@@ -1,5 +1,7 @@
 # Capa de Persistencia: Seguimiento de Tickets y Registro de Auditoría
 
+[⬅️ Volver a Tickets y Moderación](./README.md)
+
 Este documento define la capa de acceso a datos y persistencia relacional para el seguimiento de tickets y la auditoría de eventos administrativos en `DiscordBots`. Detalla los modelos declarativos de SQLAlchemy 2.0 y los repositorios asíncronos que implementan operaciones atómicas, protección contra tipos no serializables en PostgreSQL y consultas optimizadas mediante índices compuestos.
 
 ---
@@ -8,7 +10,7 @@ Este documento define la capa de acceso a datos y persistencia relacional para e
 
 El modelo `TicketNotice` almacena el estado temporal de los canales de tickets en Discord para controlar la frecuencia de alertas, registrar las respuestas del personal de soporte y señalar canales que requieren intervención.
 
-- **Ubicación en código:** `src/liga_bot/models/ticket_notice.py:14-35`
+- **Ubicación en código:** `src/liga_bot/models/ticket_notice.py:14-34`
 - **Tabla:** `ticket_notices`
 - **Mixins heredados:** `UUIDPrimaryKeyMixin`, `TimestampMixin` (`src/liga_bot/models/base.py`)
 
@@ -31,7 +33,7 @@ El modelo `TicketNotice` almacena el estado temporal de los canales de tickets e
 
 El repositorio `TicketNoticeRepository` gestiona el ciclo de vida de los avisos de inactividad encapsulando las consultas sobre sesiones asíncronas de SQLAlchemy 2.0.
 
-- **Ubicación en código:** `src/liga_bot/repositories/ticket_repo.py:13-99`
+- **Ubicación en código:** `src/liga_bot/repositories/ticket_repo.py:13-98`
 - **Clase Base:** `BaseRepository[TicketNotice]` (`src/liga_bot/repositories/base.py`)
 - **Alias Exportado:** `TicketRepository = TicketNoticeRepository` (`L98`)
 

@@ -1,5 +1,7 @@
 # Persistencia y Modelo Relacional: RoleRequest
 
+[⬅️ Volver a Roles e Incorporación](./README.md)
+
 La capa de persistencia para el subsistema de solicitud y asignación de roles está estructurada mediante SQLAlchemy 2.0 asíncrono y migraciones gestionadas por Alembic. Comprende el modelo declarativo `RoleRequest` (`src/liga_bot/models/role_request.py`), la enumeración canónica `RoleRequestStatus` (`src/liga_bot/models/enums.py`) y el repositorio especializado `RoleRequestRepository` (`src/liga_bot/repositories/role_request_repo.py`).
 
 ---

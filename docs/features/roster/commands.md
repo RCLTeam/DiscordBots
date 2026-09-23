@@ -1,5 +1,7 @@
 # Comandos y Gateway: Gestión de Plantillas y Sincronización
 
+[⬅️ Volver a Gestión de Plantillas](./README.md)
+
 Este módulo documenta los puntos de entrada para la administración de plantillas de clubes, abarcando el comando slash interactivo `/gestionar-posicion` y el listener pasivo de Discord Gateway `on_member_update` para la sincronización reactiva de altas y bajas de membresía.
 
 ---

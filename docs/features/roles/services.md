@@ -1,5 +1,7 @@
 # Servicios de Dominio: RoleService
 
+[⬅️ Volver a Roles e Incorporación](./README.md)
+
 El subsistema de lógica de negocio para la gestión de roles se implementa en `src/liga_bot/services/role_service.py` a través de la clase `RoleService`. Esta capa orquestadora aísla las reglas del negocio de los controladores de Discord y de los repositorios de persistencia relacional.
 
 ---

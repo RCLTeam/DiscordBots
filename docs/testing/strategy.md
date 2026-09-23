@@ -25,7 +25,7 @@ La infraestructura de pruebas de `DiscordBots` está construida sobre dos princi
 
 ## 2. Arquitectura Piramidal de 4 Niveles
 
-La suite de pruebas contiene **1.138 casos de prueba** distribuidos en **49 archivos de test** más el módulo central de fixtures `tests/conftest.py` (total de 50 archivos y **33.981 líneas totales de test**, 27.014 líneas efectivas de código excluyendo comentarios y blancos).
+La suite de pruebas contiene **1.138 casos de prueba** distribuidos en **49 archivos de test** más el módulo central de fixtures `tests/conftest.py` (total de 50 archivos y **33.982 líneas totales de test**, 27.014 líneas efectivas de código excluyendo comentarios y blancos).
 
 La estructura de las pruebas sigue una pirámide de cuatro niveles claramente segregados por responsabilidad, velocidad de ejecución y profundidad de integración:
 
@@ -42,19 +42,19 @@ La estructura de las pruebas sigue una pirámide de cuatro niveles claramente se
                /-----------------\ (6 archivos | 171 tests | 15.0% | 5.853 LoC)
               /                   \
              /                     \ Nivel 1: Unit Suites
-            /-----------------------\ (22 archivos | 524 tests | 46.0% | 11.985 LoC)
+            /-----------------------\ (22 archivos | 524 tests | 46.0% | 11.986 LoC)
 ```
 
 ### Métricas de Distribución de la Pirámide
 
 | Nivel | Categoría | Archivos | Tests | % Tests | LoC | % LoC | Tiempo Medio |
 |---|---|---:|---:|---:|---:|---:|---|
-| **Nivel 1** | Unit Suites | 22 | 524 | 46.0% | 11.985 | 35.3% | < 0.005s / test |
+| **Nivel 1** | Unit Suites | 22 | 524 | 46.0% | 11.986 | 35.3% | < 0.005s / test |
 | **Nivel 2** | Integration & E2E Suites | 6 | 171 | 15.0% | 5.853 | 17.2% | ~0.02s / test |
 | **Nivel 3** | Resilience, Concurrency & Stress | 5 | 110 | 9.7% | 3.305 | 9.7% | ~0.05s / test |
 | **Nivel 4** | Adversarial Challenge Suites | 16 | 333 | 29.3% | 12.758 | 37.5% | ~0.03s / test |
 | **Fixtures**| Módulo Raíz (`conftest.py`) | 1 | - | - | 80 | 0.2% | Overhead de sesión |
-| **TOTAL** | **Suite Completa** | **49 (+1)** | **1.138** | **100.0%** | **33.981** | **100.0%** | **~35.8s total** |
+| **TOTAL** | **Suite Completa** | **49 (+1)** | **1.138** | **100.0%** | **33.982** | **100.0%** | **~35.8s total** |
 
 ### Descripción Funcional de los Niveles
 
@@ -137,7 +137,7 @@ async def migrated_db(async_engine: AsyncEngine) -> AsyncEngine:
 Para las pruebas que requieren acceso a base de datos en ámbito de función (`scope="function"`), se aplica el patrón canónico de **Savepoint Rollback** de SQLAlchemy 2.0:
 
 ```python
-# tests/conftest.py:66-81
+# tests/conftest.py:66-80
 @pytest_asyncio.fixture
 async def session(migrated_db: AsyncEngine) -> AsyncGenerator[AsyncSession, None]:
     """Proporciona una AsyncSession aislada por test con rollback automático."""

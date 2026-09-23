@@ -1,5 +1,7 @@
 # Comandos de Calendario y Seguimiento de Partidos (Schedule & Match Tracking)
 
+[⬅️ Volver a Calendario y Partidos](./README.md)
+
 El subsistema de comandos de calendario está implementado en `src/liga_bot/cogs/schedule.py` a través de la clase `ScheduleCog`. Este módulo centraliza las operaciones de creación de enfrentamientos deportivos, aprovisionamiento automático de canales privados de coordinación en Discord, asignación de permisos por rol y división, y procesamiento masivo de jornadas mediante archivos CSV.
 
 ---
@@ -9,7 +11,7 @@ El subsistema de comandos de calendario está implementado en `src/liga_bot/cogs
 La clase `ScheduleCog` extiende `discord.ext.commands.Cog` y administra los comandos de aplicación (`app_commands`) del bot para la gestión de calendario.
 
 - **Ubicación principal**: `src/liga_bot/cogs/schedule.py:27-65`.
-- **Compatibilidad legacy**: `src/liga_bot/cogs/schedule_cog.py:1-8` re-exporta `ScheduleCog` y la función `setup` para mantener compatibilidad con imports históricos.
+- **Compatibilidad legacy**: `src/liga_bot/cogs/schedule_cog.py:1-7` re-exporta `ScheduleCog` y la función `setup` para mantener compatibilidad con imports históricos.
 
 ### 1.1 Inyección de Dependencias Resiliente
 
@@ -43,7 +45,7 @@ def schedule_service(self) -> ScheduleService:
 
 ### 1.2 Registro e Idempotencia en la Carga
 
-La función `setup` (`src/liga_bot/cogs/schedule.py:307-311`) implementa una comprobación de existencia previa en el registro de cogs del bot:
+La función `setup` (`src/liga_bot/cogs/schedule.py:306-310`) implementa una comprobación de existencia previa en el registro de cogs del bot:
 
 ```python
 async def setup(bot: Bot | commands.Bot) -> None:

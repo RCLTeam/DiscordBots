@@ -1,5 +1,7 @@
 # Protocolo de Comunicación WebSocket Bridge
 
+[⬅️ Volver a WebSocket Bridge](./README.md)
+
 Este documento detalla la arquitectura de transporte, la estructura de tramas JSON, los códigos de operación (*opcodes*) y el protocolo de entrega en dos fases implementado en el servicio de pasarela WebSocket (`WebsocketBridgeService`) de **LigaBot**.
 
 ---
@@ -39,11 +41,11 @@ El componente `WebsocketBridgeService` (`src/liga_bot/services/websocket_bridge_
 
 ### Configuración de Red y Puerto Efímero
 
-El servicio se parametriza a través de `Settings` (`src/liga_bot/config.py:118-141`):
+El servicio se parametriza a través de `Settings` (`src/liga_bot/config.py:118-144`):
 - `bridge_enabled` (`bool`, por defecto `True`): determina si el servidor se inicia en `setup_hook()`. Si es `False`, el servicio finaliza su inicialización sin levantar listeners de red.
 - `bridge_host` (`str`, por defecto `"127.0.0.1"`): interfaz de red de escucha.
 - `bridge_port` (`int`, por defecto `8765`): puerto TCP.
-- **Resolución de puerto efímero**: la propiedad `port` (`websocket_bridge_service.py:60-67`) inspecciona el socket del `TCPSite` subyacente. Si se configura `bridge_port = 0`, el kernel asigna un puerto libre de forma dinámica, accesible mediante `service.port` sin colisiones durante ejecuciones de prueba paralelas.
+- **Resolución de puerto efímero**: la propiedad `port` (`src/liga_bot/services/websocket_bridge_service.py:61-67`) inspecciona el socket del `TCPSite` subyacente. Si se configura `bridge_port = 0`, el kernel asigna un puerto libre de forma dinámica, accesible mediante `service.port` sin colisiones durante ejecuciones de prueba paralelas.
 
 ### Endpoint de Salud (`/health`)
 
@@ -81,7 +83,7 @@ La respuesta se emite con código HTTP `200 OK` y cabecera `Content-Type: applic
 
 ## 2. Decodificación de Tramas y Extracción de UUID
 
-La función canónica `extract_request_id(payload)` (`src/liga_bot/services/bridge_protocol.py:10-50`) procesa e identifica cada solicitud entrante antes de transferirla a la capa de comando.
+La función canónica `extract_request_id(payload)` (`src/liga_bot/services/bridge_protocol.py:10-44`) procesa e identifica cada solicitud entrante antes de transferirla a la capa de comando.
 
 ### Formatos de Entrada Admitidos
 
@@ -91,9 +93,9 @@ La función canónica `extract_request_id(payload)` (`src/liga_bot/services/brid
 
 Cualquier error de decodificación (`UnicodeDecodeError`, `JSONDecodeError`, `ValueError`, `TypeError`) es capturado de inmediato y devuelve `None`, desencadenando el descarte silencioso en la capa de transporte.
 
-### Reglas de Precedencia y Fallback de Identificador
+### Extracción Estricta del Identificador (`data.id`)
 
-La extracción del identificador de correlación sigue una jerarquía estricta:
+La extracción del identificador de correlación se realiza única y exclusivamente sobre la envoltura de transporte de red en `data.id`:
 
 ```
                       payload
@@ -103,22 +105,19 @@ La extracción del identificador de correlación sigue una jerarquía estricta:
                          │
               ┌──────────┴──────────┐
               ▼ Sí                  ▼ No
-     ¿Existe data["content"]?     return None
+         raw_id = data.get("id")   return None
               │
-     ┌────────┴────────┐
-     ▼ Dict            ▼ No es dict / None
-¿content["id"]         raw_id = data.get("id")
- no es None?                    │
-     │                          ▼
-     ├─────────► Sí: raw_id = content["id"]
-     │           (NO hay fallback a data["id"] si falla)
-     │
-     └─────────► No: raw_id = data.get("id")
+              ▼
+       ¿Es raw_id un str no vacío?
+              │
+       ┌──────┴──────┐
+       ▼ Sí          ▼ No
+   uuid.UUID()    return None
 ```
 
-1. **Ruta Primaria (`data.content.id`)**: Si `data["content"]` es un diccionario y posee una clave `"id"` no nula, dicho valor es seleccionado como `raw_id`.
-2. **Ruta Secundaria (`data.id`)**: Si `data["content"]` no es un diccionario o carece del campo `"id"`, se utiliza `data.get("id")`.
-3. **Invariante Crítica de Fallback**: Si `data["content"]` contiene una clave `"id"` con un valor no válido (por ejemplo, `{"content": {"id": "formato-invalido"}}`), el protocolo **NO** salta a `data["id"]`. Se preserva el valor inválido y la validación RFC 4122 rechaza la trama devolviendo `None`.
+1. **`data.id`**: UUID RFC 4122 obligatorio para correlación asíncrona en la capa de transporte de red.
+2. **`data.content`**: Contenedor exclusivo para los parámetros de negocio del comando.
+3. **Validación Determinista**: Si `data.id` está ausente, no es una cadena de texto o no cumple con el estándar RFC 4122, la trama se rechaza devolviendo `None`.
 
 ### Validación y Normalización RFC 4122
 
@@ -305,7 +304,7 @@ sequenceDiagram
 
 ### Mecánica de Retención y Prevención de Fugas de Tareas
 
-En Python `asyncio`, una tarea creada con `asyncio.create_task` cuya referencia no se conserve puede ser eliminada prematuramente por el recolector de basura (*garbage collector*). `WebsocketBridgeService` implementa una política de ciclo de vida hermética (`websocket_bridge_service.py:310-312`):
+En Python `asyncio`, una tarea creada con `asyncio.create_task` cuya referencia no se conserve puede ser eliminada prematuramente por el recolector de basura (*garbage collector*). `WebsocketBridgeService` implementa una política de ciclo de vida hermética (`src/liga_bot/services/websocket_bridge_service.py:310-312`):
 
 1. **Registro:** `self._background_tasks.add(task)` mantiene una referencia fuerte en el conjunto interno.
 2. **Limpieza automática:** `task.add_done_callback(self._background_tasks.discard)` desasocia la tarea de memoria tan pronto como finaliza su ejecución, ya sea por éxito o por excepción.

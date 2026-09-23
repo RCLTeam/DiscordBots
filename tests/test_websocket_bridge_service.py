@@ -37,7 +37,7 @@ def base_settings():
         bridge_port=0,  # Puerto efímero asignado por el kernel
         discord_bot_supertoken="valid-secret-token",
         suggestions_channel_id=123456789,
-        suggestions_rate_limit_per_minute=10,
+        bridge_rate_limit_per_minute=10,
     )
 
 
@@ -176,10 +176,10 @@ async def test_pre_auth_silence_on_non_login_command(running_service):
                 {
                     "type": "SUGGESTION_CREATED",
                     "data": {
+                        "id": "e4b3c2a1-0000-4000-8000-0123456789ab",
                         "content": {
-                            "id": "e4b3c2a1-0000-4000-8000-0123456789ab",
                             "suggestion": "Prueba",
-                        }
+                        },
                     },
                 }
             )
@@ -196,10 +196,10 @@ async def test_pre_auth_silence_on_invalid_token(running_service):
                 {
                     "type": "LOG IN",
                     "data": {
+                        "id": "e4b3c2a1-0000-4000-8000-0123456789ab",
                         "content": {
-                            "id": "e4b3c2a1-0000-4000-8000-0123456789ab",
                             "token": "wrong-token",
-                        }
+                        },
                     },
                 }
             )
@@ -226,10 +226,10 @@ async def test_auth_empty_configured_supertoken_security(mock_bot, mock_suggesti
                     {
                         "type": "LOG IN",
                         "data": {
+                            "id": "e4b3c2a1-0000-4000-8000-0123456789ab",
                             "content": {
-                                "id": "e4b3c2a1-0000-4000-8000-0123456789ab",
                                 "token": "",
-                            }
+                            },
                         },
                     }
                 )
@@ -269,10 +269,10 @@ async def test_auth_success_content_dict(running_service):
                 {
                     "type": "LOG IN",
                     "data": {
+                        "id": uuid_str,
                         "content": {
-                            "id": uuid_str,
                             "token": "valid-secret-token",
-                        }
+                        },
                     },
                 }
             )
@@ -320,10 +320,10 @@ async def test_two_phase_delivery_success(running_service, mock_suggestion_servi
                 {
                     "type": "LOG IN",
                     "data": {
+                        "id": "e4b3c2a1-0000-4000-8000-0123456789ab",
                         "content": {
-                            "id": "e4b3c2a1-0000-4000-8000-0123456789ab",
                             "token": "valid-secret-token",
-                        }
+                        },
                     },
                 }
             )
@@ -335,14 +335,14 @@ async def test_two_phase_delivery_success(running_service, mock_suggestion_servi
                 {
                     "type": "SUGGESTION_CREATED",
                     "data": {
+                        "id": sugg_uuid,
                         "content": {
-                            "id": sugg_uuid,
                             "author_id": "999888",
                             "author_username": "ProGamer",
                             "suggestion": "Añadir más torneos los fines de semana",
                             "avatar_url": "https://example.com/avatar.png",
                             "created_at": "2026-09-23T18:00:00Z",
-                        }
+                        },
                     },
                 }
             )
@@ -385,10 +385,10 @@ async def test_two_phase_delivery_discord_error(running_service, mock_suggestion
                 {
                     "type": "LOG IN",
                     "data": {
+                        "id": "e4b3c2a1-0000-4000-8000-0123456789ab",
                         "content": {
-                            "id": "e4b3c2a1-0000-4000-8000-0123456789ab",
                             "token": "valid-secret-token",
-                        }
+                        },
                     },
                 }
             )
@@ -399,10 +399,10 @@ async def test_two_phase_delivery_discord_error(running_service, mock_suggestion
                 {
                     "type": "SUGGESTION_CREATED",
                     "data": {
+                        "id": sugg_uuid,
                         "content": {
-                            "id": sugg_uuid,
                             "suggestion": "Test",
-                        }
+                        },
                     },
                 }
             )
@@ -441,10 +441,10 @@ async def test_rate_limiter_blocks_exceeded_requests(
                     {
                         "type": "LOG IN",
                         "data": {
+                            "id": "e4b3c2a1-0000-4000-8000-0123456789ab",
                             "content": {
-                                "id": "e4b3c2a1-0000-4000-8000-0123456789ab",
                                 "token": "valid-secret-token",
-                            }
+                            },
                         },
                     }
                 )
@@ -455,7 +455,7 @@ async def test_rate_limiter_blocks_exceeded_requests(
                 await ws.send_json(
                     {
                         "type": "SUGGESTION_CREATED",
-                        "data": {"content": {"id": req1, "suggestion": "S1"}},
+                        "data": {"id": req1, "content": {"suggestion": "S1"}},
                     }
                 )
                 r1_q = await ws.receive_json()
@@ -468,7 +468,7 @@ async def test_rate_limiter_blocks_exceeded_requests(
                 await ws.send_json(
                     {
                         "type": "SUGGESTION_CREATED",
-                        "data": {"content": {"id": req2, "suggestion": "S2"}},
+                        "data": {"id": req2, "content": {"suggestion": "S2"}},
                     }
                 )
                 r2_err = await ws.receive_json()
@@ -500,10 +500,10 @@ async def test_socket_disconnect_during_inflight_delivery(running_service, mock_
                 {
                     "type": "LOG IN",
                     "data": {
+                        "id": "e4b3c2a1-0000-4000-8000-0123456789ab",
                         "content": {
-                            "id": "e4b3c2a1-0000-4000-8000-0123456789ab",
                             "token": "valid-secret-token",
-                        }
+                        },
                     },
                 }
             )
@@ -513,7 +513,7 @@ async def test_socket_disconnect_during_inflight_delivery(running_service, mock_
             await ws.send_json(
                 {
                     "type": "SUGGESTION_CREATED",
-                    "data": {"content": {"id": sugg_uuid, "suggestion": "Fast close"}},
+                    "data": {"id": sugg_uuid, "content": {"suggestion": "Fast close"}},
                 }
             )
             r_q = await ws.receive_json()
@@ -563,10 +563,10 @@ async def test_missing_suggestion_service_fails_gracefully(mock_bot, base_settin
                     {
                         "type": "LOG IN",
                         "data": {
+                            "id": "e4b3c2a1-0000-4000-8000-0123456789ab",
                             "content": {
-                                "id": "e4b3c2a1-0000-4000-8000-0123456789ab",
                                 "token": "valid-secret-token",
-                            }
+                            },
                         },
                     }
                 )
@@ -576,7 +576,7 @@ async def test_missing_suggestion_service_fails_gracefully(mock_bot, base_settin
                 await ws.send_json(
                     {
                         "type": "SUGGESTION_CREATED",
-                        "data": {"content": {"id": sugg_uuid, "suggestion": "No service"}},
+                        "data": {"id": sugg_uuid, "content": {"suggestion": "No service"}},
                     }
                 )
                 r_q = await ws.receive_json()

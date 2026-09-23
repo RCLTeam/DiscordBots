@@ -1,5 +1,7 @@
 # Persistencia Base y Repositorio Genérico
 
+[⬅️ Volver a Base de Datos](./README.md)
+
 Este documento describe la capa de persistencia base implementada en `src/liga_bot/repositories/base.py`, el patrón `BaseRepository[ModelT]`, la protección defensiva contra errores transaccionales en PostgreSQL y las reglas de demarcación de transacciones en `DiscordBots`.
 
 ---

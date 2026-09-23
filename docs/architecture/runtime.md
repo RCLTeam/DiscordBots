@@ -40,7 +40,7 @@ El runtime de `LigaBot` está estructurado sobre la subclase `LigaBot(commands.B
 
 ## 2. Inicialización y Contenedor de Inyección de Dependencias (`LigaBot`)
 
-La clase `LigaBot` se define en `src/liga_bot/bot.py:43-244`. Su constructor garantiza invariantes estrictos antes de iniciar cualquier conexión de red:
+La clase `LigaBot` se define en `src/liga_bot/bot.py:43-243`. Su constructor garantiza invariantes estrictos antes de iniciar cualquier conexión de red:
 
 ### 2.1 Intents Privilegiados Obligatorios
 
@@ -164,7 +164,7 @@ El método `close()` puede invocarse múltiples veces de forma consecutiva o con
 
 ## 5. Desacoplamiento del Evento `on_ready`
 
-Implementado en `src/liga_bot/bot.py:228-244`:
+Implementado en `src/liga_bot/bot.py:228-243`:
 
 ```python
 async def on_ready(self) -> None:

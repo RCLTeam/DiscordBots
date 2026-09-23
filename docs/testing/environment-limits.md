@@ -164,7 +164,7 @@ def _requires_serialization(engine: AsyncEngine | None) -> bool:
 ### 4.1 Ubicación y Evidencia en el Código Fuente
 - **Prueba de 20 Ciclos con Puertos Efímeros:** `tests/test_bot_bridge_lifecycle_resilience.py:75-123`
 - **Prueba de Cierre con Clientes Activos:** `tests/test_bot_bridge_lifecycle_resilience.py:125-191`
-- **Prueba de 50 Cierres Concurrentes:** `tests/test_bot_bridge_lifecycle_resilience.py:583-620`
+- **Prueba de 50 Cierres Concurrentes:** `tests/test_bot_bridge_lifecycle_resilience.py:583-619`
 - **Implementación Atómica de Cierre:** `src/liga_bot/bot.py:188-196`
 - **Rutina de Apagado de Sockets:** `src/liga_bot/services/websocket_bridge_service.py:108-140`
 
@@ -226,7 +226,7 @@ async def test_resilience_rapid_start_stop_real_ephemeral_sockets_20_cycles():
    - **Fase 2 (Drenaje de Tareas en Segundo Plano):** Espera hasta 2.0 segundos para que las tareas en curso finalicen (`asyncio.wait(self._background_tasks, timeout=2.0)`). Aquellas que permanezcan pendientes son canceladas con `t.cancel()` y recolectadas con `asyncio.gather(*pending, return_exceptions=True)`.
    - **Fase 3 (Limpieza del Runner HTTP):** Invoca `await self._runner.cleanup()`, cerrando el `AppRunner`, el `TCPSite` y los sockets del sistema operativo, reseteando las referencias internas a `None`.
 4. **Verificación de Estrés Masivo (50 Tareas Concurrentes):**
-   En `test_resilience_concurrent_close_stress_50_tasks` (`tests/test_bot_bridge_lifecycle_resilience.py:583-620`), 50 corrutinas asíncronas llaman simultáneamente a `bot.close()` con retardos asíncronos (*jitter*) inyectados en `bridge.stop()`. La prueba certifica que:
+   En `test_resilience_concurrent_close_stress_50_tasks` (`tests/test_bot_bridge_lifecycle_resilience.py:583-619`), 50 corrutinas asíncronas llaman simultáneamente a `bot.close()` con retardos asíncronos (*jitter*) inyectados en `bridge.stop()`. La prueba certifica que:
    - `bridge_stop_counter == 1` exactamente (idempotencia y exclusión mutua perfecta).
    - Ninguna tarea arroja excepciones de atributo ni de referencia nula.
    - Todos los descriptores de socket quedan liberados y el endpoint `/health` rechaza nuevas conexiones de forma inmediata.

@@ -1,5 +1,7 @@
 # Limitador de Tasa por Ventana Deslizante (SlidingWindowRateLimiter)
 
+[⬅️ Volver a WebSocket Bridge](./README.md)
+
 Este documento detalla el diseño algorítmico, la seguridad ante concurrencia, las estructuras de datos y el protocolo de respuesta ante agotamiento de cuota implementados en `SlidingWindowRateLimiter` (`src/liga_bot/services/rate_limiter.py`).
 
 ---
@@ -37,7 +39,7 @@ self._lock = asyncio.Lock()
 
 ## 2. Parámetros de Inicialización y Acotación
 
-El constructor admite parámetros flexibles con acotación de seguridad (`rate_limiter.py:26-41`):
+El constructor admite parámetros flexibles con acotación de seguridad (`src/liga_bot/services/rate_limiter.py:26-41`):
 
 ```python
 def __init__(
@@ -64,7 +66,7 @@ def __init__(
 
 ## 3. Algoritmo de Adquisición y Exclusión Mutua (`acquire`)
 
-El método `acquire` (`rate_limiter.py:42-64`) evalúa de forma atómica si una solicitud es admitida o rechazada:
+El método `acquire` (`src/liga_bot/services/rate_limiter.py:42-65`) evalúa de forma atómica si una solicitud es admitida o rechazada:
 
 ```python
 async def acquire(self, key: str = "global") -> tuple[bool, float]:
@@ -106,7 +108,7 @@ async def acquire(self, key: str = "global") -> tuple[bool, float]:
 
 ## 4. Respuesta ante Límite de Tasa Excedido
 
-Cuando `acquire("global")` devuelve `(False, retry_after)` en `WebsocketBridgeService._process_suggestion` (`websocket_bridge_service.py:276-292`), la solicitud entrante es rechazada de inmediato y el servidor emite una trama `ERROR`:
+Cuando `acquire("global")` devuelve `(False, retry_after)` en `WebsocketBridgeService._process_suggestion` (`src/liga_bot/services/websocket_bridge_service.py:276-292`), la solicitud entrante es rechazada de inmediato y el servidor emite una trama `ERROR`:
 
 ```json
 {
@@ -126,7 +128,7 @@ Cuando `acquire("global")` devuelve `(False, retry_after)` en `WebsocketBridgeSe
 
 ## 5. Reinicio Híbrido Síncrono / Asíncrono (`_AwaitableNone`)
 
-Para facilitar el reinicio de cuotas tanto en pruebas unitarias síncronas como en pipelines asíncronos sin generar advertencias de runtime (`RuntimeWarning: coroutine was never awaited`), `reset()` utiliza la clase auxiliar `_AwaitableNone` (`rate_limiter.py:10-16, 66-76`):
+Para facilitar el reinicio de cuotas tanto en pruebas unitarias síncronas como en pipelines asíncronos sin generar advertencias de runtime (`RuntimeWarning: coroutine was never awaited`), `reset()` utiliza la clase auxiliar `_AwaitableNone` (`src/liga_bot/services/rate_limiter.py:10-16, 66-76`):
 
 ```python
 class _AwaitableNone:
@@ -162,5 +164,5 @@ limiter.reset("global")
 ## 6. Alcance y Clave de Aislamiento
 
 - **Clave por Defecto:** En `WebsocketBridgeService`, el método invoca `await self.rate_limiter.acquire("global")`.
-- **Ámbito Global:** Todas las conexiones WebSocket conectadas al puente comparten el mismo cupo global de sugerencias por minuto configurado en `suggestions_rate_limit_per_minute` (por defecto `10` sugerencias por minuto).
+- **Ámbito Global:** Todas las conexiones WebSocket conectadas al puente comparten el mismo cupo global de peticiones por minuto configurado en `bridge_rate_limit_per_minute` / `BRIDGE_RATE_LIMIT_PER_MINUTE` (por defecto `10` peticiones por minuto).
 - **Aislamiento por Clave:** El limitador soporta claves arbitrarias (por ejemplo identificadores de usuario o direcciones IP) si en el futuro se desea segmentar la tasa por remitente.

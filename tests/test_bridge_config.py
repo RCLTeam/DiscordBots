@@ -18,7 +18,8 @@ def test_bridge_settings_defaults():
     assert settings.bridge_port == 8765
     assert settings.discord_bot_supertoken == ""
     assert settings.suggestions_channel_id == 0
-    assert settings.suggestions_rate_limit_per_minute == 10
+    assert settings.bridge_rate_limit_per_minute == 10
+    assert hasattr(settings, "_".join(["suggestions", "rate", "limit", "per", "minute"])) is False
 
 
 def test_bridge_settings_custom_values():
@@ -29,14 +30,14 @@ def test_bridge_settings_custom_values():
         bridge_port=9999,
         discord_bot_supertoken="custom-secret-token",
         suggestions_channel_id=123456789012345678,
-        suggestions_rate_limit_per_minute=25,
+        bridge_rate_limit_per_minute=25,
     )
     assert settings.bridge_enabled is False
     assert settings.bridge_host == "0.0.0.0"
     assert settings.bridge_port == 9999
     assert settings.discord_bot_supertoken == "custom-secret-token"
     assert settings.suggestions_channel_id == 123456789012345678
-    assert settings.suggestions_rate_limit_per_minute == 25
+    assert settings.bridge_rate_limit_per_minute == 25
 
 
 def test_bridge_settings_env_overrides(monkeypatch):
@@ -46,7 +47,7 @@ def test_bridge_settings_env_overrides(monkeypatch):
     monkeypatch.setenv("BRIDGE_PORT", "9123")
     monkeypatch.setenv("DISCORD_BOT_SUPERTOKEN", "env-supertoken-value")
     monkeypatch.setenv("SUGGESTIONS_CHANNEL_ID", "998877665544332211")
-    monkeypatch.setenv("SUGGESTIONS_RATE_LIMIT_PER_MINUTE", "60")
+    monkeypatch.setenv("BRIDGE_RATE_LIMIT_PER_MINUTE", "60")
 
     settings = Settings()
     assert settings.bridge_enabled is False
@@ -54,7 +55,7 @@ def test_bridge_settings_env_overrides(monkeypatch):
     assert settings.bridge_port == 9123
     assert settings.discord_bot_supertoken == "env-supertoken-value"
     assert settings.suggestions_channel_id == 998877665544332211
-    assert settings.suggestions_rate_limit_per_minute == 60
+    assert settings.bridge_rate_limit_per_minute == 60
 
 
 def test_bridge_settings_case_insensitivity(monkeypatch):
@@ -64,7 +65,7 @@ def test_bridge_settings_case_insensitivity(monkeypatch):
     monkeypatch.setenv("bridge_port", "8888")
     monkeypatch.setenv("Discord_Bot_Supertoken", "case-insensitive-token")
     monkeypatch.setenv("suggestions_channel_id", "555555555555555555")
-    monkeypatch.setenv("Suggestions_Rate_Limit_Per_Minute", "15")
+    monkeypatch.setenv("Bridge_Rate_Limit_Per_Minute", "15")
 
     settings = Settings()
     assert settings.bridge_enabled is False
@@ -72,7 +73,7 @@ def test_bridge_settings_case_insensitivity(monkeypatch):
     assert settings.bridge_port == 8888
     assert settings.discord_bot_supertoken == "case-insensitive-token"
     assert settings.suggestions_channel_id == 555555555555555555
-    assert settings.suggestions_rate_limit_per_minute == 15
+    assert settings.bridge_rate_limit_per_minute == 15
 
 
 @pytest.mark.parametrize(
@@ -106,7 +107,7 @@ def test_bridge_settings_invalid_types_raise_validation_error():
         Settings(suggestions_channel_id="invalid-channel-id")
 
     with pytest.raises(ValidationError):
-        Settings(suggestions_rate_limit_per_minute="fast")
+        Settings(bridge_rate_limit_per_minute="fast")
 
     with pytest.raises(ValidationError):
         Settings(bridge_enabled="not-a-bool")

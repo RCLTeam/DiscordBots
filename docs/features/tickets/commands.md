@@ -1,5 +1,7 @@
 # Comandos Slash: Administración y Vigilancia de Tickets
 
+[⬅️ Volver a Tickets y Moderación](./README.md)
+
 Este módulo documenta los comandos de barra diagonal (*slash commands*) de administración general y vigilancia de tickets en `DiscordBots`. Detalla los puntos de entrada expuestos en `AdminCog` y `TicketsCog`, sus niveles de autorización, control de límites en la API de Discord y el dictamen fáctico que refuta comandos inexistentes o rutas fuera de la interfaz de chat.
 
 ---
@@ -41,7 +43,7 @@ La sincronización de comandos de aplicación (*Application Commands*) registra 
 
 La ejecución está protegida por la función `is_staff_or_admin` (`src/liga_bot/cogs/permissions.py:115-133`):
 
-1. **Resolución de Miembro (`permissions.py:24-60`):**
+1. **Resolución de Miembro (`src/liga_bot/cogs/permissions.py:24-60`):**
    Obtiene el objeto `discord.Member` mediante la caché local de Discord (`guild.get_member`) o mediante una consulta asíncrona al Gateway (`await guild.fetch_member`).
 2. **Permisos de Administrador Nativo:**
    Si el miembro posee el permiso nativo `administrator=True` en sus `guild_permissions`, se concede el acceso de inmediato.
@@ -49,7 +51,7 @@ La ejecución está protegida por la función `is_staff_or_admin` (`src/liga_bot
    Si no es administrador nativo, sus roles asignados deben intersectar con al menos uno de los roles autorizados en `Settings`:
    - `settings.staff_role_id`
    - `settings.admin_role_id`
-4. **Respuesta ante Fallo de Autorización (`admin.py:41-47`):**
+4. **Respuesta ante Fallo de Autorización (`src/liga_bot/cogs/admin.py:41-47`):**
    Si el invocador no cumple ninguna de las condiciones anteriores, la interacción responde de forma efímera y se cancela la ejecución:
    ```text
    ❌ No tienes permisos para sincronizar comandos (se requiere Staff o Administrador).
@@ -118,7 +120,7 @@ Estos comandos ejecutan una inspección bajo demanda de todos los canales de tic
    ```
 2. **Permisos Nativos en el Cliente (`L177`):**
    El decorador `@app_commands.default_permissions(manage_guild=True)` oculta el comando en la interfaz a usuarios sin privilegios de administración del servidor.
-3. **Autorización Ampliada (`is_authorized_scheduler`, `permissions.py:167-190`):**
+3. **Autorización Ampliada (`is_authorized_scheduler`, `src/liga_bot/cogs/permissions.py:167-190`):**
    Comprueba que el usuario sea administrador nativo o posea al menos uno de los siguientes roles configurados en `Settings`:
    - `staff_role_id`
    - `admin_role_id`

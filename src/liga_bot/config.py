@@ -135,9 +135,12 @@ class Settings(BaseSettings):
         default=0,
         description="ID del canal de Discord donde se publicarán las sugerencias.",
     )
-    suggestions_rate_limit_per_minute: int = Field(
+    bridge_rate_limit_per_minute: int = Field(
         default=10,
-        description="Máximo número de sugerencias admitidas por minuto a través del bridge.",
+        description=(
+            "Límite máximo global de peticiones por minuto admitidas a través de la pasarela"
+            " WebSocket."
+        ),
     )
 
     # Diagnóstico y Logging

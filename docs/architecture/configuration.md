@@ -52,14 +52,14 @@ A continuación se detalla la totalidad de los 18 campos configurables en `Setti
 | 14 | `bridge_port` | 126-129 | `int` | `8765` | `BRIDGE_PORT` | Puerto TCP de enlace para el servidor WebSocket local. |
 | 15 | `discord_bot_supertoken` | 130-133 | `str` | `""` | `DISCORD_BOT_SUPERTOKEN` | Clave secreta compartida requerida en el handshake de autenticación WebSocket. |
 | 16 | `suggestions_channel_id` | 134-137 | `int` | `0` | `SUGGESTIONS_CHANNEL_ID` | Snowflake ID del canal de Discord donde se publican las sugerencias web. |
-| 17 | `suggestions_rate_limit_per_minute` | 138-141 | `int` | `10` | `SUGGESTIONS_RATE_LIMIT_PER_MINUTE` | Tasa máxima de sugerencias aceptadas por minuto a través del bridge. |
-| 18 | `log_level` | 144-147 | `str` | `"INFO"` | `LOG_LEVEL` | Nivel de verbosidad del logger (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`). |
+| 17 | `bridge_rate_limit_per_minute` | 138-144 | `int` | `10` | `BRIDGE_RATE_LIMIT_PER_MINUTE` | Límite máximo global de peticiones por minuto admitidas a través de la pasarela WebSocket. |
+| 18 | `log_level` | 147-150 | `str` | `"INFO"` | `LOG_LEVEL` | Nivel de verbosidad del logger (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`). |
 
 ---
 
 ## 3. Validadores y Propiedades Computadas
 
-### 3.1 Validador Estricto de `log_level` (`src/liga_bot/config.py:149-160`)
+### 3.1 Validador Estricto de `log_level` (`src/liga_bot/config.py:152-162`)
 
 El nivel de logging se procesa mediante un validador en modo previo (`mode="before"`):
 
@@ -82,20 +82,20 @@ def normalize_log_level(cls, value: str) -> str:
 
 ### 3.2 Discriminador de Motor de Base de Datos
 
-- **`is_pglite` (`src/liga_bot/config.py:162-164`):**
+- **`is_pglite` (`src/liga_bot/config.py:164-167`):**
   ```python
   @property
   def is_pglite(self) -> bool:
       return self.database_url.startswith("pglite")
   ```
-- **`is_postgres` (`src/liga_bot/config.py:166-170`):**
+- **`is_postgres` (`src/liga_bot/config.py:169-173`):**
   ```python
   @property
   def is_postgres(self) -> bool:
       return self.database_url.startswith("postgres")
   ```
 
-### 3.3 Normalizador de URL Asíncrona (`async_database_url`, líneas 172-183)
+### 3.3 Normalizador de URL Asíncrona (`async_database_url`, líneas 175-186)
 
 SQLAlchemy 2.0 requiere drivers asíncronos explícitos en su esquema de conexión. En entornos de producción (Heroku, Supabase, Neon, AWS RDS), las cadenas de conexión suelen proveerse con el prefijo `postgres://` o `postgresql://`. La propiedad `async_database_url` normaliza estas URLs de forma transparente para el driver `asyncpg`:
 
@@ -165,7 +165,7 @@ La liga organiza exactamente 20 equipos oficiales distribuidos en 2 divisiones:
 
 ## 5. Factoría Singleton y Aislamiento en Pruebas
 
-En `src/liga_bot/config.py:185-191`, se expone la factoría canónica:
+En `src/liga_bot/config.py:188-194`, se expone la factoría canónica:
 
 ```python
 @lru_cache

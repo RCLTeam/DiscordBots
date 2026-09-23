@@ -1,5 +1,7 @@
 # Persistencia y Modelo Relacional de Partidos (`Match` y `MatchRepository`)
 
+[⬅️ Volver a Calendario y Partidos](./README.md)
+
 El subsistema de persistencia para el calendario y seguimiento de partidos está implementado en `src/liga_bot/models/match.py` (modelo declarativo `Match`) y `src/liga_bot/repositories/match_repo.py` (repositorio de acceso a datos `MatchRepository`), apoyado en los enumerados de dominio de `src/liga_bot/models/enums.py`.
 
 ---
@@ -8,7 +10,7 @@ El subsistema de persistencia para el calendario y seguimiento de partidos está
 
 El modelo `Match` representa un enfrentamiento programado entre dos clubes deportivos durante una jornada específica.
 
-- **Ubicación**: `src/liga_bot/models/match.py:29-85`.
+- **Ubicación**: `src/liga_bot/models/match.py:29-84`.
 - **Tabla**: `matches`.
 - **Mixins**:
   - `UUIDPrimaryKeyMixin`: Genera una clave primaria `id` de tipo UUID v4 (`Uuid`).
@@ -69,13 +71,13 @@ class Match(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
 Definidos en `src/liga_bot/models/enums.py`:
 
-- **`Division`** (`enums.py:6-10`):
+- **`Division`** (`src/liga_bot/models/enums.py:6-10`):
   ```python
   class Division(str, enum.Enum):
       PREMIER = "PREMIER"
       ASCEND = "ASCEND"
   ```
-- **`MatchStatus`** (`enums.py:13-19`):
+- **`MatchStatus`** (`src/liga_bot/models/enums.py:13-19`):
   ```python
   class MatchStatus(str, enum.Enum):
       PENDIENTE = "PENDIENTE"
