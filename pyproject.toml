@@ -19,7 +19,8 @@ dependencies = [
 ]
 
 [project.scripts]
-liga-bot = "liga_bot.cli:main"
+liga-bot = "liga_bot.__main__:main"
+liga-cli = "liga_bot.cli:main"
 
 [dependency-groups]
 dev = [
