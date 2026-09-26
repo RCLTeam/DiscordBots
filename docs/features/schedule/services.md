@@ -8,7 +8,7 @@ El servicio de dominio para el aprovisionamiento, validación y gestión de cale
 
 ## 1. Arquitectura y Modelos de Transferencia de Datos (DTOs)
 
-`ScheduleService` encapsula las reglas de negocio de la competición deportiva, la sincronización relacional en PostgreSQL y la orquestación de la API de Discord. Para comunicar resultados y errores desacoplados de la capa de transporte o interfaz de usuario, define tres DTOs (`slots=True`):
+`ScheduleService` encapsula las reglas de negocio de la competición deportiva, la sincronización relacional en PostgreSQL y la orquestación de la API de Discord. Para comunicar resultados y errores desacoplados de la capa de transporte o interfaz de usuario, define cuatro DTOs (`slots=True`):
 
 ```python
 @dataclass(slots=True)
@@ -46,6 +46,18 @@ class JornadaResult:
     @property
     def error_count(self) -> int:
         return len(self.errors)
+
+
+@dataclass(slots=True)
+class StreamUrlResult:
+    success: bool
+    url: str
+    is_live: bool
+    match: Match | None = None
+    team1_name: str | None = None
+    team2_name: str | None = None
+    jornada: int | None = None
+    error: str | None = None
 ```
 
 ---
@@ -194,7 +206,51 @@ El método `create_jornada_from_csv` (`src/liga_bot/services/schedule_service.py
 
 ---
 
-## 5. Alias de Compatibilidad con Especificaciones Previas
+## 5. Asignación y Gestión de URLs de Retransmisión: `set_stream_url`
+
+El método `set_stream_url` (`src/liga_bot/services/schedule_service.py:537-602`) gestiona de forma transaccional la asignación y actualización de URLs de streaming en directo y grabaciones VOD para un enfrentamiento deportivo, resolviendo los equipos a partir de los roles de Discord proporcionados por el usuario.
+
+### 5.1 Firma del Método
+
+```python
+async def set_stream_url(
+    self,
+    role1_id: int,
+    role2_id: int,
+    url: str,
+    is_live: bool = False,
+    jornada: int | None = None,
+) -> StreamUrlResult:
+```
+
+### 5.2 Parámetros
+
+| Parámetro | Tipo | Por Defecto | Descripción |
+|---|---|---|---|
+| `role1_id` | `int` | — | Snowflake del rol de Discord del primer equipo. |
+| `role2_id` | `int` | — | Snowflake del rol de Discord del segundo equipo. |
+| `url` | `str` | — | Cadena de texto con la URL de la retransmisión o directo. |
+| `is_live` | `bool` | `False` | `True` para actualizar `stream_url_live`; `False` para actualizar `stream_url` (VOD). |
+| `jornada` | `int \| None` | `None` | Número de jornada opcional para desambiguar si existen múltiples enfrentamientos. |
+
+### 5.3 Validaciones y Pipeline de Ejecución
+
+1. **Validación Sintáctica de URL**: Limpia espacios en blanco con `url.strip()`. Valida que la URL comience estrictamente por `http://` o `https://`. Si no cumple este prefijo, aborta inmediatamente retornando:
+   `StreamUrlResult(success=False, url=clean_url, is_live=is_live, error="La URL proporcionada no es válida (debe comenzar con http:// o https://).")`.
+2. **Validación de Roles Distintos**: Verifica `role1_id != role2_id`. Si ambos identificadores coinciden, aborta con:
+   `StreamUrlResult(success=False, url=clean_url, is_live=is_live, error="Los dos roles de equipo deben ser diferentes.")`.
+3. **Aislamiento Transaccional**: Abre una sesión corta de base de datos (`async with transactional_session(self.session_factory) as session:`), instanciando `TeamRepository` y `MatchRepository`.
+4. **Resolución de Equipos por Rol**:
+   - `team1 = await team_repo.get_by_role_id(role1_id)`
+   - `team2 = await team_repo.get_by_role_id(role2_id)`
+   Si alguno de los roles no está registrado en la tabla `teams`, retorna `success=False` indicando la mención de rol no encontrada (`<@&{role_id}>`).
+5. **Búsqueda Simétrica Bidireccional**: Invoca `match_repo.get_by_teams(team1_id=team1.id, team2_id=team2.id, jornada=jornada, with_teams=True)`. La consulta SQL localiza el partido independientemente del orden de localía (`(team1 == u1 & team2 == u2) | (team1 == u2 & team2 == u1)`), ordenando de forma descendente por fecha programada o creación para seleccionar el más reciente si no se especifica jornada.
+6. **Actualización Atómica y Refresh**: Si se encuentra el partido, invoca `match_repo.update_stream_url(match_or_id=match, url=clean_url, is_live=is_live)`, actualizando el campo `stream_url_live` (si `is_live=True`) o `stream_url` (si `is_live=False`), ejecutando `flush()` y `refresh()`.
+7. **Retorno Estructurado**: Retorna `StreamUrlResult(success=True, url=clean_url, is_live=is_live, match=updated_match, team1_name=team1.name, team2_name=team2.name, jornada=match.jornada)`.
+
+---
+
+## 6. Alias de Compatibilidad con Especificaciones Previas
 
 `ScheduleService` incluye dos métodos alias para garantizar compatibilidad con interfaces definidas en la arquitectura:
 
@@ -203,17 +259,17 @@ El método `create_jornada_from_csv` (`src/liga_bot/services/schedule_service.py
 
 ---
 
-## 6. Utilidades de Formateo y Plantillas Oficiales (`src/liga_bot/utils/formatting.py`)
+## 7. Utilidades de Formateo y Plantillas Oficiales (`src/liga_bot/utils/formatting.py`)
 
 Ubicadas en `src/liga_bot/utils/formatting.py`:
 
-### 6.1 Normalización de Slugs y Canales
+### 7.1 Normalización de Slugs y Canales
 - **`normalize_slug(text: str, max_length: int = 100) -> str`**: Aplica descomposición Unicode NFKD, descarta diacríticos (`unicodedata.combining`), convierte a minúsculas, sustituye caracteres no alfanuméricos por guiones, colapsa guiones repetidos y acota a `max_length`.
 - **`normalize_tag(tag: str, max_length: int = 4) -> str`**: Elimina espacios, pasa a mayúsculas y acota a 4 caracteres para cumplir la restricción relacional del tag de equipo.
 - **`format_match_channel_name(jornada: int, team1_tag_or_slug: str, team2_tag_or_slug: str, max_length: int = 100) -> str`**: Genera el nombre del canal bajo el patrón canónico `j{jornada}-{slug1}-vs-{slug2}` truncado a un máximo de 100 caracteres.
 - **`normalize_name(name: str) -> str`**: Normaliza nombres para comparaciones insensibles a caracteres tipográficos o emojis decorativos.
 
-### 6.2 Plantillas Oficiales Verbatim
+### 7.2 Plantillas Oficiales Verbatim
 - **`MENSAJE_1`** (`src/liga_bot/utils/formatting.py:24-43`): Texto reglamentario de acuerdo de horario (plazo límite jueves 23:59h) y convocatoria de alineaciones OP.GG (4 horas previas, penalizaciones de -1 BAN, 0 BANS y Abandono).
 - **`MENSAJE_2`** (`src/liga_bot/utils/formatting.py:45-62`): Texto reglamentario de Fearless Draft (`https://lol.draftcore.net/`, fallback a `https://drafter.lol/`) y referencia al canal de normas (`DEFAULT_REGLAMENTO_CHANNEL` = `<#1414343806297374780>`).
 - **`format_mensaje_1(...) -> str`**: Interpola `jornada`, `fecha`, `hora`, `equipo1` y `equipo2` admitiendo firmas flexibles por palabras clave o posicionales.
@@ -221,8 +277,8 @@ Ubicadas en `src/liga_bot/utils/formatting.py`:
 
 ---
 
-## 7. Aclaraciones Fácticas sobre Métodos Inexistentes
+## 8. Aclaraciones Fácticas sobre Métodos Inexistentes
 
-1. **Construcción de Embeds**: `ScheduleService` **NO** contiene métodos como `format_match_embed`. La creación y serialización de los embeds visuales corresponde exclusivamente a la capa del Cog (`ScheduleCog.crear_partido` y `ScheduleCog._importar_jornada_impl`).
+1. **Construcción de Embeds**: `ScheduleService` **NO** contiene métodos como `format_match_embed`. La creación y serialización de los embeds visuales corresponde exclusivamente a la capa del Cog (`ScheduleCog.crear_partido`, `ScheduleCog._importar_jornada_impl` y `ScheduleCog._stream_url_impl`).
 2. **Transmisión de Calendario**: No existe ningún método `broadcast_schedule` en el servicio; el aprovisionamiento opera creando canales privados específicos para cada enfrentamiento individual.
 3. **Sincronización Externa**: `ScheduleService` no efectúa peticiones HTTP salientes ni sincronización con APIs externas o WebSockets; toda la persistencia se realiza localmente en la base de datos PostgreSQL de la aplicación.

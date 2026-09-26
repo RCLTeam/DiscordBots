@@ -69,7 +69,7 @@ Representa la identidad base de un usuario de Discord autenticado en el ecosiste
 | `username` | `String(64)` | `varchar(64)` | No | — | Nombre de usuario en Discord. |
 | `global_name` | `String(64)` | `varchar(64)` | Sí | `None` | Nombre global o apodo visible. |
 | `avatar_hash` | `String(128)` | `varchar(128)` | Sí | `None` | Hash del avatar en CDN de Discord. |
-| `role` | `Enum(AppRole)` | `app_role` | No | `AppRole.VIEWER` / `'viewer'` | Nivel de privilegio (`viewer` o `admin`). |
+| `role` | `Enum(AppRole)` | `app_role` | No | `AppRole.VIEWER` / `'viewer'` | Nivel de privilegio (`viewer`, `admin` u `owner`). |
 | `created_at` | `DateTime(timezone=True)` | `timestamptz` | No | `func.now()` | Fecha de creación del registro. |
 | `updated_at` | `DateTime(timezone=True)` | `timestamptz` | No | `func.now()` (`onupdate=func.now()`) | Fecha de última modificación. |
 
@@ -244,7 +244,7 @@ Monitorea la actividad de los canales de soporte (tickets) para disparar avisos 
 
 ### 2.8 `Match` (`matches`)
 *Archivo fuente:* `src/liga_bot/models/match.py`  
-*Gobernanza:* Propietaria de DiscordBots (Migración Alembic `001_initial_schema.py`).
+*Gobernanza:* Propietaria de DiscordBots (Migraciones Alembic `001_initial_schema.py` y `003_add_stream_urls.py`).
 
 Representa un enfrentamiento competitivo programado entre dos clubes dentro de una jornada.
 
@@ -258,7 +258,10 @@ Representa un enfrentamiento competitivo programado entre dos clubes dentro de u
 | `discord_channel_id` | `BigInteger` | `bigint` | Sí | `None` (Unique) | Canal de texto privado asignado al partido. |
 | `scheduled_at` | `DateTime(timezone=True)` | `timestamptz` | Sí | `None` | Fecha y hora programada de la partida. |
 | `status` | `Enum(MatchStatus)` | `matchstatus` | No | `PENDIENTE` / `'PENDIENTE'` | Estado operativo (`PENDIENTE`, `CANAL_CREADO`, `JUGADO`, `CANCELADO`). |
+| `stream_url` | `Text` | `text` | Sí | `None` | URL de la retransmisión grabada o VOD del partido. |
+| `stream_url_live` | `String(255)` | `varchar(255)` | Sí | `None` | URL del directo o retransmisión en vivo del partido (Twitch, YouTube Live, etc.). |
 | `created_at` | `DateTime(timezone=True)` | `timestamptz` | No | `func.now()` (Timestamp Mixin) | Fecha de creación del emparejamiento. |
+| `updated_at` | `DateTime(timezone=True)` | `timestamptz` | No | `func.now()` (`onupdate=func.now()`) | Fecha de última modificación. |
 
 **Restricciones DDL e Índices:**
 - `UniqueConstraint("jornada", "team1_id", "team2_id", name="uq_matches_jornada_teams")`: Impide duplicar el mismo enfrentamiento en una misma jornada.

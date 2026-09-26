@@ -895,6 +895,159 @@ async def test_match_repo_cascade_delete_on_team_removal(
     assert await match_repo.get_by_id(match_id) is None
 
 
+@pytest.mark.asyncio
+async def test_get_by_teams_bidirectional(match_repo: MatchRepository, team_repo: TeamRepository):
+    """Verifica get_by_teams en orden normal y simétricamente invertido."""
+    t1 = await team_repo.create(
+        name="Team Liquid",
+        tag="TL",
+        slug="team-liquid",
+        division=Division.PREMIER,
+        discord_role_id=300000000000000026,
+    )
+    t2 = await team_repo.create(
+        name="Cloud9",
+        tag="C9",
+        slug="cloud9",
+        division=Division.PREMIER,
+        discord_role_id=300000000000000027,
+    )
+    match = await match_repo.create(
+        jornada=1, division=Division.PREMIER, team1_id=t1.id, team2_id=t2.id
+    )
+
+    # Orden normal (t1 vs t2)
+    m1 = await match_repo.get_by_teams(t1.id, t2.id)
+    assert m1 is not None
+    assert m1.id == match.id
+    assert m1.team1.name == "Team Liquid"
+    assert m1.team2.name == "Cloud9"
+
+    # Orden invertido (t2 vs t1)
+    m2 = await match_repo.get_by_teams(t2.id, t1.id)
+    assert m2 is not None
+    assert m2.id == match.id
+
+    # Pasando UUIDs como string
+    m3 = await match_repo.get_by_teams(str(t1.id), str(t2.id))
+    assert m3 is not None
+    assert m3.id == match.id
+
+
+@pytest.mark.asyncio
+async def test_get_by_teams_with_jornada_filter(
+    match_repo: MatchRepository, team_repo: TeamRepository
+):
+    """Verifica get_by_teams filtrando por jornada y ordenando por más reciente."""
+    t1 = await team_repo.create(
+        name="Fnatic",
+        tag="FNC",
+        slug="fnatic",
+        division=Division.PREMIER,
+        discord_role_id=300000000000000028,
+    )
+    t2 = await team_repo.create(
+        name="G2 Esports",
+        tag="G2",
+        slug="g2-esports",
+        division=Division.PREMIER,
+        discord_role_id=300000000000000029,
+    )
+
+    dt1 = datetime(2026, 9, 10, 18, 0, tzinfo=timezone.utc)
+    dt2 = datetime(2026, 9, 24, 20, 0, tzinfo=timezone.utc)
+
+    match_j1 = await match_repo.create(
+        jornada=1, division=Division.PREMIER, team1_id=t1.id, team2_id=t2.id, scheduled_at=dt1
+    )
+    match_j2 = await match_repo.create(
+        jornada=2, division=Division.PREMIER, team1_id=t2.id, team2_id=t1.id, scheduled_at=dt2
+    )
+
+    # Filtrar por jornada específica
+    res_j1 = await match_repo.get_by_teams(t1.id, t2.id, jornada=1)
+    assert res_j1 is not None
+    assert res_j1.id == match_j1.id
+
+    res_j2 = await match_repo.get_by_teams(t1.id, t2.id, jornada=2)
+    assert res_j2 is not None
+    assert res_j2.id == match_j2.id
+
+    res_j3 = await match_repo.get_by_teams(t1.id, t2.id, jornada=3)
+    assert res_j3 is None
+
+    # Sin jornada: debe devolver el más reciente (jornada 2 por scheduled_at)
+    latest = await match_repo.get_by_teams(t1.id, t2.id)
+    assert latest is not None
+    assert latest.id == match_j2.id
+
+
+@pytest.mark.asyncio
+async def test_get_by_teams_invalid_uuid_and_not_found(
+    match_repo: MatchRepository, team_repo: TeamRepository
+):
+    """Verifica manejo seguro de UUIDs inválidos y equipos no enfrentados."""
+    t1 = await team_repo.create(
+        name="Astralis",
+        tag="AST",
+        slug="astralis",
+        division=Division.PREMIER,
+        discord_role_id=300000000000000030,
+    )
+    # Formato inválido retorna None sin fallar la sesión
+    assert await match_repo.get_by_teams("not-a-valid-uuid", str(t1.id)) is None
+    assert await match_repo.get_by_teams(str(t1.id), "not-a-valid-uuid") is None
+
+    # UUIDs válidos pero sin partido registrado
+    assert await match_repo.get_by_teams(uuid.uuid4(), t1.id) is None
+
+
+@pytest.mark.asyncio
+async def test_update_stream_url(match_repo: MatchRepository, team_repo: TeamRepository):
+    """Verifica actualización de stream_url (VOD) y stream_url_live."""
+    t1 = await team_repo.create(
+        name="Team Vitality",
+        tag="VIT",
+        slug="team-vitality",
+        division=Division.PREMIER,
+        discord_role_id=300000000000000031,
+    )
+    t2 = await team_repo.create(
+        name="Karmine Corp",
+        tag="KC",
+        slug="karmine-corp",
+        division=Division.PREMIER,
+        discord_role_id=300000000000000032,
+    )
+    match = await match_repo.create(
+        jornada=1, division=Division.PREMIER, team1_id=t1.id, team2_id=t2.id
+    )
+
+    # Actualizar stream_url (VOD / is_live=False) pasando UUID
+    vod_url = "https://youtube.com/watch?v=vod123"
+    updated_vod = await match_repo.update_stream_url(match.id, vod_url, is_live=False)
+    assert updated_vod is not None
+    assert updated_vod.stream_url == vod_url
+    assert updated_vod.stream_url_live is None
+
+    # Actualizar stream_url_live (is_live=True) pasando instancia Match
+    live_url = "https://twitch.tv/rcl_live"
+    updated_live = await match_repo.update_stream_url(updated_vod, live_url, is_live=True)
+    assert updated_live is not None
+    assert updated_live.stream_url == vod_url
+    assert updated_live.stream_url_live == live_url
+
+    # Actualizar pasando str ID
+    live_url_updated = "https://twitch.tv/rcl_live_2"
+    updated_str = await match_repo.update_stream_url(str(match.id), live_url_updated, is_live=True)
+    assert updated_str is not None
+    assert updated_str.stream_url_live == live_url_updated
+
+    # ID inexistente
+    non_existent = await match_repo.update_stream_url(uuid.uuid4(), "https://twitch.tv/foo")
+    assert non_existent is None
+
+
 # ---------------------------------------------------------------------------
 # 4. TicketNoticeRepository
 # ---------------------------------------------------------------------------

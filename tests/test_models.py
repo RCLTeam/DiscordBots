@@ -406,6 +406,49 @@ class TestMatchModel:
             async with session.begin_nested():
                 await session.flush()
 
+    def test_match_model_has_stream_urls(self):
+        """Verifica la definición de columnas stream_url y stream_url_live en Match."""
+        assert hasattr(Match, "stream_url")
+        assert hasattr(Match, "stream_url_live")
+        columns = {c.name: c for c in Match.__table__.columns}
+        assert "stream_url" in columns
+        assert "stream_url_live" in columns
+        assert columns["stream_url_live"].type.length == 255
+
+    @pytest.mark.asyncio
+    async def test_match_stream_urls_persistence(self, session: AsyncSession):
+        """Verifica que stream_url y stream_url_live se persistan correctamente."""
+        t1 = Team(
+            name="Cloud9",
+            tag="C9",
+            slug="cloud9",
+            division=Division.PREMIER,
+            discord_role_id=999111222333444555,
+        )
+        t2 = Team(
+            name="Fnatic",
+            tag="FNC",
+            slug="fnatic",
+            division=Division.PREMIER,
+            discord_role_id=999222333444555666,
+        )
+        session.add_all([t1, t2])
+        await session.flush()
+
+        match = Match(
+            jornada=1,
+            division=Division.PREMIER,
+            team1_id=t1.id,
+            team2_id=t2.id,
+            stream_url="https://youtube.com/watch?v=example",
+            stream_url_live="https://twitch.tv/example_live",
+        )
+        session.add(match)
+        await session.flush()
+
+        assert match.stream_url == "https://youtube.com/watch?v=example"
+        assert match.stream_url_live == "https://twitch.tv/example_live"
+
 
 class TestTicketNoticeModel:
     """Pruebas unitarias para el modelo TicketNotice."""
@@ -442,3 +485,14 @@ class TestTicketNoticeModel:
         with pytest.raises(IntegrityError):
             async with session.begin_nested():
                 await session.flush()
+
+
+class TestEnums:
+    """Pruebas unitarias para las enumeraciones de dominio."""
+
+    def test_app_role_owner_enum(self):
+        """Verifica que AppRole incluya OWNER = 'owner' alineado con RCL-Next."""
+        from liga_bot.models.enums import AppRole
+
+        assert AppRole.OWNER == "owner"
+        assert AppRole.OWNER.value == "owner"

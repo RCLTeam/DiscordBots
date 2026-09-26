@@ -80,6 +80,20 @@ class JornadaResult:
         return len(self.errors)
 
 
+@dataclass(slots=True)
+class StreamUrlResult:
+    """Resultado de la asignación de URL de stream o VOD a un partido."""
+
+    success: bool
+    url: str
+    is_live: bool
+    match: Match | None = None
+    team1_name: str | None = None
+    team2_name: str | None = None
+    jornada: int | None = None
+    error: str | None = None
+
+
 class ScheduleService:
     """
     Servicio de orquestación de calendario, validación de enfrentamientos y
@@ -490,3 +504,92 @@ class ScheduleService:
             guild=guild, jornada=jornada, csv_content=csv_content
         )
         return j_res.matches
+
+    async def set_stream_url(
+        self,
+        role1_id: int,
+        role2_id: int,
+        url: str,
+        is_live: bool = False,
+        jornada: int | None = None,
+    ) -> StreamUrlResult:
+        """Asigna o actualiza la URL de stream o directo para un enfrentamiento."""
+        clean_url = url.strip()
+        if not (clean_url.startswith("http://") or clean_url.startswith("https://")):
+            return StreamUrlResult(
+                success=False,
+                url=clean_url,
+                is_live=is_live,
+                error="La URL proporcionada no es válida (debe comenzar con http:// o https://).",
+            )
+
+        if role1_id == role2_id:
+            return StreamUrlResult(
+                success=False,
+                url=clean_url,
+                is_live=is_live,
+                error="Los dos roles de equipo deben ser diferentes.",
+            )
+
+        async with transactional_session(self.session_factory) as session:
+            team_repo = TeamRepository(session)
+            match_repo = MatchRepository(session)
+
+            team1 = await team_repo.get_by_role_id(role1_id)
+            if team1 is None:
+                return StreamUrlResult(
+                    success=False,
+                    url=clean_url,
+                    is_live=is_live,
+                    error=(
+                        f"El rol de Discord <@&{role1_id}> no está asociado "
+                        "a ningún equipo registrado."
+                    ),
+                )
+
+            team2 = await team_repo.get_by_role_id(role2_id)
+            if team2 is None:
+                return StreamUrlResult(
+                    success=False,
+                    url=clean_url,
+                    is_live=is_live,
+                    error=(
+                        f"El rol de Discord <@&{role2_id}> no está asociado "
+                        "a ningún equipo registrado."
+                    ),
+                )
+
+            match = await match_repo.get_by_teams(
+                team1_id=team1.id,
+                team2_id=team2.id,
+                jornada=jornada,
+                with_teams=True,
+            )
+
+            if match is None:
+                extra_jornada = f" en la jornada {jornada}" if jornada is not None else ""
+                return StreamUrlResult(
+                    success=False,
+                    url=clean_url,
+                    is_live=is_live,
+                    error=(
+                        "No se encontró ningún enfrentamiento registrado entre "
+                        f"**{team1.name}** y **{team2.name}**{extra_jornada}."
+                    ),
+                )
+
+            updated_match = await match_repo.update_stream_url(
+                match_or_id=match,
+                url=clean_url,
+                is_live=is_live,
+            )
+
+            return StreamUrlResult(
+                success=True,
+                url=clean_url,
+                is_live=is_live,
+                match=updated_match,
+                team1_name=team1.name,
+                team2_name=team2.name,
+                jornada=match.jornada,
+            )

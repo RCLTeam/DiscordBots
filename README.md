@@ -39,7 +39,7 @@ Diseñado bajo una arquitectura modular por capas desacopladas (*vertical slices
 | **Migraciones de Esquema** | `Alembic` | `1.14+` | Control de versiones de la base de datos relacional con soporte asíncrono para migraciones automáticas. |
 | **Red y WebSockets** | `aiohttp` | `3.11+` | Servidor WebSocket interno y endpoints HTTP REST para la pasarela de integración bidireccional (*WebSocket Bridge*). |
 | **Configuración** | `pydantic-settings` | `2.7+` | Validación estricta en tiempo de arranque, normalización de URLs y lectura de 18 variables de entorno. |
-| **Calidad y Testing** | `pytest` + `ruff` | `9.1+` / `0.9+` | Suite de 1.138 pruebas deterministas (`pytest-asyncio`) y formateo/linting estricto de código. |
+| **Calidad y Testing** | `pytest` + `ruff` | `9.1+` / `0.9+` | Suite de 1.159 pruebas deterministas (`pytest-asyncio`) y formateo/linting estricto de código. |
 
 ---
 
@@ -52,6 +52,7 @@ Diseñado bajo una arquitectura modular por capas desacopladas (*vertical slices
 - **Gestión Automatizada de Calendario y Jornadas**:
   - Creación individual de partidos (`/crear-partido`) con validación de división competitiva (Premier y Ascend).
   - Importación masiva por lotes desde archivos CSV (`/importar-jornada` y `/crear-jornada`) con tolerancia a delimitadores (`,` y `;`) y BOM UTF-8.
+  - Asignación de URLs de retransmisión en directo (`/stream_url_live`) y grabaciones VOD (`/stream_url`) para cualquier enfrentamiento mediante búsqueda simétrica por roles de Discord.
   - Generación de canales privados de Discord con permisos automáticos para equipos, árbitros, administración y CEOs.
   - Publicación instantánea de plantillas oficiales de coordinación, reglas de horario, convocatorias y Fearless Draft.
   - **Garantía Anti-Huérfanos**: Reversión transaccional inmediata y eliminación física del canal de Discord si ocurre un error durante el envío de mensajes o la transacción de base de datos.
@@ -172,8 +173,8 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │   │   │   └── ui.md                         # Componentes UI de confirmación de traspasos y capitanías
 │   │   ├── schedule/                         # Gestión de partidos, cronogramas y canales privados de juego
 │   │   │   ├── README.md                     # Índice del módulo de calendario competitivo
-│   │   │   ├── commands.md                   # Comandos slash (/crear-partido, /importar-jornada, /crear-jornada)
-│   │   │   ├── persistence.md                # Persistencia relacional de partidos y validación de divisiones
+│   │   │   ├── commands.md                   # Comandos slash (/crear-partido, /importar-jornada, /crear-jornada, /stream_url, /stream_url_live)
+│   │   │   ├── persistence.md                # Persistencia relacional de partidos, URLs de stream y validación de divisiones
 │   │   │   └── services.md                   # Orquestación de creación segura de canales y plantillas oficiales
 │   │   ├── tickets/                          # Auditoría y supervisión de tickets de soporte y fichajes
 │   │   │   ├── README.md                     # Índice del módulo de tickets y soporte

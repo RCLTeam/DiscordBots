@@ -32,6 +32,7 @@ class AppRole(str, enum.Enum):
 
     VIEWER = "viewer"
     ADMIN = "admin"
+    OWNER = "owner"
 
 
 class RosterRole(str, enum.Enum):

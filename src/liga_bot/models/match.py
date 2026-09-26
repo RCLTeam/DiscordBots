@@ -14,6 +14,8 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    String,
+    Text,
     UniqueConstraint,
     Uuid,
 )
@@ -60,6 +62,14 @@ class Match(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         default=MatchStatus.PENDIENTE,
         server_default="PENDIENTE",
         nullable=False,
+    )
+    stream_url: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    stream_url_live: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
     )
 
     # Relaciones eager seguras para contextos asíncronos

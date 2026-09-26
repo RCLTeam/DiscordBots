@@ -52,6 +52,14 @@ class Match(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         server_default="PENDIENTE",
         nullable=False,
     )
+    stream_url: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    stream_url_live: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
 ```
 
 | Columna | Tipo SQLAlchemy | Tipo Python | Nulo | Por Defecto | Descripción |
@@ -64,6 +72,8 @@ class Match(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 | `discord_channel_id` | `BigInteger` | `int \| None` | Sí | `None` | Snowflake de 64 bits del canal de Discord creado. Unicidad estricta para valores no nulos. |
 | `scheduled_at` | `DateTime(timezone=True)` | `datetime \| None` | Sí | `None` | Fecha y hora oficial programada en UTC. |
 | `status` | `Enum(MatchStatus, native_enum=True)` | `MatchStatus` | No | `PENDIENTE` | Estado del ciclo de vida operativo del enfrentamiento. |
+| `stream_url` | `Text` | `str \| None` | Sí | `None` | URL de la retransmisión grabada o VOD del partido. |
+| `stream_url_live` | `String(255)` | `str \| None` | Sí | `None` | URL del directo o emisión en vivo del partido. |
 | `created_at` | `DateTime(timezone=True)` | `datetime` | No | `now(UTC)` | Fecha de creación del registro. |
 | `updated_at` | `DateTime(timezone=True)` | `datetime` | No | `now(UTC)` | Fecha de última modificación. |
 
@@ -153,6 +163,18 @@ Recupera el partido programado para una jornada entre dos equipos:
   Permite detectar si los dos equipos ya se enfrentan en esa jornada, independientemente de quién figure como local o visitante.
 - **`exact_order=True`**: Aplica comprobación estricta respetando la localía `(Match.team1_id == u1) & (Match.team2_id == u2)`.
 
+#### `get_by_teams(team1_id: UUID | str, team2_id: UUID | str, jornada: int | None = None, with_teams: bool = True) -> Match | None`
+Recupera el partido disputado entre dos equipos en cualquier orden de localía (`team1 vs team2` O `team2 vs team1`) mediante comprobación simétrica bidireccional:
+```python
+condition = ((Match.team1_id == u1) & (Match.team2_id == u2)) | (
+    (Match.team1_id == u2) & (Match.team2_id == u1)
+)
+```
+- **Manejo defensivo de UUIDs**: Convierte los identificadores recibidos a `uuid.UUID`; ante un formato de UUID inválido retorna `None` sin emitir consulta SQL ni propagar excepción.
+- **Filtro opcional de jornada**: Si se proporciona `jornada`, restringe la búsqueda a dicha jornada competitiva (`Match.jornada == jornada`).
+- **Ordenación determinista**: Aplica `order_by(Match.scheduled_at.desc().nulls_last(), Match.created_at.desc())`. Si existen múltiples partidos registrados entre los dos equipos, selecciona el enfrentamiento más reciente.
+- **Carga Eager**: Por defecto (`with_teams=True`), precarga las entidades de ambos equipos mediante `_apply_eager_teams`.
+
 #### `list_by_jornada(jornada: int, division: Division | str | None = None, with_teams: bool = False) -> Sequence[Match]`
 Obtiene todos los enfrentamientos de una jornada específica con ordenamiento determinista:
 - **Filtro de división opcional**: Si se indica `division`, restringe la consulta (`Match.division == div_val`).
@@ -176,6 +198,12 @@ Actualiza el estado operativo del partido. Resuelve la entidad por ID si se prop
 
 #### `update_channel_id(match_or_id: Match | UUID | str, channel_id: int | None) -> Match | None`
 Asocia o desvincula el ID del canal de Discord asociado al partido, ejecutando `flush()` y `refresh()`.
+
+#### `update_stream_url(match_or_id: Match | UUID | str, url: str, is_live: bool = False) -> Match | None`
+Asigna o actualiza la URL de retransmisión para un enfrentamiento:
+- **Resolución polimórfica**: Admite una instancia existente de `Match` o su identificador (`UUID` o `str`). Si recibe un identificador, recupera la entidad mediante `get_by_id`. Si no se localiza en base de datos, retorna `None`.
+- **Discriminación de transmisión**: Si `is_live=True`, asigna `match.stream_url_live = url`; si `is_live=False`, asigna `match.stream_url = url`.
+- **Sincronización transaccional**: Ejecuta `await self._session.flush()` y `await self._session.refresh(match)`, devolviendo la entidad actualizada y persistida.
 
 ---
 

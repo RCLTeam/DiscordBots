@@ -210,11 +210,155 @@ Alias funcional de `/importar-jornada` mantenido para preservar la ergonomía y 
 
 ---
 
-## 4. Aclaraciones Fácticas sobre Comandos Inexistentes
+### 3.4 `/stream_url`
+
+Asigna o actualiza la URL de la retransmisión grabada o VOD (Twitch VOD, YouTube, etc.) para el enfrentamiento deportivo entre dos equipos.
+
+- **Ubicación**: `src/liga_bot/cogs/schedule.py:382-404` (implementación compartida en `_stream_url_impl:311-380`).
+- **Firma**:
+  ```python
+  @app_commands.command(
+      name="stream_url",
+      description="Asigna la URL del stream/VOD grabado para el partido entre dos equipos",
+  )
+  @app_commands.describe(
+      equipo1="Rol del primer equipo",
+      equipo2="Rol del segundo equipo",
+      url="URL de la retransmisión o VOD (Twitch, YouTube, etc.)",
+      jornada="Jornada específica del partido (opcional, por defecto el más reciente)",
+  )
+  @app_commands.default_permissions(manage_guild=True)
+  async def stream_url(
+      self,
+      interaction: discord.Interaction,
+      equipo1: discord.Role,
+      equipo2: discord.Role,
+      url: str,
+      jornada: int | None = None,
+  ) -> None:
+      await self._stream_url_impl(
+          interaction=interaction,
+          equipo1=equipo1,
+          equipo2=equipo2,
+          url=url,
+          is_live=False,
+          jornada=jornada,
+      )
+  ```
+
+#### Parámetros
+
+| Parámetro | Tipo | Obligatorio | Descripción |
+|---|---|:---:|---|
+| `equipo1` | `discord.Role` | Sí | Rol de Discord representativo del primer equipo involucrado en el partido. |
+| `equipo2` | `discord.Role` | Sí | Rol de Discord representativo del segundo equipo involucrado en el partido. |
+| `url` | `str` | Sí | URL del VOD o grabación del partido (debe comenzar obligatoriamente con `http://` o `https://`). |
+| `jornada` | `int \| None` | No | Número de la jornada específica (opcional). Si se omite, se resuelve automáticamente el partido más reciente entre ambos clubes. |
+
+#### Control de Acceso y Validaciones Pre-Ejecución
+
+1. **Rechazo de DMs**: Si `interaction.guild is None`, responde efímeramente `"❌ Este comando solo puede ser ejecutado dentro de un servidor de Discord."`.
+2. **Autorización Programática**: Valida `await is_authorized_scheduler(interaction, self.settings)`. Requiere permiso de Administrador o posesión de rol Staff, Admin, CEO Premier o CEO Ascend. En caso contrario, responde: `"❌ No tienes permisos para gestionar URLs de partidos (se requiere Staff, Admin o CEO)."`.
+3. **Aplazamiento Proactivo**: Ejecuta `await interaction.response.defer(ephemeral=True)` para asegurar holgura ante la resolución asíncrona de roles y persistencia transaccional.
+4. **Delegación**: Invoca `ScheduleService.set_stream_url(role1_id=equipo1.id, role2_id=equipo2.id, url=url, is_live=False, jornada=jornada)`.
+
+#### Respuestas Visuales (Embeds)
+
+- **Éxito (`result.success is True`)**:
+  - **Color**: Azul (`discord.Color.blue()`).
+  - **Título**: `✅ URL de VOD / Transmisión Asignada`.
+  - **Descripción**:
+    ```
+    **Partido:** {result.team1_name} vs {result.team2_name}
+    **Jornada:** {result.jornada}
+    **URL:** [Ver enlace]({result.url})
+    ```
+  - **Campos**: `Enlace directo` mostrando la URL completa (`inline=False`).
+- **Fallo (`result.success is False`)**:
+  - **Color**: Rojo (`discord.Color.red()`).
+  - **Título**: `❌ Error al Asignar URL`.
+  - **Descripción**: Mensaje descriptivo del motivo de rechazo (roles idénticos, rol no vinculado a equipo, partido no encontrado o URL no válida).
+
+---
+
+### 3.5 `/stream_url_live`
+
+Asigna o actualiza la URL de la retransmisión en directo en vivo (Twitch Live, YouTube Live, etc.) para el enfrentamiento deportivo entre dos equipos.
+
+- **Ubicación**: `src/liga_bot/cogs/schedule.py:406-425` (implementación compartida en `_stream_url_impl:311-380`).
+- **Firma**:
+  ```python
+  @app_commands.command(
+      name="stream_url_live",
+      description="Asigna la URL del stream en directo para el partido entre dos equipos",
+  )
+  @app_commands.describe(
+      equipo1="Rol del primer equipo",
+      equipo2="Rol del segundo equipo",
+      url="URL del directo en vivo (Twitch, YouTube Live, etc.)",
+      jornada="Jornada específica del partido (opcional, por defecto el más reciente)",
+  )
+  @app_commands.default_permissions(manage_guild=True)
+  async def stream_url_live(
+      self,
+      interaction: discord.Interaction,
+      equipo1: discord.Role,
+      equipo2: discord.Role,
+      url: str,
+      jornada: int | None = None,
+  ) -> None:
+      await self._stream_url_impl(
+          interaction=interaction,
+          equipo1=equipo1,
+          equipo2=equipo2,
+          url=url,
+          is_live=True,
+          jornada=jornada,
+      )
+  ```
+
+#### Parámetros
+
+| Parámetro | Tipo | Obligatorio | Descripción |
+|---|---|:---:|---|
+| `equipo1` | `discord.Role` | Sí | Rol de Discord representativo del primer equipo involucrado en el partido. |
+| `equipo2` | `discord.Role` | Sí | Rol de Discord representativo del segundo equipo involucrado en el partido. |
+| `url` | `str` | Sí | URL del directo en vivo (debe comenzar obligatoriamente con `http://` o `https://`). |
+| `jornada` | `int \| None` | No | Número de la jornada específica (opcional; si se omite, se asocia al partido más reciente entre ambos clubes). |
+
+#### Control de Acceso y Validaciones Pre-Ejecución
+
+Idénticos a `/stream_url` (`interaction.guild is not None`, `is_authorized_scheduler`, aplazamiento efímero y delegación a `ScheduleService.set_stream_url(..., is_live=True, ...)`).
+
+#### Respuestas Visuales (Embeds)
+
+- **Éxito (`result.success is True`)**:
+  - **Color**: Morado / Púrpura (`discord.Color.purple()`).
+  - **Título**: `✅ URL de Directo (Live) Asignada`.
+  - **Descripción**:
+    ```
+    **Partido:** {result.team1_name} vs {result.team2_name}
+    **Jornada:** {result.jornada}
+    **URL:** [Ver enlace]({result.url})
+    ```
+  - **Campos**: `Enlace directo` mostrando la URL completa (`inline=False`).
+- **Fallo (`result.success is False`)**:
+  - **Color**: Rojo (`discord.Color.red()`).
+  - **Título**: `❌ Error al Asignar URL`.
+  - **Descripción**: Detalle de la incidencia detectada.
+
+---
+
+## 4. Aclaraciones Fácticas sobre Comandos y Gestión de Calendario
 
 En versiones conceptuales o especificaciones preliminares se propusieron comandos de consulta y sincronización bajo el grupo `/horarios` (tales como `/horarios ver`, `/horarios actualizar` o `/horarios sync`).
 
 Se aclara taxativamente que:
 1. El grupo o comando `/horarios` **NO EXISTE** en el código fuente de `DiscordBots`.
-2. Las únicas interfaces slash para programación y gestión de calendario disponibles en el sistema son `/crear-partido`, `/importar-jornada` y su alias `/crear-jornada`.
-3. No existen comandos de consulta de calendario en Discord; la visualización de enfrentamientos se realiza directamente a través de los canales de texto aprovisionados bajo las categorías de jornada en el servidor de Discord.
+2. Las interfaces slash para programación, aprovisionamiento y gestión de calendario disponibles en el sistema son exclusivamente:
+   - `/crear-partido`: Aprovisionamiento individual de canales privados y partidos.
+   - `/importar-jornada`: Creación masiva por lotes mediante archivos CSV.
+   - `/crear-jornada`: Alias funcional de `/importar-jornada`.
+   - `/stream_url`: Asignación y actualización de URLs de retransmisión grabada o VODs de partidos por roles de Discord.
+   - `/stream_url_live`: Asignación y actualización de URLs de emisiones en vivo de partidos por roles de Discord.
+3. No existen comandos de consulta de calendario en Discord; la visualización de enfrentamientos se realiza directamente a través de los canales de texto aprovisionados bajo las categorías de jornada en el servidor de Discord, mientras que la gestión de URLs de transmisión se efectúa mediante `/stream_url` y `/stream_url_live`.
