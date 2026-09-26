@@ -928,6 +928,45 @@ class TestConfirmRoleRequest:
         assert updated_req.staff_id == 900001
 
     @pytest.mark.asyncio
+    async def test_confirm_request_resolves_role_by_discord_role_id(
+        self, role_service: RoleService, clean_settings: Settings, db_session: AsyncSession
+    ):
+        """El rol se localiza por discord_role_id aunque no coincida con el nombre del equipo."""
+        await db_session.merge(
+            Team(
+                name="Dive. Flip. Repeat.",
+                tag="DFR",
+                slug="dive-flip-repeat",
+                division=Division.PREMIER,
+                discord_role_id=888202,
+            )
+        )
+        await db_session.commit()
+
+        # El rol de Discord se llama distinto al equipo registrado en base de datos
+        team_role = create_mock_role(888202, "🎯 Dive Flip Repeat")
+        guild = create_mock_guild(clean_settings, roles=[team_role])
+        staff = create_mock_member(900001, name="StaffBoss", guild=guild)
+        member = create_mock_member(400011, name="Ninym2", guild=guild)
+        guild._members_map[400011] = member
+
+        repo = RoleRequestRepository(db_session)
+        await repo.create_request(
+            user_id=400011,
+            nombre_lol="Ninym2",
+            riot_tag="EUW",
+            equipo="Dive. Flip. Repeat.",
+            canal_id=777011,
+        )
+
+        ok, _ = await role_service.confirm_role_request(
+            guild=guild, channel_id=777011, staff_member=staff
+        )
+
+        assert ok is True
+        member.add_roles.assert_awaited_once_with(team_role)
+
+    @pytest.mark.asyncio
     async def test_confirm_request_applies_team_tag_to_nick(
         self, role_service: RoleService, clean_settings: Settings, db_session: AsyncSession
     ):

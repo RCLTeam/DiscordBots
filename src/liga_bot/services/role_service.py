@@ -343,8 +343,17 @@ class RoleService:
             if member is None:
                 return False, "El usuario solicitante no se encuentra en el servidor."
 
-            # Asignar rol del equipo si existe
-            role = discord.utils.get(guild.roles, name=req.equipo)
+            # Resolver el equipo en base de datos: su discord_role_id manda sobre el
+            # nombre, que puede no coincidir literalmente con el rol de Discord.
+            team_repo = TeamRepository(session)
+            team = await team_repo.get_by_name(req.equipo)
+
+            role = None
+            if team is not None:
+                role = guild.get_role(team.discord_role_id)
+            if role is None:
+                role = discord.utils.get(guild.roles, name=req.equipo)
+
             if role is not None:
                 try:
                     await member.add_roles(role)
@@ -357,8 +366,10 @@ class RoleService:
                     )
             else:
                 logger.warning(
-                    "El rol del equipo '%s' no se encontró en el servidor %s.",
+                    "El rol del equipo '%s' (discord_role_id=%s) no se encontró en el "
+                    "servidor %s: revisa el ID sembrado con seed-teams.",
                     req.equipo,
+                    team.discord_role_id if team is not None else "desconocido",
                     guild.name,
                 )
 
@@ -381,8 +392,6 @@ class RoleService:
 
             # Actualizar apodo, anteponiendo el tag del equipo asignado
             nick = f"{req.nombre_lol} #{req.riot_tag}"
-            team_repo = TeamRepository(session)
-            team = await team_repo.get_by_name(req.equipo)
             if team is not None:
                 known_tags = [t.tag for t in await team_repo.list_all()]
                 nick = apply_team_tag(nick, team.tag, known_tags)
@@ -394,7 +403,15 @@ class RoleService:
             nick = nick[:32]
             try:
                 await member.edit(nick=nick)
-            except (discord.Forbidden, discord.HTTPException) as exc:
+            except discord.Forbidden:
+                logger.warning(
+                    "Sin permisos para cambiar el apodo de %s a '%s': el bot necesita "
+                    "'Gestionar apodos' y un rol por encima del miembro (los dueños del "
+                    "servidor nunca pueden ser renombrados).",
+                    member.display_name,
+                    nick,
+                )
+            except discord.HTTPException as exc:
                 logger.warning(
                     "No se pudo actualizar el apodo de %s a '%s': %s",
                     member.display_name,
