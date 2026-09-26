@@ -16,6 +16,7 @@ import asyncio
 import inspect
 import logging
 import re
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 import discord
@@ -26,6 +27,9 @@ if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
+
+# Discord admite 25 opciones por desplegable; la última se reserva para agente libre.
+MAX_TEAM_OPTIONS = 24
 
 
 # ---------------------------------------------------------------------------
@@ -64,9 +68,22 @@ class SolicitudRolModal(discord.ui.Modal, title="Solicitud de Rol de Jugador"):
             view=EquipoSelectView(
                 nombre_lol=self.nombre_lol.value,
                 riot_tag=self.riot_tag.value,
+                teams=await _fetch_team_names(interaction),
             ),
             ephemeral=True,
         )
+
+
+async def _fetch_team_names(interaction: discord.Interaction) -> list[str] | None:
+    """Nombres de equipo desde base de datos; None si no se pueden consultar."""
+    role_service = getattr(interaction.client, "role_service", None)
+    if role_service is None:
+        return None
+    try:
+        return await role_service.list_team_names()
+    except Exception as exc:
+        logger.error("No se pudieron cargar los equipos desde base de datos: %s", exc)
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -77,7 +94,7 @@ class SolicitudRolModal(discord.ui.Modal, title="Solicitud de Rol de Jugador"):
 class EquipoSelect(discord.ui.Select[Any]):
     """
     Menú desplegable con 21 opciones:
-    - 20 equipos oficiales de la liga (TEAMS_ALL).
+    - Equipos registrados en base de datos (o TEAMS_ALL como respaldo).
     - 1 opción de Agente Libre (free_role_name, por defecto 'Libre').
     """
 
@@ -86,11 +103,22 @@ class EquipoSelect(discord.ui.Select[Any]):
         nombre_lol: str,
         riot_tag: str,
         free_role_name: str | None = None,
+        teams: Sequence[str] | None = None,
     ) -> None:
         resolved_free_role = free_role_name or get_settings().free_role_name
         self.nombre_lol: str = nombre_lol
         self.riot_tag: str = riot_tag
         self.free_role_name: str = resolved_free_role
+
+        # Discord limita un desplegable a 25 opciones, una reservada para agente libre.
+        resolved_teams = list(teams) if teams else list(TEAMS_ALL)
+        if len(resolved_teams) > MAX_TEAM_OPTIONS:
+            logger.warning(
+                "Hay %d equipos registrados; solo se muestran los %d primeros.",
+                len(resolved_teams),
+                MAX_TEAM_OPTIONS,
+            )
+            resolved_teams = resolved_teams[:MAX_TEAM_OPTIONS]
 
         options: list[discord.SelectOption] = [
             discord.SelectOption(
@@ -98,7 +126,7 @@ class EquipoSelect(discord.ui.Select[Any]):
                 value=equipo,
                 description=f"Solicitar rol para {equipo}",
             )
-            for equipo in TEAMS_ALL
+            for equipo in resolved_teams
         ]
         options.append(
             discord.SelectOption(
@@ -212,12 +240,14 @@ class EquipoSelectView(discord.ui.View):
         riot_tag: str,
         timeout: float | None = 180.0,
         free_role_name: str | None = None,
+        teams: Sequence[str] | None = None,
     ) -> None:
         super().__init__(timeout=timeout)
         self.select: EquipoSelect = EquipoSelect(
             nombre_lol=nombre_lol,
             riot_tag=riot_tag,
             free_role_name=free_role_name,
+            teams=teams,
         )
         self.add_item(self.select)
 

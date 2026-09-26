@@ -194,6 +194,30 @@ class TestEquipoSelect:
         free_opt = next(opt for opt in select.options if opt.value == "Libre")
         assert str(free_opt.emoji) == "🕊️"
 
+    def test_equipo_select_uses_teams_from_database(self) -> None:
+        """Los equipos recibidos (de base de datos) sustituyen a las constantes por defecto."""
+        select = EquipoSelect(
+            nombre_lol="Ninym",
+            riot_tag="EUW",
+            free_role_name="Libre",
+            teams=["Planar Shock Pingus", "The Lost Guardian"],
+        )
+
+        option_values = [opt.value for opt in select.options]
+        assert option_values == ["Planar Shock Pingus", "The Lost Guardian", "Libre"]
+        assert TEAMS_ALL[0] not in option_values
+
+    def test_equipo_select_truncates_to_discord_limit(self) -> None:
+        """Con más equipos de los que admite Discord, el desplegable se recorta a 25 opciones."""
+        select = EquipoSelect(
+            nombre_lol="Ninym",
+            riot_tag="EUW",
+            free_role_name="Libre",
+            teams=[f"Equipo {i}" for i in range(40)],
+        )
+
+        assert len(select.options) == 25
+
     def test_equipo_select_custom_free_role_name(self) -> None:
         """Valida que un free_role_name personalizado se incluya correctamente en las opciones."""
         select = EquipoSelect(nombre_lol="PlayerTwo", riot_tag="LAN", free_role_name="FreeAgent")

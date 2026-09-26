@@ -115,6 +115,12 @@ class RoleService:
 
         return True
 
+    async def list_team_names(self) -> list[str]:
+        """Nombres de los equipos registrados en base de datos (división, nombre)."""
+        async with transactional_session(self.session_factory) as session:
+            teams = await TeamRepository(session).list_all()
+            return [team.name for team in teams]
+
     async def assign_free_role(
         self,
         member: discord.Member,
