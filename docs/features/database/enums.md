@@ -74,12 +74,14 @@ Define el nivel de autorización y privilegios de un usuario en el ecosistema (a
 class AppRole(str, enum.Enum):
     VIEWER = "viewer"
     ADMIN = "admin"
+    OWNER = "owner"
 ```
 
 - **Tipo PostgreSQL Subyacente:** `app_role` (creado y gobernado por RCL-Next).
 - **Valores Permitidos:**
   - `viewer`: Usuario estándar con permisos de lectura y visualización (`default=AppRole.VIEWER`, `server_default="viewer"`).
   - `admin`: Administrador de la plataforma con privilegios de gestión y moderación.
+  - `owner`: Propietario de la plataforma con máximos privilegios administrativos.
 - **Modelos que lo utilizan:** `DiscordUser.role`.
 
 ---

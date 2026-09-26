@@ -39,7 +39,7 @@ La base de datos PostgreSQL de la plataforma opera bajo un modelo de gobernanza 
 - **Filtro de Migraciones en Alembic (`include_object`):** Para evitar que Alembic intente alterar o borrar estas tablas en producción, la función `include_object` en `alembic/env.py` intercepta el autogenerate e ignora de forma estricta cualquier tabla, índice o restricción perteneciente a este conjunto.
 
 ### 2.2 Tablas Propietarias (Gobernadas por DiscordBots)
-- **Autoridad:** Las 3 tablas operativas propias del bot (`matches`, `ticket_notices`, `role_requests`) son gestionadas directamente por el pipeline de migraciones de **Alembic** en `alembic/versions/` (`001_initial_schema.py`, `002_role_requests.py`).
+- **Autoridad:** Las 3 tablas operativas propias del bot (`matches`, `ticket_notices`, `role_requests`) son gestionadas directamente por el pipeline de migraciones de **Alembic** en `alembic/versions/` (`001_initial_schema.py`, `002_role_requests.py`, `003_add_stream_urls.py`).
 - Cualquier modificación estructural en estas entidades requiere la generación y aplicación de una migración versionada de Alembic.
 
 ---
