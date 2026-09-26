@@ -54,6 +54,7 @@ coverage.xml
 *.pglite
 pglite_data/
 pgdata/
+.data/
 *.sqlite
 *.sqlite3
 *.db
