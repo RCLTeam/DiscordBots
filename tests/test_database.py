@@ -343,3 +343,18 @@ async def test_close_engine_cleans_engine_lock():
 
     await close_engine(mock_engine)
     assert mock_engine not in _engine_locks
+
+
+@pytest.mark.asyncio
+async def test_migration_003_columns_exist(session: AsyncSession):
+    """Verifica que la migración 003 agregue stream_url y stream_url_live a matches."""
+    result = await session.execute(
+        text(
+            "SELECT column_name, data_type, character_maximum_length "
+            "FROM information_schema.columns WHERE table_name = 'matches'"
+        )
+    )
+    cols = {row[0]: (row[1], row[2]) for row in result.fetchall()}
+    assert "stream_url" in cols
+    assert "stream_url_live" in cols
+    assert cols["stream_url_live"][1] == 255

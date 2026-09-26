@@ -85,7 +85,7 @@ class TestRosterEnumsAndHelpers:
 
     def test_app_role_values(self):
         """Verifica los valores del enum app_role."""
-        assert {r.value for r in AppRole} == {"viewer", "admin"}
+        assert {r.value for r in AppRole} == {"viewer", "admin", "owner"}
 
 
 class TestRosterReexport:
