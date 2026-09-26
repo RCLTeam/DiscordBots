@@ -6,11 +6,12 @@
 
 ## 1. Introducción y Contexto de Infraestructura
 
-El software de alta concurrencia no opera en un vacío teórico; interactúa continuamente con las capas de red, los descriptores del kernel y la memoria intermedia del sistema operativo. Durante las pruebas de estrés del proyecto `DiscordBots`, se identificaron y resolvieron **tres límites empíricos críticos** relacionados con la infraestructura y el entorno de ejecución:
+El software de alta concurrencia no opera en un vacío teórico; interactúa continuamente con las capas de red, los descriptores del kernel y la memoria intermedia del sistema operativo. Durante las pruebas de estrés y validación en diversos entornos del proyecto `DiscordBots`, se identificaron y resolvieron **cuatro límites empíricos críticos** relacionados con la infraestructura y el entorno de ejecución:
 
 1. **Desbordamiento de buffer en sockets UNIX (Node.js 24+ con PGlite)**: saturación en sentencias `INSERT ... RETURNING` superiores a 16KB.
 2. **Colisión de transacciones concurrentes en motores de conexión única**: contención de operaciones concurrentes en `StaticPool` / PGlite.
 3. **Agotamiento de descriptores de socket de red**: fuga o contención de descriptores TCP en ciclos rápidos de reinicio y parada del WebSocket Bridge.
+4. **Incompatibilidad de sockets de dominio UNIX en Windows (Node.js / PGlite EACCES)**: bloqueo de permisos de escucha en el sistema de archivos NTFS y mitigación con contenedor Docker.
 
 Este documento detalla la causa raíz técnica, el mecanismo de fallo, el impacto en el sistema y la mitigación exacta implementada y verificada en el código fuente.
 
@@ -233,10 +234,38 @@ async def test_resilience_rapid_start_stop_real_ephemeral_sockets_20_cycles():
 
 ---
 
-## 5. Tabla Comparativa de Límites y Mitigaciones
+## 5. Límite 4: Incompatibilidad de Sockets de Dominio UNIX en Windows (Node.js / PGlite EACCES)
+
+### 5.1 Mecanismo Técnico del Fallo
+1. **La Dependencia de Sockets UNIX en `@electric-sql/pglite-socket`:**
+   En entornos POSIX (Linux y macOS), PGlite levanta un servidor de base de datos dentro de Node.js enlazando un socket de dominio UNIX (`.s.PGSQL.5432`) en una ruta de archivo.
+2. **Limitaciones de Node.js y Windows:**
+   En Windows, la función `net.Server.listen()` de Node.js no permite abrir sockets de escucha en rutas de archivos ordinarias del sistema de archivos NTFS, disparando `Error: listen EACCES: permission denied`. Adicionalmente, al serializar rutas absolutas de Windows con barras invertidas (`D:\DiscordBots\...`) hacia el entorno JavaScript, se produce un escape incorrecto de caracteres (`D:DiscordBots...`).
+3. **Incompatibilidad del Driver `asyncpg`:**
+   El driver asíncrono `asyncpg` no cuenta con soporte nativo para sockets de dominio UNIX sobre sistemas de archivos Windows.
+
+### 5.2 Mitigación de Infraestructura Canónica: PostgreSQL en Contenedor Docker
+Para entornos de desarrollo sobre sistemas operativos Windows, la arquitectura desacopla el uso de PGlite y establece como estándar la ejecución de PostgreSQL en un contenedor mediante Docker Desktop:
+
+```bash
+docker run -d --name postgres-liga -p 5432:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=liga_bot postgres:16
+```
+
+Y la configuración en el archivo `.env`:
+
+```env
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/liga_bot
+```
+
+Esta mitigación canaliza la comunicación a través del protocolo de red TCP estándar (puerto 5432) en lugar de sockets UNIX del sistema de archivos, garantizando compatibilidad total con `asyncpg` y pools de conexiones concurrentes en Windows sin errores de permisos.
+
+---
+
+## 6. Tabla Comparativa de Límites y Mitigaciones
 
 | Límite Identificado | Subsistema Afectado | Síntoma Sin Mitigación | Estrategia de Mitigación | Verificación Automatizada |
 |---|---|---|---|---|
 | **Buffer Overflow UNIX** | Node.js 24+ / `@electric-sql/pglite-socket` | `SIGPIPE` / `ECONNRESET` al superar 16KB (~97+ registros con RETURNING) | Lotes de 25 registros + `await session.flush()` explícito | `test_bulk_team_cascade_deletion_stress` (20 equipos, 100 usuarios, 100 miembros, 100 movimientos) |
 | **Serialización Transaccional** | `StaticPool` / PGlite | `InterfaceError: another operation is in progress` en queries concurrentes | Registro `_engine_locks` + `asyncio.Lock` en `transactional_session` | `test_pglite_engine_lock_handling_across_test_iterations`, `test_engine_lock_recovery_after_transaction_failure` |
 | **Agotamiento de Sockets** | Kernel Linux / `aiohttp` / WebSocket Bridge | `EMFILE` / `EADDRINUSE` / excepciones concurrentes en parada | `port=0` efímero + extracción atómica `self.websocket_bridge_service = None` + cierre trifásico | `test_resilience_rapid_start_stop_real_ephemeral_sockets_20_cycles`, `test_resilience_concurrent_close_stress_50_tasks` |
+| **Sockets UNIX en Windows** | Windows / Node.js / `py-pglite` | `Error: listen EACCES: permission denied` en `.s.PGSQL.5432` | Desacoplamiento de PGlite en Windows y ejecución de PostgreSQL en Docker (`postgres:16`) vía TCP | Verificación de conexión estándar `postgresql+asyncpg` y suite de tests de base de datos |

@@ -19,13 +19,18 @@ A diferencia de herramientas basadas en paquetes de terceros como Click, el CLI 
 
 ## 2. Definición de Comandos y Sintaxis (`seed-teams`)
 
+El punto de entrada canónico para la administración está registrado como `liga-cli` en `pyproject.toml` (`[project.scripts] liga-cli = "liga_bot.cli:main"`).
+
 El comando principal del CLI es `seed-teams`, diseñado para poblar y actualizar los equipos participantes en la base de datos:
 
 ```bash
-# Invocación mediante uv
-uv run python -m liga_bot.cli seed-teams [opciones]
+# Invocación directa mediante el script canónico
+uv run liga-cli seed-teams [opciones]
 
-# O directamente mediante el módulo
+# Ayuda del CLI
+uv run liga-cli --help
+
+# O alternativamente mediante ejecución del módulo
 python -m liga_bot.cli seed-teams [opciones]
 ```
 

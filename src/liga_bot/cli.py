@@ -365,9 +365,9 @@ async def run_seed_command(
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Construye el árbol de comandos CLI para liga-bot."""
+    """Construye el árbol de comandos CLI para liga-cli."""
     parser = argparse.ArgumentParser(
-        prog="liga-bot",
+        prog="liga-cli",
         description="CLI de administración y gestión para LigaBot.",
     )
     subparsers = parser.add_subparsers(dest="subcommand", help="Comando a ejecutar")

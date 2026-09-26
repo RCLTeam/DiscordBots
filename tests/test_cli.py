@@ -54,7 +54,7 @@ def test_cli_parser_help(capsys):
         parser.parse_args(["--help"])
     assert exc_info.value.code == 0
     captured = capsys.readouterr()
-    assert "liga-bot" in captured.out
+    assert "liga-cli" in captured.out
     assert "seed-teams" in captured.out
 
 

@@ -365,10 +365,24 @@ Copia la plantilla de variables de entorno y ajusta tus credenciales:
 cp .env.example .env
 ```
 
+#### En Linux / macOS (PGlite embebido)
 Para desarrollo local y pruebas no necesitas configurar un servidor PostgreSQL externo; el bot iniciará por defecto con **PGlite** en memoria (`DATABASE_URL=pglite:///:memory:`). Si deseas persistir los datos de desarrollo localmente en disco sin Docker, usa:
 
 ```env
 DATABASE_URL=pglite:///./.data/pglite_dev_db
+```
+
+#### En Windows (PostgreSQL en Docker Desktop)
+En Windows, `py-pglite` depende de Node.js abriendo sockets de dominio UNIX en el sistema de archivos, lo cual falla debido a que Node.js no permite sockets de escucha UNIX en rutas estándar de Windows (`Error: listen EACCES: permission denied`). Por ello, la solución canónica en Windows consiste en ejecutar PostgreSQL estándar en un contenedor mediante **Docker Desktop**:
+
+```bash
+docker run -d --name postgres-liga -p 5432:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=liga_bot postgres:16
+```
+
+Y configurar en tu `.env`:
+
+```env
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/liga_bot
 ```
 
 ### 4. Inicialización de la Base de Datos (Alembic)
@@ -381,7 +395,7 @@ uv run alembic upgrade head
 
 ### 5. Sembrado Inicial de Equipos Canónicos
 
-Puebla la base de datos con los 20 equipos oficiales de las divisiones Premier y Ascend:
+Puebla la base de datos con los 20 equipos oficiales de las divisiones Premier y Ascend mediante el script `liga-cli`:
 
 ```bash
 uv run liga-cli seed-teams
@@ -389,12 +403,14 @@ uv run liga-cli seed-teams
 
 ### 6. Ejecución del Bot
 
-Inicia el proceso principal de LigaBot:
+Inicia el proceso principal de LigaBot mediante el script `liga-bot`:
 
 ```bash
 uv run liga-bot
 ```
 
+> **Nota sobre entornos Windows:** Asegúrate de que el contenedor Docker (`postgres-liga`) esté levantado antes de arrancar el bot si utilizas la cadena de conexión `postgresql+asyncpg`. En Linux y macOS, PGlite arranca de forma transparente en proceso.
+>
 > **Nota sobre sincronización de comandos:** Para prevenir límites de tasa (*rate limits*) de la API de Discord al reiniciar, LigaBot desacopla el registro de comandos de `on_ready`. Los administradores pueden forzar la sincronización global o de guild ejecutando el comando slash `/sync` directamente en el servidor.
 
 ---

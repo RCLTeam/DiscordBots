@@ -8,6 +8,8 @@ Este documento detalla la arquitectura de ejecución, el ciclo de vida, la inyec
 
 ## 1. Visión General del Runtime
 
+El proceso principal de ejecución está registrado canónicamente como `liga-bot` en `pyproject.toml` (`[project.scripts] liga-bot = "liga_bot.__main__:main"`), invocable mediante `uv run liga-bot` o alternativamente `python -m liga_bot`.
+
 El runtime de `LigaBot` está estructurado sobre la subclase `LigaBot(commands.Bot)` de `discord.py`, desacoplando completamente la lógica de negocio, la persistencia relacional, la pasarela WebSocket y los controladores de comandos (Cogs).
 
 ```
@@ -187,9 +189,9 @@ En muchas aplicaciones de Discord es común colocar `await self.tree.sync()` den
 
 ---
 
-## 6. Proceso Principal y Manejo de Señales (`__main__.py`)
+## 6. Proceso Principal y Manejo de Señales (`__main__.py` / `liga-bot`)
 
-El archivo `src/liga_bot/__main__.py` contiene el bootstrap de ejecución y el control del proceso ante el sistema operativo:
+El archivo `src/liga_bot/__main__.py` contiene el bootstrap de ejecución y el control del proceso ante el sistema operativo, expuesto a través del comando canónico de consola `liga-bot` (`uv run liga-bot`):
 
 ### 6.1 Configuración de Logging (`setup_logging`, líneas 27-39)
 - Resuelve el nivel numérico de log mediante `getattr(logging, settings.log_level, logging.INFO)`.

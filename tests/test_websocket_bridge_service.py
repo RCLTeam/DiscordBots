@@ -347,11 +347,10 @@ async def test_two_phase_delivery_success(running_service, mock_suggestion_servi
                 }
             )
 
-            # Fase 1: Inmediato SUGGESTION_QUEUED
+            # Fase 1: Inmediato QUEUED
             resp_queued = await ws.receive_json()
-            assert resp_queued["type"] == "SUGGESTION_QUEUED"
-            assert resp_queued["data"]["id"] == sugg_uuid
-            assert resp_queued["data"]["status"] == "queued"
+            assert resp_queued["type"] == "QUEUED"
+            assert resp_queued["data"] == {"id": sugg_uuid}
 
             # Fase 2: Asíncrono SUGGESTION_CONFIRMED
             resp_confirmed = await ws.receive_json()
@@ -409,7 +408,7 @@ async def test_two_phase_delivery_discord_error(running_service, mock_suggestion
 
             # Fase 1: QUEUED
             r_q = await ws.receive_json()
-            assert r_q["type"] == "SUGGESTION_QUEUED"
+            assert r_q["type"] == "QUEUED"
 
             # Fase 2: FAILED con DISCORD_ERROR
             r_f = await ws.receive_json()
@@ -459,7 +458,7 @@ async def test_rate_limiter_blocks_exceeded_requests(
                     }
                 )
                 r1_q = await ws.receive_json()
-                assert r1_q["type"] == "SUGGESTION_QUEUED"
+                assert r1_q["type"] == "QUEUED"
                 r1_c = await ws.receive_json()
                 assert r1_c["type"] == "SUGGESTION_CONFIRMED"
 
@@ -517,7 +516,7 @@ async def test_socket_disconnect_during_inflight_delivery(running_service, mock_
                 }
             )
             r_q = await ws.receive_json()
-            assert r_q["type"] == "SUGGESTION_QUEUED"
+            assert r_q["type"] == "QUEUED"
 
             # Cliente se desconecta abruptamente antes de la confirmación
             await ws.close()
@@ -580,7 +579,7 @@ async def test_missing_suggestion_service_fails_gracefully(mock_bot, base_settin
                     }
                 )
                 r_q = await ws.receive_json()
-                assert r_q["type"] == "SUGGESTION_QUEUED"
+                assert r_q["type"] == "QUEUED"
 
                 r_f = await ws.receive_json()
                 assert r_f["type"] == "SUGGESTION_FAILED"

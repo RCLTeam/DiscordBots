@@ -292,19 +292,20 @@ class WebsocketBridgeService:
             return
 
         # Fase 1: Confirmación inmediata de cola
-        if not ws.closed:
-            try:
-                await ws.send_json(
-                    {
-                        "type": "SUGGESTION_QUEUED",
-                        "data": {
-                            "id": req_id,
-                            "status": "queued",
-                        },
-                    }
-                )
-            except (ConnectionResetError, RuntimeError):
-                return
+        if ws.closed:
+            return
+
+        try:
+            await ws.send_json(
+                {
+                    "type": "QUEUED",
+                    "data": {
+                        "id": req_id,
+                    },
+                }
+            )
+        except (ConnectionResetError, RuntimeError):
+            return
 
         # Fase 2: Tarea asíncrona desacoplada con retención en _background_tasks
         task = asyncio.create_task(self._deliver_suggestion(ws, req_id, payload))
