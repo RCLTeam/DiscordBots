@@ -16,7 +16,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from liga_bot.cogs.permissions import is_authorized_scheduler
 from liga_bot.config import Settings, get_settings
 from liga_bot.database import get_session_factory
-from liga_bot.services.schedule_service import JornadaResult, MatchResult, ScheduleService
+from liga_bot.services.schedule_service import (
+    JornadaResult,
+    MatchResult,
+    ScheduleService,
+    StreamUrlResult,
+)
 
 if TYPE_CHECKING:
     from discord.ext.commands import Bot
@@ -302,6 +307,120 @@ class ScheduleCog(commands.Cog, name="Schedule"):
     ) -> None:
         """Alias legacy de /importar-jornada."""
         await self._importar_jornada_impl(interaction, jornada, archivo)
+
+    async def _stream_url_impl(
+        self,
+        interaction: discord.Interaction,
+        equipo1: discord.Role,
+        equipo2: discord.Role,
+        url: str,
+        is_live: bool,
+        jornada: int | None = None,
+    ) -> None:
+        """Helper compartido para asignar o actualizar la URL de transmisión o VOD."""
+        if interaction.guild is None:
+            await interaction.response.send_message(
+                "❌ Este comando solo puede ser ejecutado dentro de un servidor de Discord.",
+                ephemeral=True,
+            )
+            return
+
+        if not await is_authorized_scheduler(interaction, self.settings):
+            await interaction.response.send_message(
+                "❌ No tienes permisos para gestionar URLs de partidos "
+                "(se requiere Staff, Admin o CEO).",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        result: StreamUrlResult = await self.schedule_service.set_stream_url(
+            role1_id=equipo1.id,
+            role2_id=equipo2.id,
+            url=url,
+            is_live=is_live,
+            jornada=jornada,
+        )
+
+        if result.success:
+            tipo_str = "Directo (Live)" if is_live else "VOD / Transmisión"
+            embed = discord.Embed(
+                title=f"✅ URL de {tipo_str} Asignada",
+                description=(
+                    f"**Partido:** {result.team1_name} vs {result.team2_name}\n"
+                    f"**Jornada:** {result.jornada}\n"
+                    f"**URL:** [Ver enlace]({result.url})"
+                ),
+                color=discord.Color.purple() if is_live else discord.Color.blue(),
+            )
+            embed.add_field(name="Enlace directo", value=result.url, inline=False)
+        else:
+            embed = discord.Embed(
+                title="❌ Error al Asignar URL",
+                description=result.error or "Error desconocido al procesar la solicitud.",
+                color=discord.Color.red(),
+            )
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @app_commands.command(
+        name="stream_url",
+        description="Asigna la URL del stream/VOD grabado para el partido entre dos equipos",
+    )
+    @app_commands.describe(
+        equipo1="Rol del primer equipo",
+        equipo2="Rol del segundo equipo",
+        url="URL de la retransmisión o VOD (Twitch, YouTube, etc.)",
+        jornada="Jornada específica del partido (opcional, por defecto el más reciente)",
+    )
+    @app_commands.default_permissions(manage_guild=True)
+    async def stream_url(
+        self,
+        interaction: discord.Interaction,
+        equipo1: discord.Role,
+        equipo2: discord.Role,
+        url: str,
+        jornada: int | None = None,
+    ) -> None:
+        """Asigna la URL de la retransmisión grabada o VOD de un partido."""
+        await self._stream_url_impl(
+            interaction=interaction,
+            equipo1=equipo1,
+            equipo2=equipo2,
+            url=url,
+            is_live=False,
+            jornada=jornada,
+        )
+
+    @app_commands.command(
+        name="stream_url_live",
+        description="Asigna la URL del stream en directo para el partido entre dos equipos",
+    )
+    @app_commands.describe(
+        equipo1="Rol del primer equipo",
+        equipo2="Rol del segundo equipo",
+        url="URL del directo en vivo (Twitch, YouTube Live, etc.)",
+        jornada="Jornada específica del partido (opcional, por defecto el más reciente)",
+    )
+    @app_commands.default_permissions(manage_guild=True)
+    async def stream_url_live(
+        self,
+        interaction: discord.Interaction,
+        equipo1: discord.Role,
+        equipo2: discord.Role,
+        url: str,
+        jornada: int | None = None,
+    ) -> None:
+        """Asigna la URL del directo o retransmisión en vivo de un partido."""
+        await self._stream_url_impl(
+            interaction=interaction,
+            equipo1=equipo1,
+            equipo2=equipo2,
+            url=url,
+            is_live=True,
+            jornada=jornada,
+        )
 
 
 async def setup(bot: Bot | commands.Bot) -> None:
