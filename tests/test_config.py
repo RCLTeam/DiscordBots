@@ -208,6 +208,8 @@ def test_alembic_cli_default_fallback_without_env_var():
     cuando DATABASE_URL está ausente.
     """
     clean_env = {k: v for k, v in os.environ.items() if k != "DATABASE_URL"}
+    # Ignorar el .env local del desarrollador: aquí se valida el fallback por defecto.
+    clean_env["LIGA_BOT_ENV_FILE"] = ".env.inexistente"
     res = subprocess.run(
         ["uv", "run", "alembic", "upgrade", "head"],
         env=clean_env,

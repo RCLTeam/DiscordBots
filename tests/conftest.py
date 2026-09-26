@@ -11,14 +11,22 @@ from py_pglite.sqlalchemy.manager_async import SQLAlchemyAsyncPGliteManager
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from alembic import command
-from liga_bot.config import get_settings
+from liga_bot.config import Settings, get_settings
 
 
 @pytest.fixture(autouse=True)
 def reset_settings_cache():
-    """Limpia la caché de get_settings() antes y después de cada test."""
+    """Aísla la configuración de cada test.
+
+    Limpia la caché de get_settings() y desactiva la lectura del fichero .env:
+    la suite valida los valores por defecto de Settings, que un .env local con
+    credenciales reales sobrescribiría.
+    """
+    original_env_file = Settings.model_config.get("env_file")
+    Settings.model_config["env_file"] = None
     get_settings.cache_clear()
     yield
+    Settings.model_config["env_file"] = original_env_file
     get_settings.cache_clear()
 
 

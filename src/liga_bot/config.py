@@ -6,6 +6,7 @@ resolución de variables de entorno y preservación de constantes
 canónicas de la liga.
 """
 
+import os
 from functools import lru_cache
 from typing import Final
 
@@ -58,7 +59,9 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        # LIGA_BOT_ENV_FILE permite apuntar a otro fichero de entorno (o a uno
+        # inexistente, para ignorar el .env local en pruebas y despliegues).
+        env_file=os.environ.get("LIGA_BOT_ENV_FILE", ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
