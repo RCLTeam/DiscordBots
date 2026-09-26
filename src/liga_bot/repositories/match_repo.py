@@ -74,6 +74,37 @@ class MatchRepository(BaseRepository[Match]):
         result = await self._session.execute(stmt)
         return result.scalars().first()
 
+    async def get_by_teams(
+        self,
+        team1_id: UUID | str,
+        team2_id: UUID | str,
+        jornada: int | None = None,
+        with_teams: bool = True,
+    ) -> Match | None:
+        """Recupera el partido entre dos equipos en cualquier orden (t1 vs t2 o t2 vs t1).
+
+        Si se especifica jornada, filtra por ella. De existir múltiples coincidencias,
+        ordena de forma descendente por fecha programada / fecha de creación devolviendo
+        el más reciente.
+        """
+        try:
+            u1 = team1_id if isinstance(team1_id, UUID) else UUID(str(team1_id))
+            u2 = team2_id if isinstance(team2_id, UUID) else UUID(str(team2_id))
+        except ValueError:
+            return None
+
+        condition = ((Match.team1_id == u1) & (Match.team2_id == u2)) | (
+            (Match.team1_id == u2) & (Match.team2_id == u1)
+        )
+        stmt = select(Match).where(condition)
+        if jornada is not None:
+            stmt = stmt.where(Match.jornada == jornada)
+
+        stmt = stmt.order_by(Match.scheduled_at.desc().nulls_last(), Match.created_at.desc())
+        stmt = self._apply_eager_teams(stmt, with_teams)
+        result = await self._session.execute(stmt)
+        return result.scalars().first()
+
     async def list_by_jornada(
         self,
         jornada: int,
@@ -139,6 +170,30 @@ class MatchRepository(BaseRepository[Match]):
             match = match_or_id
 
         match.discord_channel_id = channel_id
+        await self._session.flush()
+        await self._session.refresh(match)
+        return match
+
+    async def update_stream_url(
+        self,
+        match_or_id: Match | UUID | str,
+        url: str,
+        is_live: bool = False,
+    ) -> Match | None:
+        """Actualiza stream_url (is_live=False) o stream_url_live (is_live=True)."""
+        match: Match | None
+        if isinstance(match_or_id, (UUID, str)):
+            match = await self.get_by_id(match_or_id)
+            if match is None:
+                return None
+        else:
+            match = match_or_id
+
+        if is_live:
+            match.stream_url_live = url
+        else:
+            match.stream_url = url
+
         await self._session.flush()
         await self._session.refresh(match)
         return match

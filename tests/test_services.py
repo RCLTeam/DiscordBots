@@ -758,6 +758,218 @@ async def test_process_schedule_csv_alias(
 
 
 # ---------------------------------------------------------------------------
+# Tests de ScheduleService.set_stream_url
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_set_stream_url_success(
+    session_factory: async_sessionmaker[AsyncSession],
+    db_session: AsyncSession,
+    test_settings: Settings,
+):
+    """Verifica asignación exitosa de stream_url y stream_url_live con orden simétrico."""
+    team_repo = TeamRepository(db_session)
+    match_repo = MatchRepository(db_session)
+
+    t1 = await team_repo.create(
+        name="Team Heretics",
+        tag="TH",
+        slug="team-heretics",
+        division=Division.PREMIER,
+        discord_role_id=2501,
+    )
+    t2 = await team_repo.create(
+        name="Movistar KOI",
+        tag="KOI",
+        slug="movistar-koi",
+        division=Division.PREMIER,
+        discord_role_id=2502,
+    )
+    await match_repo.create(jornada=3, division=Division.PREMIER, team1_id=t1.id, team2_id=t2.id)
+    await db_session.commit()
+
+    service = ScheduleService(session_factory=session_factory, settings=test_settings)
+
+    # 1. Asignar stream en directo (is_live=True) con rol1, rol2
+    live_url = "  https://twitch.tv/heretics_live  "
+    result_live = await service.set_stream_url(
+        role1_id=2501,
+        role2_id=2502,
+        url=live_url,
+        is_live=True,
+    )
+
+    assert result_live.success is True
+    assert result_live.is_live is True
+    assert result_live.url == "https://twitch.tv/heretics_live"
+    assert result_live.match is not None
+    assert result_live.match.stream_url_live == "https://twitch.tv/heretics_live"
+    assert result_live.match.stream_url is None
+    assert result_live.team1_name == "Team Heretics"
+    assert result_live.team2_name == "Movistar KOI"
+    assert result_live.jornada == 3
+    assert result_live.error is None
+
+    # 2. Asignar VOD (is_live=False) con orden simétrico invertido (rol2, rol1) y jornada explícita
+    vod_url = "https://youtube.com/watch?v=koi_vs_th"
+    result_vod = await service.set_stream_url(
+        role1_id=2502,
+        role2_id=2501,
+        url=vod_url,
+        is_live=False,
+        jornada=3,
+    )
+
+    assert result_vod.success is True
+    assert result_vod.is_live is False
+    assert result_vod.url == vod_url
+    assert result_vod.match is not None
+    assert result_vod.match.stream_url == vod_url
+    assert result_vod.match.stream_url_live == "https://twitch.tv/heretics_live"
+
+
+@pytest.mark.asyncio
+async def test_set_stream_url_same_role_error(
+    session_factory: async_sessionmaker[AsyncSession],
+    db_session: AsyncSession,
+    test_settings: Settings,
+):
+    """Verifica rechazo temprano cuando role1_id == role2_id."""
+    service = ScheduleService(session_factory=session_factory, settings=test_settings)
+    result = await service.set_stream_url(
+        role1_id=2501,
+        role2_id=2501,
+        url="https://twitch.tv/stream",
+    )
+
+    assert result.success is False
+    assert result.match is None
+    assert "diferentes" in result.error.lower() or "mismo" in result.error.lower()
+
+
+@pytest.mark.asyncio
+async def test_set_stream_url_role_not_found(
+    session_factory: async_sessionmaker[AsyncSession],
+    db_session: AsyncSession,
+    test_settings: Settings,
+):
+    """Verifica error cuando uno de los roles no pertenece a ningún equipo."""
+    team_repo = TeamRepository(db_session)
+    await team_repo.create(
+        name="Team BDS",
+        tag="BDS",
+        slug="team-bds",
+        division=Division.PREMIER,
+        discord_role_id=2601,
+    )
+    await db_session.commit()
+
+    service = ScheduleService(session_factory=session_factory, settings=test_settings)
+
+    # Rol 2 no existe
+    res1 = await service.set_stream_url(
+        role1_id=2601,
+        role2_id=9999999999,
+        url="https://twitch.tv/stream",
+    )
+    assert res1.success is False
+    assert "9999999999" in res1.error
+    assert "no está asociado a ningún equipo" in res1.error
+
+    # Rol 1 no existe
+    res2 = await service.set_stream_url(
+        role1_id=8888888888,
+        role2_id=2601,
+        url="https://twitch.tv/stream",
+    )
+    assert res2.success is False
+    assert "8888888888" in res2.error
+    assert "no está asociado a ningún equipo" in res2.error
+
+
+@pytest.mark.asyncio
+async def test_set_stream_url_invalid_url(
+    session_factory: async_sessionmaker[AsyncSession],
+    db_session: AsyncSession,
+    test_settings: Settings,
+):
+    """Verifica rechazo temprano de URLs inválidas que no inicien con http:// o https://."""
+    service = ScheduleService(session_factory=session_factory, settings=test_settings)
+
+    for invalid in ["not_a_valid_url", "ftp://twitch.tv/stream", "www.twitch.tv/stream", ""]:
+        res = await service.set_stream_url(
+            role1_id=2501,
+            role2_id=2502,
+            url=invalid,
+        )
+        assert res.success is False
+        assert res.match is None
+        assert "url" in res.error.lower()
+
+
+@pytest.mark.asyncio
+async def test_set_stream_url_match_not_found(
+    session_factory: async_sessionmaker[AsyncSession],
+    db_session: AsyncSession,
+    test_settings: Settings,
+):
+    """Verifica error cuando los equipos no tienen partido registrado o jornada errónea."""
+    team_repo = TeamRepository(db_session)
+    match_repo = MatchRepository(db_session)
+
+    t1 = await team_repo.create(
+        name="SK Gaming",
+        tag="SK",
+        slug="sk-gaming",
+        division=Division.PREMIER,
+        discord_role_id=2701,
+    )
+    t2 = await team_repo.create(
+        name="GIANTX",
+        tag="GX",
+        slug="giantx",
+        division=Division.PREMIER,
+        discord_role_id=2702,
+    )
+    await match_repo.create(jornada=1, division=Division.PREMIER, team1_id=t1.id, team2_id=t2.id)
+    await db_session.commit()
+
+    service = ScheduleService(session_factory=session_factory, settings=test_settings)
+
+    # 1. Sin enfrentamiento en la jornada solicitada (jornada=4)
+    res_wrong_jornada = await service.set_stream_url(
+        role1_id=2701,
+        role2_id=2702,
+        url="https://twitch.tv/giantx",
+        jornada=4,
+    )
+    assert res_wrong_jornada.success is False
+    assert "SK Gaming" in res_wrong_jornada.error
+    assert "GIANTX" in res_wrong_jornada.error
+    assert "jornada 4" in res_wrong_jornada.error
+
+    # 2. Equipos sin partido registrado alguno
+    await team_repo.create(
+        name="Rogue",
+        tag="RGE",
+        slug="rogue",
+        division=Division.PREMIER,
+        discord_role_id=2703,
+    )
+    await db_session.commit()
+
+    res_no_match = await service.set_stream_url(
+        role1_id=2701,
+        role2_id=2703,
+        url="https://twitch.tv/sk_vs_rge",
+    )
+    assert res_no_match.success is False
+    assert "SK Gaming" in res_no_match.error
+    assert "Rogue" in res_no_match.error
+
+
+# ---------------------------------------------------------------------------
 # Tests de TicketService
 # ---------------------------------------------------------------------------
 
