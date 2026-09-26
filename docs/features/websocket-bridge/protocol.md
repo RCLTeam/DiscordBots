@@ -201,15 +201,14 @@ Confirma la autenticación exitosa de la sesión.
 
 *Comportamiento idempotente:* Si un cliente ya autenticado vuelve a enviar un comando `LOGIN` válido, el servidor responde nuevamente con `LOGIN_SUCCESS` confirmando la sesión activa.
 
-#### `SUGGESTION_QUEUED` (Fase 1)
+#### `QUEUED` (Fase 1)
 Confirmación síncrona inmediata que certifica la recepción de la sugerencia, la aprobación de cuota por el limitador de tasa y el encolado de la tarea en segundo plano.
 
 ```json
 {
-  "type": "SUGGESTION_QUEUED",
+  "type": "QUEUED",
   "data": {
-    "id": "a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c8d",
-    "status": "queued"
+    "id": "a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c8d"
   }
 }
 ```
@@ -284,7 +283,7 @@ sequenceDiagram
     else Cuota Aprobada
         RL-->>WS: (True, 0.0)
         Note over WS,Client: Fase 1: Confirmación Inmediata
-        WS-->>Client: SUGGESTION_QUEUED (id: UUID, status: "queued")
+        WS-->>Client: QUEUED (id: UUID)
         
         Note over WS,Task: Fase 2: Desacoplamiento asíncrono
         WS->>Task: asyncio.create_task(_deliver_suggestion)

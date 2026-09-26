@@ -314,7 +314,7 @@ async def test_challenge_empty_supertoken_bypass_prevention(
 async def test_challenge_disconnect_immediately_after_suggestion_queued(
     mock_bot, mock_suggestion_service
 ):
-    """Client disconnects immediately after receiving SUGGESTION_QUEUED during active delivery.
+    """Client disconnects immediately after receiving QUEUED during active delivery.
 
     Server must complete delivery or clean up background task with ZERO unhandled exceptions.
     """
@@ -374,7 +374,7 @@ async def test_challenge_disconnect_immediately_after_suggestion_queued(
                 )
 
                 queued = await ws.receive_json()
-                assert queued["type"] == "SUGGESTION_QUEUED"
+                assert queued["type"] == "QUEUED"
 
                 # Abrupt client close right now
                 await ws.close()
@@ -435,7 +435,7 @@ async def test_challenge_disconnect_with_discord_error_in_flight(mock_bot, mock_
                         },
                     }
                 )
-                await ws.receive_json()  # SUGGESTION_QUEUED
+                await ws.receive_json()  # QUEUED
                 await ws.close()
 
         await asyncio.sleep(0.05)
@@ -513,7 +513,7 @@ async def test_challenge_multi_client_rate_limiter_concurrency(mock_bot, mock_su
                 )
 
                 first_resp = await ws.receive_json()
-                if first_resp["type"] == "SUGGESTION_QUEUED":
+                if first_resp["type"] == "QUEUED":
                     # Expect confirmation
                     second_resp = await ws.receive_json()
                     assert second_resp["type"] == "SUGGESTION_CONFIRMED"
@@ -621,7 +621,7 @@ async def test_challenge_single_socket_pipelining(mock_bot, mock_suggestion_serv
                     msg = await asyncio.wait_for(ws.receive_json(), timeout=2.0)
                     msg_type = msg["type"]
                     msg_id = msg["data"]["id"]
-                    if msg_type == "SUGGESTION_QUEUED":
+                    if msg_type == "QUEUED":
                         queued_ids.add(msg_id)
                     elif msg_type == "SUGGESTION_CONFIRMED":
                         confirmed_ids.add(msg_id)
@@ -696,7 +696,7 @@ async def test_challenge_stop_drains_and_cancels_hanging_tasks(mock_bot, mock_su
             },
         }
     )
-    await ws.receive_json()  # SUGGESTION_QUEUED
+    await ws.receive_json()  # QUEUED
 
     # Wait until hanging task actually started
     await asyncio.wait_for(hanging_event.wait(), timeout=1.0)
