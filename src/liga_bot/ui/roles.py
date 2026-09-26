@@ -229,11 +229,23 @@ class EquipoSelectView(discord.ui.View):
 
 def build_panel_rol_embed() -> discord.Embed:
     """Embed del panel de solicitud de rol, compartido por el comando y la bienvenida."""
-    return discord.Embed(
-        title="Solicitud de Rol de Jugador",
-        description="Haz clic en el botón inferior para solicitar tu rol en la liga...",
-        color=discord.Color.blue(),
+    embed = discord.Embed(
+        title="🔥 Únete a la Rebel Crown Legacy",
+        description=(
+            "Este es el paso previo a formar parte de la liga. Pulsa el botón de abajo "
+            "para dejarnos tu **nombre de invocador** y tu **Riot Tag**, y a continuación "
+            "elige el equipo con el que compites.\n\n"
+            "🛡️ **¿Tienes equipo?** Se abrirá un ticket privado solo visible para ti y el "
+            "staff, donde verificaremos tus datos y te asignaremos el rol.\n\n"
+            "🕊️ **¿Vas por libre?** Selecciona **Libre** en el desplegable — no hace falta "
+            "ticket ni espera, se te asigna el rol al momento y ya tendrás acceso a los "
+            "canales correspondientes.\n\n"
+            "Sin este paso no podrás ver el resto del servidor, así que no tardes."
+        ),
+        color=discord.Color.purple(),
     )
+    embed.set_footer(text="RCL · Rebel Crown Legacy")
+    return embed
 
 
 class PanelPedirRolView(discord.ui.View):
@@ -246,7 +258,7 @@ class PanelPedirRolView(discord.ui.View):
         super().__init__(timeout=None)
 
     @discord.ui.button(
-        label="Pedir Rol",
+        label="Solicitar mi rol",
         style=discord.ButtonStyle.primary,
         emoji="🎮",
         custom_id="solicitud_rol:panel_pedir_rol",

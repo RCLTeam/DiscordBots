@@ -75,7 +75,7 @@ Publica el mensaje visual incrustado (*embed*) con el botón interactivo persist
 - **Flujo de Operación**:
   1. Verifica los privilegios del invocador.
   2. Valida que el canal destino admita el método `send`. Si no es un canal de texto válido, emite una advertencia efímera.
-  3. Construye un `discord.Embed` con título `"Solicitud de Rol de Jugador"` y estilo informativo azul (`discord.Color.blue()`).
+  3. Construye el embed del panel con `build_panel_rol_embed()`: título `"🔥 Únete a la Rebel Crown Legacy"`, instrucciones de solicitud y estilo morado (`discord.Color.purple()`).
   4. Envía el mensaje con la vista adjunta: `await target_channel.send(embed=embed, view=PanelPedirRolView())`.
   5. Emite confirmación efímera al invocador: `f"Panel publicado en {target_channel.mention}."`.
 

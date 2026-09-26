@@ -549,7 +549,7 @@ class TestRolesCogCommands:
         view = send_kwargs.get("view")
 
         assert isinstance(embed, discord.Embed)
-        assert "Solicitud de Rol de Jugador" in (embed.title or "")
+        assert "Rebel Crown Legacy" in (embed.title or "")
         assert isinstance(view, PanelPedirRolView)
 
         inter.response.send_message.assert_awaited_once_with(

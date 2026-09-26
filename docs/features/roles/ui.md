@@ -88,7 +88,7 @@ Permite la captura estructurada de las credenciales de juego del miembro.
 - **Ubicación**: `src/liga_bot/ui/roles.py:217-237`.
 - **Persistencia**: `timeout=None`.
 - **Botón `pedir_rol`**:
-  - `label="Pedir Rol"`, `style=discord.ButtonStyle.primary`, `emoji="🎮"`.
+  - `label="Solicitar mi rol"`, `style=discord.ButtonStyle.primary`, `emoji="🎮"`.
   - `custom_id="solicitud_rol:panel_pedir_rol"`.
 - **Callback**:
   - Al pulsarse, ejecuta `await interaction.response.send_modal(SolicitudRolModal())`.

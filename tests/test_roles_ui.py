@@ -385,7 +385,7 @@ class TestPanelPedirRolView:
         btn = view.children[0]
         assert isinstance(btn, discord.ui.Button)
         assert btn.custom_id == "solicitud_rol:panel_pedir_rol"
-        assert btn.label == "Pedir Rol"
+        assert btn.label == "Solicitar mi rol"
         assert btn.style == discord.ButtonStyle.primary
 
     @pytest.mark.asyncio
