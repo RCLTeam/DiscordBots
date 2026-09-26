@@ -29,6 +29,7 @@ from liga_bot.ui.roles import (
     PanelPedirRolView,
     SolicitudRolModal,
     TicketView,
+    build_panel_rol_embed,
 )
 
 if TYPE_CHECKING:
@@ -239,12 +240,7 @@ class RolesCog(commands.Cog, name="Roles"):
             )
             return
 
-        embed = discord.Embed(
-            title="Solicitud de Rol de Jugador",
-            description="Haz clic en el botón inferior para solicitar tu rol en la liga...",
-            color=discord.Color.blue(),
-        )
-        await target_channel.send(embed=embed, view=PanelPedirRolView())
+        await target_channel.send(embed=build_panel_rol_embed(), view=PanelPedirRolView())
         await interaction.response.send_message(
             f"Panel publicado en {target_channel.mention}.",
             ephemeral=True,

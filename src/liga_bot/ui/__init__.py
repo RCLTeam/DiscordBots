@@ -11,6 +11,7 @@ from liga_bot.ui.roles import (
     PanelPedirRolView,
     SolicitudRolModal,
     TicketView,
+    build_panel_rol_embed,
 )
 from liga_bot.ui.roster import (
     CancelButton,
@@ -34,4 +35,5 @@ __all__ = [
     "SolicitudRolModal",
     "TeamSelect",
     "TicketView",
+    "build_panel_rol_embed",
 ]

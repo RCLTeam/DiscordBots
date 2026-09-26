@@ -21,6 +21,7 @@ from liga_bot.config import Settings, get_settings
 from liga_bot.database import get_session_factory, transactional_session
 from liga_bot.models.enums import RoleRequestStatus
 from liga_bot.repositories.role_request_repo import RoleRequestRepository
+from liga_bot.ui.roles import PanelPedirRolView, build_panel_rol_embed
 
 if TYPE_CHECKING:
     from discord.ext import commands
@@ -89,9 +90,14 @@ class RoleService:
             welcome_msg = (
                 f"¡Bienvenido/a a **{member.guild.name}**!\n\n"
                 "Para acceder a los canales de la liga y registrarte en un equipo, "
-                "solicita tu rol mediante el panel o utilizando el comando `/pedir-rol`."
+                "solicita tu rol con el botón de abajo, desde el panel del servidor "
+                "o con el comando `/pedir-rol`."
             )
-            await member.send(welcome_msg)
+            await member.send(
+                welcome_msg,
+                embed=build_panel_rol_embed(),
+                view=PanelPedirRolView(),
+            )
         except (discord.Forbidden, discord.HTTPException) as exc:
             logger.info(
                 "No se pudo enviar DM de bienvenida a %s (DMs cerrados o bloqueados): %s",

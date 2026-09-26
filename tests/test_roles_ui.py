@@ -234,6 +234,43 @@ class TestEquipoSelect:
         )
 
     @pytest.mark.asyncio
+    async def test_callback_from_dm_resolves_member_from_configured_guild(self) -> None:
+        """En DM (interaction.guild None) el miembro se resuelve desde el servidor configurado."""
+        service = make_mock_role_service(free_role_name="Libre")
+        interaction = make_mock_interaction(role_service=service)
+        interaction.guild = None
+        interaction.response.is_done.return_value = False
+
+        guild = make_mock_guild()
+        member = make_mock_user()
+        guild.get_member.return_value = member
+        interaction.client.get_guild.return_value = guild
+
+        select = EquipoSelect(nombre_lol="Invocador", riot_tag="EUW1", free_role_name="Libre")
+        select.values = ["Libre"]
+
+        await select.callback(interaction)
+
+        interaction.client.get_guild.assert_called_once_with(service.settings.guild_id)
+        service.assign_free_role.assert_awaited_once_with(member, "Invocador", "EUW1")
+
+    @pytest.mark.asyncio
+    async def test_callback_from_dm_without_membership_warns_user(self) -> None:
+        """En DM, si el usuario no está en el servidor, se avisa y no se asigna nada."""
+        service = make_mock_role_service(free_role_name="Libre")
+        interaction = make_mock_interaction(role_service=service)
+        interaction.guild = None
+        interaction.client.get_guild.return_value = None
+
+        select = EquipoSelect(nombre_lol="Invocador", riot_tag="EUW1", free_role_name="Libre")
+        select.values = ["Libre"]
+
+        await select.callback(interaction)
+
+        service.assign_free_role.assert_not_awaited()
+        interaction.response.send_message.assert_awaited_once()
+
+    @pytest.mark.asyncio
     async def test_callback_free_agent_assignment_already_done(self) -> None:
         """Valida la asignación de Agente Libre usando followup si response.is_done() es True."""
         service = make_mock_role_service(free_role_name="Libre")

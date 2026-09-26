@@ -143,10 +143,23 @@ class EquipoSelect(discord.ui.Select[Any]):
             )
             return
 
+        # El panel también se envía por DM (bienvenida), donde la interacción no trae
+        # guild ni Member: en ese caso se resuelven desde el servidor configurado.
+        member = interaction.user
+        guild = interaction.guild
+        if guild is None:
+            guild = interaction.client.get_guild(role_service.settings.guild_id)
+            member = guild.get_member(interaction.user.id) if guild is not None else None
+            if member is None:
+                await interaction.response.send_message(
+                    "No se te ha encontrado en el servidor de la liga. "
+                    "Entra en el servidor y vuelve a intentarlo.",
+                    ephemeral=True,
+                )
+                return
+
         if equipo == role_service.settings.free_role_name:
-            ok, msg = await role_service.assign_free_role(
-                interaction.user, self.nombre_lol, self.riot_tag
-            )
+            ok, msg = await role_service.assign_free_role(member, self.nombre_lol, self.riot_tag)
             if interaction.response.is_done():
                 await interaction.followup.send(msg, ephemeral=True)
             else:
@@ -154,8 +167,8 @@ class EquipoSelect(discord.ui.Select[Any]):
         else:
             await interaction.response.defer(ephemeral=True)
             ok, msg, channel = await role_service.create_role_request_ticket(
-                interaction.guild,
-                interaction.user,
+                guild,
+                member,
                 self.nombre_lol,
                 self.riot_tag,
                 equipo,
@@ -173,7 +186,7 @@ class EquipoSelect(discord.ui.Select[Any]):
                     color=discord.Color.blue(),
                 )
                 embed.set_footer(text="Usa los botones de abajo para gestionar la solicitud.")
-                ticket_view = TicketView(user_id=interaction.user.id, equipo=equipo)
+                ticket_view = TicketView(user_id=member.id, equipo=equipo)
                 await channel.send(
                     content=f"Solicitud de rol para {interaction.user.mention}:",
                     embed=embed,
@@ -212,6 +225,15 @@ class EquipoSelectView(discord.ui.View):
 # ---------------------------------------------------------------------------
 # 3. Vista de Panel de Bienvenida (Persistente)
 # ---------------------------------------------------------------------------
+
+
+def build_panel_rol_embed() -> discord.Embed:
+    """Embed del panel de solicitud de rol, compartido por el comando y la bienvenida."""
+    return discord.Embed(
+        title="Solicitud de Rol de Jugador",
+        description="Haz clic en el botón inferior para solicitar tu rol en la liga...",
+        color=discord.Color.blue(),
+    )
 
 
 class PanelPedirRolView(discord.ui.View):
