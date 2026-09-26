@@ -111,6 +111,34 @@ class AdminCog(commands.Cog, name="Admin"):
             )
             await interaction.followup.send(embed=embed_err, ephemeral=True)
 
+    @commands.command(name="sync")
+    @commands.has_permissions(manage_guild=True)
+    async def sync_prefix(self, ctx: commands.Context, scope: str = "global") -> None:
+        """
+        Sincroniza el árbol de comandos por mensaje de texto (!sync).
+
+        Existe porque /sync no se puede usar hasta que Discord conozca los comandos:
+        este no necesita registro previo. 'scope' admite 'global' (por defecto) o
+        'guild', que copia los comandos globales a este servidor (propagación
+        inmediata, pero los deja duplicados mientras existan también los globales).
+        """
+        try:
+            if scope.strip().lower() == "guild" and ctx.guild is not None:
+                self.bot.tree.copy_global_to(guild=ctx.guild)
+                synced = await self.bot.tree.sync(guild=ctx.guild)
+                destino = f"el servidor {ctx.guild.name}"
+            else:
+                synced = await self.bot.tree.sync(guild=None)
+                destino = "todos los servidores (global)"
+        except (discord.Forbidden, discord.HTTPException) as err:
+            logger.error("Error sincronizando comandos con !sync: %s", err)
+            await ctx.reply(f"❌ Error al sincronizar: {err}")
+            return
+
+        nombres = ", ".join(f"`/{c.name}`" for c in synced) or "ninguno"
+        logger.info("Sincronización por !sync: %d comandos en %s", len(synced), destino)
+        await ctx.reply(f"🔄 {len(synced)} comando(s) sincronizados en {destino}: {nombres}")
+
     @app_commands.command(
         name="sync",
         description="Sincroniza el árbol de slash commands del bot",
