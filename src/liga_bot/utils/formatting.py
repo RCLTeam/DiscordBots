@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections.abc import Iterable
 from typing import Any, Final
 
 from liga_bot.config import DEFAULT_REGLAMENTO_CHANNEL
@@ -114,6 +115,31 @@ def normalize_tag(tag: str, max_length: int = 4) -> str:
     cleaned = "".join(c for c in tag.strip() if not c.isspace())
     upper_tag = cleaned.upper()
     return upper_tag[:max_length]
+
+
+def apply_team_tag(nick: str, team_tag: str, known_tags: Iterable[str]) -> str:
+    """
+    Antepone el tag del equipo al apodo respetando el resto del nombre.
+
+    - Si la primera palabra del apodo es el tag de otro equipo, se sustituye.
+    - Si ya es el tag de este equipo, el apodo se deja intacto.
+    - En cualquier otro caso, el tag se añade al principio.
+    """
+    tag = normalize_tag(team_tag)
+    cleaned_nick = nick.strip()
+    if not tag or not cleaned_nick:
+        return cleaned_nick
+
+    known = {normalize_tag(t) for t in known_tags}
+    known.discard("")
+
+    first, _, rest = cleaned_nick.partition(" ")
+    if first.upper() in known:
+        if first.upper() == tag:
+            return cleaned_nick
+        return f"{tag} {rest}".strip()
+
+    return f"{tag} {cleaned_nick}"
 
 
 def format_match_channel_name(

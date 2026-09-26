@@ -3,6 +3,7 @@
 from liga_bot.utils.formatting import (
     MENSAJE_1,
     MENSAJE_2,
+    apply_team_tag,
     format_match_channel_name,
     format_mensaje_1,
     format_mensaje_2,
@@ -14,6 +15,7 @@ from liga_bot.utils.formatting import (
 __all__ = [
     "MENSAJE_1",
     "MENSAJE_2",
+    "apply_team_tag",
     "format_match_channel_name",
     "format_mensaje_1",
     "format_mensaje_2",

@@ -21,7 +21,9 @@ from liga_bot.config import Settings, get_settings
 from liga_bot.database import get_session_factory, transactional_session
 from liga_bot.models.enums import RoleRequestStatus
 from liga_bot.repositories.role_request_repo import RoleRequestRepository
+from liga_bot.repositories.team_repo import TeamRepository
 from liga_bot.ui.roles import PanelPedirRolView, build_panel_rol_embed
+from liga_bot.utils.formatting import apply_team_tag
 
 if TYPE_CHECKING:
     from discord.ext import commands
@@ -371,8 +373,19 @@ class RoleService:
                             exc,
                         )
 
-            # Actualizar apodo
-            nick = f"{req.nombre_lol} #{req.riot_tag}"[:32]
+            # Actualizar apodo, anteponiendo el tag del equipo asignado
+            nick = f"{req.nombre_lol} #{req.riot_tag}"
+            team_repo = TeamRepository(session)
+            team = await team_repo.get_by_name(req.equipo)
+            if team is not None:
+                known_tags = [t.tag for t in await team_repo.list_all()]
+                nick = apply_team_tag(nick, team.tag, known_tags)
+            else:
+                logger.warning(
+                    "El equipo '%s' no existe en base de datos: no se aplica tag al apodo.",
+                    req.equipo,
+                )
+            nick = nick[:32]
             try:
                 await member.edit(nick=nick)
             except (discord.Forbidden, discord.HTTPException) as exc:

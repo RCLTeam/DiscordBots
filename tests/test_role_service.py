@@ -14,7 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from liga_bot.bot import LigaBot
 from liga_bot.config import Settings
-from liga_bot.models.enums import RoleRequestStatus
+from liga_bot.models.enums import Division, RoleRequestStatus
+from liga_bot.models.team import Team
 from liga_bot.repositories.role_request_repo import RoleRequestRepository
 from liga_bot.services.role_service import RoleService
 
@@ -925,6 +926,44 @@ class TestConfirmRoleRequest:
         assert updated_req is not None
         assert updated_req.estado == RoleRequestStatus.APPROVED
         assert updated_req.staff_id == 900001
+
+    @pytest.mark.asyncio
+    async def test_confirm_request_applies_team_tag_to_nick(
+        self, role_service: RoleService, clean_settings: Settings, db_session: AsyncSession
+    ):
+        """El apodo recibe el tag del equipo confirmado cuando el equipo existe en BD."""
+        await db_session.merge(
+            Team(
+                name="Planar Shock Pingus",
+                tag="PSP",
+                slug="planar-shock-pingus",
+                division=Division.PREMIER,
+                discord_role_id=888201,
+            )
+        )
+        await db_session.commit()
+
+        team_role = create_mock_role(888201, "Planar Shock Pingus")
+        guild = create_mock_guild(clean_settings, roles=[team_role])
+        staff = create_mock_member(900001, name="StaffBoss", guild=guild)
+        member = create_mock_member(400010, name="Ninym", display_name="Ninym", guild=guild)
+        guild._members_map[400010] = member
+
+        repo = RoleRequestRepository(db_session)
+        await repo.create_request(
+            user_id=400010,
+            nombre_lol="Ninym",
+            riot_tag="EUW",
+            equipo="Planar Shock Pingus",
+            canal_id=777010,
+        )
+
+        ok, _ = await role_service.confirm_role_request(
+            guild=guild, channel_id=777010, staff_member=staff
+        )
+
+        assert ok is True
+        member.edit.assert_awaited_once_with(nick="PSP Ninym #EUW")
 
     @pytest.mark.asyncio
     async def test_confirm_request_success_fetched_member(

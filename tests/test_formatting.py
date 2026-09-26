@@ -11,6 +11,7 @@ from liga_bot.config import DEFAULT_REGLAMENTO_CHANNEL
 from liga_bot.utils.formatting import (
     MENSAJE_1,
     MENSAJE_2,
+    apply_team_tag,
     format_match_channel_name,
     format_mensaje_1,
     format_mensaje_2,
@@ -203,3 +204,40 @@ def test_templates_have_no_missing_keys():
 
     fields_2 = {field_name for _, field_name, _, _ in formatter.parse(MENSAJE_2) if field_name}
     assert fields_2 == {"reglamento"}
+
+
+# ---------------------------------------------------------------------------
+# apply_team_tag
+# ---------------------------------------------------------------------------
+
+KNOWN_TAGS = ["PSP", "TLG", "FNX"]
+
+
+def test_apply_team_tag_prefixes_when_no_previous_tag():
+    """Un apodo sin tag de equipo recibe el tag al principio."""
+    assert apply_team_tag("Ninym", "PSP", KNOWN_TAGS) == "PSP Ninym"
+    assert apply_team_tag("Ninym #EUW", "PSP", KNOWN_TAGS) == "PSP Ninym #EUW"
+
+
+def test_apply_team_tag_is_idempotent_with_same_tag():
+    """Si el apodo ya empieza por el tag del equipo, se deja intacto."""
+    assert apply_team_tag("TLG Hiperxp", "TLG", KNOWN_TAGS) == "TLG Hiperxp"
+    assert apply_team_tag("tlg Hiperxp", "TLG", KNOWN_TAGS) == "tlg Hiperxp"
+
+
+def test_apply_team_tag_replaces_previous_team_tag():
+    """El tag de otro equipo en la primera palabra se sustituye, no se encadena."""
+    assert apply_team_tag("TLG Hiperxp", "PSP", KNOWN_TAGS) == "PSP Hiperxp"
+    assert apply_team_tag("FNX Ninym #EUW", "PSP", KNOWN_TAGS) == "PSP Ninym #EUW"
+
+
+def test_apply_team_tag_ignores_first_word_that_is_not_a_tag():
+    """Una primera palabra que no es tag de ningún equipo se conserva."""
+    assert apply_team_tag("Dark Ninym", "PSP", KNOWN_TAGS) == "PSP Dark Ninym"
+    # No se confunde con un tag por compartir prefijo
+    assert apply_team_tag("PSPlayer Ninym", "PSP", KNOWN_TAGS) == "PSP PSPlayer Ninym"
+
+
+def test_apply_team_tag_without_tag_returns_nick():
+    """Sin tag de equipo, el apodo no se modifica."""
+    assert apply_team_tag("Ninym", "", KNOWN_TAGS) == "Ninym"
