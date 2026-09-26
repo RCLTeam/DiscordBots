@@ -21,6 +21,8 @@ from discord.ext import commands
 
 from liga_bot.cogs.permissions import is_staff, resolve_member
 from liga_bot.config import Settings, get_settings
+from liga_bot.models.enums import RosterRole
+from liga_bot.services.roster_sync_service import RosterSyncError
 from liga_bot.ui.roster import GestionarPosicionView
 
 if TYPE_CHECKING:
@@ -234,6 +236,109 @@ class RosterCog(commands.Cog, name="Roster"):
             ephemeral=True,
         )
         view.message = msg
+
+
+    # ---------------------------------------------------------------------------
+    # Slash Command: /traspasa-equipo
+    # ---------------------------------------------------------------------------
+
+    @app_commands.command(
+        name="traspasa-equipo",
+        description="Traspasa a un jugador al equipo indicado con su nueva posición (Solo Staff)",
+    )
+    @app_commands.describe(
+        usuario="Jugador que se traspasa",
+        equipo="Rol de Discord del equipo de destino",
+        posicion="Posición que ocupará en la plantilla",
+    )
+    @app_commands.default_permissions(manage_guild=True)
+    async def traspasa_equipo(
+        self,
+        interaction: discord.Interaction,
+        usuario: discord.Member,
+        equipo: discord.Role,
+        posicion: RosterRole,
+    ) -> None:
+        """Traspasa a un jugador a otro equipo actualizando plantilla y roles de Discord."""
+        if interaction.guild is None:
+            await interaction.response.send_message(
+                "❌ Este comando solo puede ser ejecutado dentro de un servidor de Discord.",
+                ephemeral=True,
+            )
+            return
+
+        staff_check = is_staff(interaction.user, self.settings)
+        is_authorized = await staff_check if inspect.isawaitable(staff_check) else bool(staff_check)
+        if not is_authorized:
+            await interaction.response.send_message(
+                "❌ Solo el personal de staff puede traspasar jugadores.",
+                ephemeral=True,
+            )
+            return
+
+        service = self.roster_sync_service
+        if service is None:
+            await interaction.response.send_message(
+                "❌ El servicio de sincronización de plantillas no está disponible.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        target_member = await resolve_member(usuario) or usuario
+
+        # 1. Base de datos primero: así el listener on_member_update encuentra la
+        #    membresía ya creada con su posición y no la recrea con el rol por defecto.
+        try:
+            _, previous_team = await service.transfer_player(
+                member=target_member,
+                team_role=equipo,
+                new_position=posicion,
+                actor_id=interaction.user.id,
+            )
+        except RosterSyncError as exc:
+            await interaction.followup.send(f"❌ {exc}", ephemeral=True)
+            return
+        except Exception as exc:
+            logger.error(
+                "Error al traspasar a %s al equipo %s: %s",
+                getattr(target_member, "display_name", str(target_member)),
+                equipo.name,
+                exc,
+                exc_info=True,
+            )
+            await interaction.followup.send(
+                "❌ Ocurrió un error inesperado al registrar el traspaso.",
+                ephemeral=True,
+            )
+            return
+
+        # 2. Sincronizar los roles de Discord con la plantilla resultante
+        avisos: list[str] = []
+        if previous_team is not None:
+            old_role = interaction.guild.get_role(previous_team.discord_role_id)
+            if old_role is not None and old_role in target_member.roles:
+                try:
+                    await target_member.remove_roles(old_role)
+                except (discord.Forbidden, discord.HTTPException) as exc:
+                    logger.warning("No se pudo retirar el rol '%s': %s", old_role.name, exc)
+                    avisos.append(f"no se pudo retirar el rol {old_role.mention}")
+
+        if equipo not in target_member.roles:
+            try:
+                await target_member.add_roles(equipo)
+            except (discord.Forbidden, discord.HTTPException) as exc:
+                logger.warning("No se pudo asignar el rol '%s': %s", equipo.name, exc)
+                avisos.append(f"no se pudo asignar el rol {equipo.mention}")
+
+        procedencia = f" desde **{previous_team.name}**" if previous_team is not None else ""
+        mensaje = (
+            f"✅ {target_member.mention} traspasado{procedencia} a {equipo.mention} "
+            f"como **{posicion.value}**."
+        )
+        if avisos:
+            mensaje += "\n⚠️ Plantilla actualizada, pero " + ", ".join(avisos) + "."
+        await interaction.followup.send(mensaje, ephemeral=True)
 
 
 async def setup(bot: LigaBot | commands.Bot) -> None:

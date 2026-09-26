@@ -380,6 +380,131 @@ class RosterSyncService:
         async with transactional_session(self.session_factory) as s:
             return await _do_removed(s)
 
+    async def transfer_player(
+        self,
+        member: discord.Member,
+        team_role: discord.Role,
+        new_position: RosterRole | str,
+        actor_id: str | int | None = None,
+        session: AsyncSession | None = None,
+    ) -> tuple[TeamMembership, Team | None]:
+        """
+        Traspasa a un jugador al equipo asociado al rol de Discord indicado:
+        - Resuelve el equipo destino por discord_role_id (RosterSyncError si no existe).
+        - Libera la membresía previa en el equipo destino, si la tuviera.
+        - Si la nueva posición es competitiva, libera también la que ocupe en cualquier
+          otro club, porque un jugador solo puede tener una posición competitiva en la liga.
+          Las posiciones no competitivas (coach, staff, partners) se conservan.
+        - Crea la nueva membresía y registra movimientos (LEFT/JOINED) y auditoría.
+        - Retorna la nueva membresía y el equipo de procedencia (None si no cambió de club).
+        """
+        position = (
+            new_position if isinstance(new_position, RosterRole) else RosterRole(new_position)
+        )
+
+        async def _do_transfer(s: AsyncSession) -> tuple[TeamMembership, Team | None]:
+            team = await TeamRepository(s).get_by_role_id(team_role.id)
+            if team is None:
+                raise RosterSyncError(
+                    f"El rol '{team_role.name}' no corresponde a ningún equipo registrado."
+                )
+
+            user_id_str = _clean_user_id(member.id)
+            if user_id_str is None:
+                raise RosterSyncError("Identificador de usuario de Discord inválido.")
+
+            clean_actor_id = _clean_user_id(actor_id)
+
+            await self._ensure_discord_user(
+                session=s,
+                discord_id=user_id_str,
+                username=member.name,
+                global_name=member.global_name,
+            )
+            if clean_actor_id is not None:
+                await self._ensure_discord_user(session=s, discord_id=clean_actor_id)
+
+            membership_repo = TeamMembershipRepository(s)
+            movement_repo = RosterMovementRepository(s)
+            audit_repo = AuditLogRepository(s)
+
+            # Membresías que deben liberarse antes de crear la nueva
+            to_release: list[TeamMembership] = []
+            current_in_team = await membership_repo.get(team.id, user_id_str)
+            if current_in_team is not None:
+                to_release.append(current_in_team)
+            if position.is_competitive():
+                competitive = await membership_repo.get_competitive_membership(
+                    user_id_str, with_team=True
+                )
+                if competitive is not None and competitive.team_id != team.id:
+                    to_release.append(competitive)
+
+            previous_team: Team | None = None
+            for old in to_release:
+                old_team_id = old.team_id
+                old_role = old.role
+                if old_team_id != team.id:
+                    previous_team = old.team
+
+                before_payload = {
+                    "team_id": str(old_team_id),
+                    "discord_user_id": user_id_str,
+                    "role": old_role.value if isinstance(old_role, RosterRole) else str(old_role),
+                    "is_captain": old.is_captain,
+                }
+                await membership_repo.delete(old)
+                await movement_repo.record_movement(
+                    team_id=old_team_id,
+                    discord_user_id=user_id_str,
+                    action=RosterMovementAction.LEFT,
+                    role=old_role,
+                    actor_id=clean_actor_id,
+                )
+                await audit_repo.log(
+                    actor_discord_user_id=clean_actor_id,
+                    action="roster.member_transferred_out",
+                    entity_type="team_membership",
+                    entity_id=old_team_id,
+                    before=before_payload,
+                    after=None,
+                )
+
+            membership = await membership_repo.create(
+                team_id=team.id,
+                discord_user_id=user_id_str,
+                role=position,
+                is_captain=False,
+            )
+            await movement_repo.record_movement(
+                team_id=team.id,
+                discord_user_id=user_id_str,
+                action=RosterMovementAction.JOINED,
+                role=position,
+                actor_id=clean_actor_id,
+            )
+            await audit_repo.log(
+                actor_discord_user_id=clean_actor_id,
+                action="roster.member_transferred_in",
+                entity_type="team_membership",
+                entity_id=team.id,
+                before=None,
+                after={
+                    "team_id": str(team.id),
+                    "discord_user_id": user_id_str,
+                    "role": position.value,
+                    "is_captain": False,
+                },
+            )
+
+            return membership, previous_team
+
+        if session is not None:
+            return await _do_transfer(session)
+
+        async with transactional_session(self.session_factory) as s:
+            return await _do_transfer(s)
+
     async def change_player_position(
         self,
         discord_user_id: str | int,

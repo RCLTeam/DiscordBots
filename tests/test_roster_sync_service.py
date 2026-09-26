@@ -35,6 +35,7 @@ from liga_bot.services.roster_sync_service import (
     CompetitivePositionConflictError,
     InvalidCaptainRoleError,
     PlayerNotTeamMemberError,
+    RosterSyncError,
     RosterSyncService,
 )
 
@@ -1011,3 +1012,134 @@ class TestGetUserTeams:
         t, m = teams[0]
         assert t.id == team_alpha.id
         assert m.role == RosterRole.MID
+
+
+# ===========================================================================
+# 7. Pruebas de traspaso de jugadores (transfer_player)
+# ===========================================================================
+
+
+class TestTransferPlayer:
+    """Traspasos entre equipos con posición competitiva y no competitiva."""
+
+    @pytest.mark.asyncio
+    async def test_transfer_moves_competitive_membership(
+        self,
+        roster_sync_service: RosterSyncService,
+        session_factory: async_sessionmaker[AsyncSession],
+        seed_teams: tuple[Team, Team, Team],
+        seed_actor: DiscordUser,
+    ):
+        """Una posición competitiva se libera del club anterior y se crea en el destino."""
+        alpha, beta, _ = seed_teams
+        role_alpha = create_mock_role(1001, "Team Alpha")
+        role_beta = create_mock_role(1002, "Team Beta")
+        member = create_mock_member(500100, name="Ninym", roles=[role_alpha])
+
+        await roster_sync_service.handle_role_added(member, role_alpha, actor_id="999000")
+        async with session_factory() as session:
+            await TeamMembershipRepository(session).update_role(
+                alpha.id, "500100", RosterRole.MID
+            )
+            await session.commit()
+
+        membership, previous_team = await roster_sync_service.transfer_player(
+            member=member,
+            team_role=role_beta,
+            new_position=RosterRole.ADC,
+            actor_id="999000",
+        )
+
+        assert membership.team_id == beta.id
+        assert membership.role == RosterRole.ADC
+        assert previous_team is not None
+        assert previous_team.id == alpha.id
+
+        async with session_factory() as session:
+            repo = TeamMembershipRepository(session)
+            assert await repo.get(alpha.id, "500100") is None
+            assert await repo.get(beta.id, "500100") is not None
+
+            movimientos = await RosterMovementRepository(session).list_by_user("500100")
+            acciones = [m.action for m in movimientos]
+            assert RosterMovementAction.LEFT in acciones
+            assert RosterMovementAction.JOINED in acciones
+
+    @pytest.mark.asyncio
+    async def test_transfer_keeps_non_competitive_memberships(
+        self,
+        roster_sync_service: RosterSyncService,
+        session_factory: async_sessionmaker[AsyncSession],
+        seed_teams: tuple[Team, Team, Team],
+        seed_actor: DiscordUser,
+    ):
+        """Un rol no competitivo (coach) en otro club se conserva tras el traspaso."""
+        alpha, beta, _ = seed_teams
+        role_alpha = create_mock_role(1001, "Team Alpha")
+        role_beta = create_mock_role(1002, "Team Beta")
+        member = create_mock_member(500101, name="Coach", roles=[role_alpha])
+
+        await roster_sync_service.handle_role_added(member, role_alpha, actor_id="999000")
+        async with session_factory() as session:
+            await TeamMembershipRepository(session).update_role(
+                alpha.id, "500101", RosterRole.COACH
+            )
+            await session.commit()
+
+        await roster_sync_service.transfer_player(
+            member=member,
+            team_role=role_beta,
+            new_position=RosterRole.STAFF,
+            actor_id="999000",
+        )
+
+        async with session_factory() as session:
+            repo = TeamMembershipRepository(session)
+            assert await repo.get(alpha.id, "500101") is not None
+            assert await repo.get(beta.id, "500101") is not None
+
+    @pytest.mark.asyncio
+    async def test_transfer_replaces_membership_in_same_team(
+        self,
+        roster_sync_service: RosterSyncService,
+        session_factory: async_sessionmaker[AsyncSession],
+        seed_teams: tuple[Team, Team, Team],
+        seed_actor: DiscordUser,
+    ):
+        """Traspasar al mismo equipo sustituye el registro y cambia la posición."""
+        alpha, _, _ = seed_teams
+        role_alpha = create_mock_role(1001, "Team Alpha")
+        member = create_mock_member(500102, name="Jugador", roles=[role_alpha])
+
+        await roster_sync_service.handle_role_added(member, role_alpha, actor_id="999000")
+
+        membership, previous_team = await roster_sync_service.transfer_player(
+            member=member,
+            team_role=role_alpha,
+            new_position=RosterRole.TOP,
+            actor_id="999000",
+        )
+
+        assert previous_team is None
+        assert membership.role == RosterRole.TOP
+        async with session_factory() as session:
+            memberships = await TeamMembershipRepository(session).list_by_user("500102")
+            assert len(memberships) == 1
+
+    @pytest.mark.asyncio
+    async def test_transfer_unknown_role_raises(
+        self,
+        roster_sync_service: RosterSyncService,
+        seed_teams: tuple[Team, Team, Team],
+    ):
+        """Un rol de Discord que no pertenece a ningún equipo aborta el traspaso."""
+        unknown_role = create_mock_role(9999, "Rol Cualquiera")
+        member = create_mock_member(500103, name="Nadie")
+
+        with pytest.raises(RosterSyncError):
+            await roster_sync_service.transfer_player(
+                member=member,
+                team_role=unknown_role,
+                new_position=RosterRole.TOP,
+                actor_id="999000",
+            )
