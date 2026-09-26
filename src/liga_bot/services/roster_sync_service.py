@@ -380,6 +380,18 @@ class RosterSyncService:
         async with transactional_session(self.session_factory) as s:
             return await _do_removed(s)
 
+    async def list_team_tags(self, session: AsyncSession | None = None) -> list[str]:
+        """Tags de todos los equipos registrados, para normalizar apodos."""
+
+        async def _do_list(s: AsyncSession) -> list[str]:
+            return [team.tag for team in await TeamRepository(s).list_all()]
+
+        if session is not None:
+            return await _do_list(session)
+
+        async with transactional_session(self.session_factory) as s:
+            return await _do_list(s)
+
     async def transfer_player(
         self,
         member: discord.Member,
@@ -387,7 +399,7 @@ class RosterSyncService:
         new_position: RosterRole | str,
         actor_id: str | int | None = None,
         session: AsyncSession | None = None,
-    ) -> tuple[TeamMembership, Team | None]:
+    ) -> tuple[TeamMembership, Team, Team | None]:
         """
         Traspasa a un jugador al equipo asociado al rol de Discord indicado:
         - Resuelve el equipo destino por discord_role_id (RosterSyncError si no existe).
@@ -396,13 +408,14 @@ class RosterSyncService:
           otro club, porque un jugador solo puede tener una posición competitiva en la liga.
           Las posiciones no competitivas (coach, staff, partners) se conservan.
         - Crea la nueva membresía y registra movimientos (LEFT/JOINED) y auditoría.
-        - Retorna la nueva membresía y el equipo de procedencia (None si no cambió de club).
+        - Retorna la nueva membresía, el equipo destino y el de procedencia
+          (None si no cambió de club).
         """
         position = (
             new_position if isinstance(new_position, RosterRole) else RosterRole(new_position)
         )
 
-        async def _do_transfer(s: AsyncSession) -> tuple[TeamMembership, Team | None]:
+        async def _do_transfer(s: AsyncSession) -> tuple[TeamMembership, Team, Team | None]:
             team = await TeamRepository(s).get_by_role_id(team_role.id)
             if team is None:
                 raise RosterSyncError(
@@ -497,7 +510,7 @@ class RosterSyncService:
                 },
             )
 
-            return membership, previous_team
+            return membership, team, previous_team
 
         if session is not None:
             return await _do_transfer(session)

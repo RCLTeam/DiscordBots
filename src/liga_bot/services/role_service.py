@@ -322,7 +322,7 @@ class RoleService:
         - Resuelve el miembro solicitante en el servidor (caché o API).
         - Asigna el rol del equipo solicitado si existe en el servidor.
         - Remueve el rol 'Sin Verificar' si está presente.
-        - Actualiza el apodo del miembro con formato 'NombreLoL #RiotTag' (máx 32 caracteres).
+        - Actualiza el apodo del miembro con formato '<TAG> <NombreLoL>' (máx 32 caracteres).
         - Actualiza el registro a estado APPROVED en base de datos registrando el staff_id.
         - Retorna (True, f"Rol {req.equipo} confirmado para {member.display_name}.") o error.
         """
@@ -390,8 +390,8 @@ class RoleService:
                             exc,
                         )
 
-            # Actualizar apodo, anteponiendo el tag del equipo asignado
-            nick = f"{req.nombre_lol} #{req.riot_tag}"
+            # Actualizar apodo: "<TAG> <NombreLoL>", sin el Riot Tag
+            nick = req.nombre_lol
             if team is not None:
                 known_tags = [t.tag for t in await team_repo.list_all()]
                 nick = apply_team_tag(nick, team.tag, known_tags)

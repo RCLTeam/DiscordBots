@@ -24,6 +24,7 @@ from liga_bot.config import Settings, get_settings
 from liga_bot.models.enums import RosterRole
 from liga_bot.services.roster_sync_service import RosterSyncError
 from liga_bot.ui.roster import GestionarPosicionView
+from liga_bot.utils.formatting import apply_team_tag
 
 if TYPE_CHECKING:
     from liga_bot.bot import LigaBot
@@ -250,6 +251,7 @@ class RosterCog(commands.Cog, name="Roster"):
         usuario="Jugador que se traspasa",
         equipo="Rol de Discord del equipo de destino",
         posicion="Posición que ocupará en la plantilla",
+        nombre_lol="Nombre de invocador para el apodo (opcional: por defecto el actual)",
     )
     @app_commands.default_permissions(manage_guild=True)
     async def traspasa_equipo(
@@ -258,6 +260,7 @@ class RosterCog(commands.Cog, name="Roster"):
         usuario: discord.Member,
         equipo: discord.Role,
         posicion: RosterRole,
+        nombre_lol: str | None = None,
     ) -> None:
         """Traspasa a un jugador a otro equipo actualizando plantilla y roles de Discord."""
         if interaction.guild is None:
@@ -290,7 +293,7 @@ class RosterCog(commands.Cog, name="Roster"):
         # 1. Base de datos primero: así el listener on_member_update encuentra la
         #    membresía ya creada con su posición y no la recrea con el rol por defecto.
         try:
-            _, previous_team = await service.transfer_player(
+            _, team, previous_team = await service.transfer_player(
                 member=target_member,
                 team_role=equipo,
                 new_position=posicion,
@@ -331,10 +334,24 @@ class RosterCog(commands.Cog, name="Roster"):
                 logger.warning("No se pudo asignar el rol '%s': %s", equipo.name, exc)
                 avisos.append(f"no se pudo asignar el rol {equipo.mention}")
 
+        # 3. Apodo: "<TAG> <NombreLoL>", sin Riot Tag
+        base_nick = (nombre_lol or "").strip() or target_member.display_name
+        try:
+            known_tags = await service.list_team_tags()
+        except Exception as exc:
+            logger.warning("No se pudieron cargar los tags de equipo: %s", exc)
+            known_tags = [team.tag]
+        nuevo_nick = apply_team_tag(base_nick, team.tag, known_tags)[:32]
+        try:
+            await target_member.edit(nick=nuevo_nick)
+        except (discord.Forbidden, discord.HTTPException) as exc:
+            logger.warning("No se pudo renombrar a '%s': %s", nuevo_nick, exc)
+            avisos.append(f"no se pudo renombrar a `{nuevo_nick}`")
+
         procedencia = f" desde **{previous_team.name}**" if previous_team is not None else ""
         mensaje = (
             f"✅ {target_member.mention} traspasado{procedencia} a {equipo.mention} "
-            f"como **{posicion.value}**."
+            f"como **{posicion.value}** (`{nuevo_nick}`)."
         )
         if avisos:
             mensaje += "\n⚠️ Plantilla actualizada, pero " + ", ".join(avisos) + "."

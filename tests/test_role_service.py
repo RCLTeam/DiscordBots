@@ -919,7 +919,7 @@ class TestConfirmRoleRequest:
         # Discord
         member.add_roles.assert_awaited_once_with(team_role)
         member.remove_roles.assert_awaited_once_with(sin_verificar_role)
-        member.edit.assert_awaited_once_with(nick="ViperLoL #KR9")
+        member.edit.assert_awaited_once_with(nick="ViperLoL")
 
         # Base de Datos
         updated_req = await repo.get_by_channel_id(777003)
@@ -1002,7 +1002,7 @@ class TestConfirmRoleRequest:
         )
 
         assert ok is True
-        member.edit.assert_awaited_once_with(nick="PSP Ninym #EUW")
+        member.edit.assert_awaited_once_with(nick="PSP Ninym")
 
     @pytest.mark.asyncio
     async def test_confirm_request_success_fetched_member(
@@ -1068,7 +1068,7 @@ class TestConfirmRoleRequest:
         assert ok is True
         assert "Rol NonExistentTeam confirmado para Doran." in msg
         member.add_roles.assert_not_called()
-        member.edit.assert_awaited_once_with(nick="Doran #TOP")
+        member.edit.assert_awaited_once_with(nick="Doran")
 
     @pytest.mark.asyncio
     async def test_confirm_request_member_edit_forbidden_does_not_abort(

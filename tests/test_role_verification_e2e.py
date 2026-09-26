@@ -524,7 +524,7 @@ class TestFullLifecycleOfficialTeamApproval:
         # - Rol "Sin Verificar" removido
         assert sin_verificar_role not in new_member.roles
         # - Apodo actualizado con formato "PinguFaker #EUW"
-        assert new_member.nick == "PinguFaker #EUW"
+        assert new_member.nick == "PinguFaker"
 
         # Verificación en la base de datos PostgreSQL: estado APPROVED y staff_id registrado
         async with session_factory() as session:
@@ -946,7 +946,7 @@ class TestDynamicItemSerializationAndLifecycle:
 
         # Validación en Discord
         assert team_role in member.roles
-        assert member.nick == "StormChaser #EUW"
+        assert member.nick == "StormChaser"
 
 
 # ===========================================================================

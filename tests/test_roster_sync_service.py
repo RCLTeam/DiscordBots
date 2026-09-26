@@ -1043,7 +1043,7 @@ class TestTransferPlayer:
             )
             await session.commit()
 
-        membership, previous_team = await roster_sync_service.transfer_player(
+        membership, _, previous_team = await roster_sync_service.transfer_player(
             member=member,
             team_role=role_beta,
             new_position=RosterRole.ADC,
@@ -1113,7 +1113,7 @@ class TestTransferPlayer:
 
         await roster_sync_service.handle_role_added(member, role_alpha, actor_id="999000")
 
-        membership, previous_team = await roster_sync_service.transfer_player(
+        membership, _, previous_team = await roster_sync_service.transfer_player(
             member=member,
             team_role=role_alpha,
             new_position=RosterRole.TOP,
