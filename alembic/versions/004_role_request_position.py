@@ -1,7 +1,7 @@
 """role_requests.posicion
 
-Revision ID: 003
-Revises: 002
+Revision ID: 004
+Revises: 003
 Create Date: 2026-09-27 02:00:00.000000
 
 """
@@ -13,8 +13,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # Identificadores de revisión utilizados por Alembic
-revision: str = "003"
-down_revision: str | None = "002"
+revision: str = "004"
+down_revision: str | None = "003"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
