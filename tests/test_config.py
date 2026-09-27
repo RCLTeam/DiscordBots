@@ -106,7 +106,7 @@ def test_environment_override_invalid_log_level(monkeypatch):
 
 def test_canonical_domain_constants():
     """Valida que las constantes de dominio auxiliares estén correctamente definidas."""
-    assert DEFAULT_REGLAMENTO_CHANNEL == "📜𝗥𝗘𝗚𝗟𝗔𝗠𝗘𝗡𝗧𝗢📜"
+    assert DEFAULT_REGLAMENTO_CHANNEL == "<#1548038711697080491>"
     assert len(DEFAULT_TICKETS_CATEGORY_NAMES) == 5
     assert "TICKETS-GENERAL-PREMIER" in DEFAULT_TICKETS_CATEGORY_NAMES
     assert DEFAULT_TICKET_REVISION_HOURS == 24

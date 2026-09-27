@@ -163,13 +163,13 @@ def test_format_mensaje_1_verbatim():
         equipo2="<@&222>",
     )
     assert msg.startswith("**Jornada 1 [13/09/2026 21:00]** <@&111> VS <@&222>")
-    assert "Este canal es la única vía oficial para coordinar vuestro partido." in msg
+    assert "Este canal es el único medio oficial para organizar vuestro enfrentamiento." in msg
     assert "**ACUERDO DE HORARIO**" in msg
-    assert "Debéis confirmar el horario antes del jueves a las 23:59h." in msg
+    assert "El horario debe quedar cerrado antes del martes a las 23:59h." in msg
     assert "**CONVOCATORIA**" in msg
-    assert "* (-1 BAN): Si se envía con menos de 4 horas de antelación" in msg
-    assert "* (0 BANS mapa 1): Si se envía con menos de 30 minutos" in msg
-    assert "* Abandono: Si no se ha enviado a falta de 5 minutos para el inicio." in msg
+    assert "con un mínimo de 6h de antelación" in msg
+    assert "disputará el partido sin derecho a bans." in msg
+    assert "y los suplentes" in msg
 
 
 def test_format_mensaje_1_role_ids_signature():
@@ -186,14 +186,14 @@ def test_format_mensaje_1_role_ids_signature():
 def test_format_mensaje_2_verbatim():
     msg_default = format_mensaje_2()
     assert msg_default.startswith("**PREPARACIÓN Y DRAFT**")
-    assert "https://lol.draftcore.net/ en formato Fearless Draft." in msg_default
+    assert "https://lol.draftcore.net/ con formato Fearless Draft." in msg_default
     assert "https://drafter.lol/" in msg_default
-    assert f"Normas completas y detalladas en {DEFAULT_REGLAMENTO_CHANNEL}." in msg_default
+    assert f"Tenéis la normativa completa en {DEFAULT_REGLAMENTO_CHANNEL}." in msg_default
 
     # Con mención personalizada de canal
     custom_reglamento = "<#1548795782360993999>"
     msg_custom = format_mensaje_2(reglamento=custom_reglamento)
-    assert f"Normas completas y detalladas en {custom_reglamento}." in msg_custom
+    assert f"Tenéis la normativa completa en {custom_reglamento}." in msg_custom
 
 
 def test_templates_have_no_missing_keys():

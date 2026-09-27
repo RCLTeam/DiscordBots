@@ -14,7 +14,9 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Constantes canónicas auxiliares de la liga (preservadas de liga_bot.py:41-52)
-DEFAULT_REGLAMENTO_CHANNEL: Final[str] = "📜𝗥𝗘𝗚𝗟𝗔𝗠𝗘𝗡𝗧𝗢📜"
+# Mención al canal de normas de la liga (#reglas). Se usa por ID para que Discord
+# la renderice como enlace aunque el canal se renombre.
+DEFAULT_REGLAMENTO_CHANNEL: Final[str] = "<#1548038711697080491>"
 DEFAULT_TICKETS_CATEGORY_NAMES: Final[tuple[str, ...]] = (
     "TICKETS-GENERAL-PREMIER",
     "TICKETS-GENERAL-ASCEND",
