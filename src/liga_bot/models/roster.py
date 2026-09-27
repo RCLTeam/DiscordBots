@@ -43,6 +43,100 @@ from liga_bot.models.enums import AppRole, RosterMovementAction, RosterRole
 from liga_bot.models.team import Team
 
 
+class Season(Base):
+    """Representa una temporada en la liga (seasons)."""
+
+    __tablename__ = "seasons"
+
+    name: Mapped[str] = mapped_column(String(120), primary_key=True)
+    starts_on: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ends_on: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    def __repr__(self) -> str:
+        return f"<Season name={self.name!r}>"
+
+
+class DivisionModel(Base):
+    """Representa una división en la liga (divisions)."""
+
+    __tablename__ = "divisions"
+
+    name: Mapped[str] = mapped_column(String(80), primary_key=True)
+    sort_order: Mapped[int] = mapped_column(sa.SmallInteger, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    def __repr__(self) -> str:
+        return f"<DivisionModel name={self.name!r} sort_order={self.sort_order!r}>"
+
+
+class SeasonDivision(Base):
+    """Representa la asignación de una división a una temporada (seasons_divisions)."""
+
+    __tablename__ = "seasons_divisions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    season_name: Mapped[str] = mapped_column(
+        String(120),
+        ForeignKey("seasons.name", ondelete="CASCADE"),
+        nullable=False,
+    )
+    division_name: Mapped[str] = mapped_column(
+        String(80),
+        ForeignKey("divisions.name", ondelete="CASCADE"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "season_name",
+            "division_name",
+            name="uq_seasons_divisions_season_division",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<SeasonDivision id={self.id!r} "
+            f"season_name={self.season_name!r} division_name={self.division_name!r}>"
+        )
+
+
 class DiscordUser(Base):
     """Representa un usuario registrado en Discord (discord_users)."""
 
@@ -407,8 +501,11 @@ Team.movements = relationship(
 __all__ = [
     "AuditLog",
     "DiscordUser",
+    "DivisionModel",
     "Player",
     "RosterMovement",
+    "Season",
+    "SeasonDivision",
     "Team",
     "TeamMembership",
 ]
