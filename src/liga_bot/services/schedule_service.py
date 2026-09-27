@@ -25,7 +25,6 @@ from liga_bot.utils.formatting import (
     format_match_channel_name,
     format_mensaje_1,
     format_mensaje_2,
-    normalize_slug,
 )
 
 if TYPE_CHECKING:
@@ -110,14 +109,10 @@ class ScheduleService:
         self.settings = settings or get_settings()
         self.bot = bot
 
-    async def _resolve_team(self, team_repo: TeamRepository, name_or_slug: str) -> Team | None:
-        """Resuelve un equipo buscando por nombre insensible a mayúsculas o por slug."""
-        cleaned = name_or_slug.strip()
-        team = await team_repo.get_by_name(cleaned, case_sensitive=False)
-        if team is not None:
-            return team
-        slug_guess = normalize_slug(cleaned)
-        return await team_repo.get_by_slug(slug_guess)
+    async def _resolve_team(self, team_repo: TeamRepository, name: str) -> Team | None:
+        """Resuelve un equipo buscando por nombre (insensible a mayúsculas)."""
+        cleaned = name.strip()
+        return await team_repo.get_by_name(cleaned, case_sensitive=False)
 
     async def create_match(
         self,
@@ -204,10 +199,11 @@ class ScheduleService:
                 )
 
             division = team1.division
+            team1_season_division_id = team1.season_division_id
             team1_role_id = team1.discord_role_id
             team2_role_id = team2.discord_role_id
-            team1_slug = team1.slug
-            team2_slug = team2.slug
+            team1_tag = team1.tag
+            team2_tag = team2.tag
             team1_id = team1.id
             team2_id = team2.id
             t1_name = team1.name
@@ -300,7 +296,7 @@ class ScheduleService:
             )
 
         # 5. Creación de Canal de Texto
-        channel_name = format_match_channel_name(jornada, team1_slug, team2_slug)
+        channel_name = format_match_channel_name(jornada, team1_tag, team2_tag)
         created_channel: discord.TextChannel | None = None
 
         try:
@@ -340,6 +336,7 @@ class ScheduleService:
                 match_repo = MatchRepository(session)
                 match = await match_repo.create(
                     jornada=jornada,
+                    id_season_division=team1_season_division_id,
                     division=division,
                     team1_id=team1_id,
                     team2_id=team2_id,

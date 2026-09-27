@@ -17,7 +17,7 @@ from liga_bot.config import Settings, get_settings
 from liga_bot.database import get_session_factory, transactional_session
 from liga_bot.models.enums import Division
 from liga_bot.repositories.team_repo import TeamRepository
-from liga_bot.utils.formatting import normalize_slug, normalize_tag
+from liga_bot.utils.formatting import normalize_tag
 
 if TYPE_CHECKING:
     from discord.ext.commands import Bot
@@ -126,7 +126,6 @@ class TeamsCog(commands.Cog, name="Teams"):
                 division_enum = Division.PREMIER
 
         tag_normalized = normalize_tag(cleaned_tag)
-        slug = normalize_slug(target_name)
 
         await interaction.response.defer(ephemeral=True)
 
@@ -159,14 +158,12 @@ class TeamsCog(commands.Cog, name="Teams"):
                         existing_by_role,
                         name=target_name,
                         tag=tag_normalized,
-                        slug=slug,
                         division=division_enum,
                     )
                 elif existing_by_name is not None:
                     team = await repo.update(
                         existing_by_name,
                         tag=tag_normalized,
-                        slug=slug,
                         division=division_enum,
                         discord_role_id=rol.id,
                     )
@@ -174,7 +171,6 @@ class TeamsCog(commands.Cog, name="Teams"):
                     team = await repo.create(
                         name=target_name,
                         tag=tag_normalized,
-                        slug=slug,
                         division=division_enum,
                         discord_role_id=rol.id,
                     )
@@ -192,7 +188,6 @@ class TeamsCog(commands.Cog, name="Teams"):
                 value=f"{rol.mention} (`{rol.id}`)",
                 inline=False,
             )
-            embed.add_field(name="Slug Canal", value=f"`{team.slug}`", inline=True)
 
             await interaction.followup.send(embed=embed, ephemeral=True)
         except Exception as exc:
