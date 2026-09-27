@@ -1,0 +1,48 @@
+# Servicio systemd para LigaBot.
+#
+# Instalación:
+#   sudo cp deploy/liga-bot.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now liga-bot
+#
+# Ajusta User, WorkingDirectory y la ruta de uv a las de tu servidor.
+
+[Unit]
+Description=LigaBot - bot de Discord de la liga RCL
+Documentation=https://github.com/RCLTeam/DiscordBots
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rcl
+Group=rcl
+
+# El bot lee .env desde este directorio (pydantic-settings), no hace falta EnvironmentFile.
+WorkingDirectory=/opt/rcl/discord-bots
+
+# --frozen: usa uv.lock tal cual, sin resolver dependencias al arrancar.
+ExecStart=/usr/local/bin/uv run --frozen liga-bot
+
+# uv necesita HOME para su caché; systemd no siempre lo define.
+Environment=HOME=/home/rcl
+Environment=PYTHONUNBUFFERED=1
+
+# __main__.py atiende SIGTERM y cierra Discord y la BD de forma ordenada.
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+Restart=always
+RestartSec=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=liga-bot
+
+# Endurecimiento básico
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
