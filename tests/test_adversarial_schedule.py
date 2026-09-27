@@ -376,7 +376,10 @@ async def test_csv_duplicate_cross_name_and_slug(
     assert j_res.total_rows == 2
     assert j_res.success_count == 1
     assert j_res.error_count == 1
-    assert "enfrentamiento duplicado" in j_res.errors[0] or "ya existe para la jornada 1" in j_res.errors[0]
+    assert (
+        "enfrentamiento duplicado" in j_res.errors[0]
+        or "ya existe para la jornada 1" in j_res.errors[0]
+    )
 
 
 @pytest.mark.asyncio

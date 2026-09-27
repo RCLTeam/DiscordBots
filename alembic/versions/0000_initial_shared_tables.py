@@ -50,9 +50,7 @@ def upgrade() -> None:
     # Escenario de base de datos local o de pruebas limpia:
     # 1. Creación de tipos ENUM nativos si el dialecto es PostgreSQL
     if bind.dialect.name == "postgresql":
-        postgresql.ENUM("viewer", "admin", "owner", name="app_role").create(
-            bind, checkfirst=True
-        )
+        postgresql.ENUM("viewer", "admin", "owner", name="app_role").create(bind, checkfirst=True)
         postgresql.ENUM(
             "top",
             "jungle",
@@ -179,9 +177,7 @@ def upgrade() -> None:
         sa.Column("avatar_hash", sa.String(length=128), nullable=True),
         sa.Column(
             "role",
-            postgresql.ENUM(
-                "viewer", "admin", "owner", name="app_role", create_type=False
-            ),
+            postgresql.ENUM("viewer", "admin", "owner", name="app_role", create_type=False),
             server_default="viewer",
             nullable=False,
         ),
@@ -235,9 +231,7 @@ def upgrade() -> None:
         ),
         sa.UniqueConstraint("game_name", "riot_tag", name="players_game_name_riot_tag_key"),
     )
-    op.create_index(
-        "ix_players_discord_user_id", "players", ["discord_user_id"], unique=False
-    )
+    op.create_index("ix_players_discord_user_id", "players", ["discord_user_id"], unique=False)
 
     op.create_table(
         "teams",

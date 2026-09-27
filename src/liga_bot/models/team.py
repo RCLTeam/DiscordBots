@@ -37,14 +37,14 @@ class Team(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     season_division: Mapped[SeasonDivision] = relationship("SeasonDivision", lazy="joined")
 
     # Relaciones bidireccionales con partidos
-    home_matches: Mapped[list["Match"]] = relationship(
+    home_matches: Mapped[list[Match]] = relationship(
         "Match",
         foreign_keys="[Match.team1_id]",
         back_populates="team1",
         passive_deletes=True,
         lazy="select",
     )
-    away_matches: Mapped[list["Match"]] = relationship(
+    away_matches: Mapped[list[Match]] = relationship(
         "Match",
         foreign_keys="[Match.team2_id]",
         back_populates="team2",
@@ -52,9 +52,7 @@ class Team(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         lazy="select",
     )
 
-    __table_args__ = (
-        Index("ix_teams_season_division_id", "season_division_id"),
-    )
+    __table_args__ = (Index("ix_teams_season_division_id", "season_division_id"),)
 
     def __init__(
         self,
@@ -119,4 +117,3 @@ class Team(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         self._division_override = div_val
         if self.season_division is not None and div_val is not None:
             self.season_division.division_name = div_val.value
-

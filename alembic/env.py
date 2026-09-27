@@ -89,7 +89,6 @@ def include_object(
     return True
 
 
-
 def get_database_url() -> str:
     """Obtiene y normaliza la URL de base de datos resolviendo la jerarquía:
     1. Variable de entorno DATABASE_URL (si está presente y no vacía).

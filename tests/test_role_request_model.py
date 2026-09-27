@@ -362,7 +362,10 @@ class TestRoleRequestModelDatabaseRoundtrip:
 
     @pytest.mark.asyncio
     async def test_alembic_002_downgrade_and_reupgrade(self, migrated_db: AsyncEngine):
-        """Verifica la reversibilidad limpia de la migración bot_tables 0001 (downgrade a 0000 y re-upgrade a head)."""
+        """
+        Verifica la reversibilidad limpia de la migración bot_tables 0001
+        (downgrade a 0000 y re-upgrade a head).
+        """
         cfg = Config("alembic.ini")
         async with migrated_db.connect() as conn:
 

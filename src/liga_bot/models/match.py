@@ -161,4 +161,3 @@ class Match(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         self._division_override = div_val
         if self.season_division is not None and div_val is not None:
             self.season_division.division_name = div_val.value
-

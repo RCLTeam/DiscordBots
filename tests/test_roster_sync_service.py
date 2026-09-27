@@ -1038,9 +1038,7 @@ class TestTransferPlayer:
 
         await roster_sync_service.handle_role_added(member, role_alpha, actor_id="999000")
         async with session_factory() as session:
-            await TeamMembershipRepository(session).update_role(
-                alpha.id, "500100", RosterRole.MID
-            )
+            await TeamMembershipRepository(session).update_role(alpha.id, "500100", RosterRole.MID)
             await session.commit()
 
         membership, _, previous_team = await roster_sync_service.transfer_player(
