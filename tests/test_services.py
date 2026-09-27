@@ -26,6 +26,7 @@ from liga_bot.config import (
     Settings,
 )
 from liga_bot.models.enums import Division, MatchStatus
+from liga_bot.models.match import DEFAULT_PREMIER_SEASON_DIVISION_ID
 from liga_bot.repositories.match_repo import MatchRepository
 from liga_bot.repositories.team_repo import TeamRepository
 from liga_bot.repositories.ticket_repo import TicketNoticeRepository
@@ -1424,3 +1425,52 @@ async def test_ticket_audit_tickets_alias(
     result = await service.audit_tickets(guild)
     assert isinstance(result, TicketAuditResult)
     assert "Revisión completada" in result.summary()
+
+
+# ---------------------------------------------------------------------------
+# Enlace con el calendario de la web (matches.id_round)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_resolve_id_round_sin_jornada_en_la_web(
+    session_factory: async_sessionmaker[AsyncSession],
+    test_settings: Any,
+):
+    """Sin jornada en rounds (o sin la tabla), el partido queda sin enlazar."""
+    service = ScheduleService(session_factory=session_factory, settings=test_settings)
+
+    assert await service._resolve_id_round(7, DEFAULT_PREMIER_SEASON_DIVISION_ID) is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_id_round_con_jornada_existente(
+    session_factory: async_sessionmaker[AsyncSession],
+    db_session: AsyncSession,
+    test_settings: Any,
+):
+    """Si la jornada existe en rounds, se devuelve su id para enlazar el partido."""
+    await db_session.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS rounds "
+            "(id smallint NOT NULL, id_season_division uuid NOT NULL, "
+            "PRIMARY KEY (id, id_season_division))"
+        )
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO rounds (id, id_season_division) VALUES (:id, :sd) "
+            "ON CONFLICT DO NOTHING"
+        ),
+        {"id": 3, "sd": str(DEFAULT_PREMIER_SEASON_DIVISION_ID)},
+    )
+    await db_session.commit()
+
+    service = ScheduleService(session_factory=session_factory, settings=test_settings)
+
+    assert await service._resolve_id_round(3, DEFAULT_PREMIER_SEASON_DIVISION_ID) == 3
+    # Una jornada que no está sigue sin enlazarse
+    assert await service._resolve_id_round(99, DEFAULT_PREMIER_SEASON_DIVISION_ID) is None
+
+    await db_session.execute(text("DROP TABLE IF EXISTS rounds"))
+    await db_session.commit()

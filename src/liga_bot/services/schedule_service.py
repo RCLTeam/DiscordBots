@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 import discord
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from liga_bot.config import Settings, get_settings
@@ -59,6 +60,7 @@ class MatchResult:
     channel_mention: str | None = None
     error: str | None = None
     is_duplicate: bool = False
+    id_round_missing: bool = False
 
 
 @dataclass(slots=True)
@@ -113,6 +115,28 @@ class ScheduleService:
         """Resuelve un equipo buscando por nombre (insensible a mayúsculas)."""
         cleaned = name.strip()
         return await team_repo.get_by_name(cleaned, case_sensitive=False)
+
+    async def _resolve_id_round(self, jornada: int, season_division_id: Any) -> int | None:
+        """
+        Devuelve rounds.id si la jornada ya existe en el calendario de RCL-Next.
+
+        El bot nunca crea jornadas: si no existe (o la tabla no está disponible,
+        como en entornos de prueba), retorna None y el partido queda sin enlazar.
+        """
+        try:
+            async with transactional_session(self.session_factory) as session:
+                result = await session.execute(
+                    text(
+                        "SELECT id FROM rounds "
+                        "WHERE id = :jornada AND id_season_division = :sd"
+                    ),
+                    {"jornada": jornada, "sd": season_division_id},
+                )
+                row = result.first()
+                return int(row[0]) if row is not None else None
+        except Exception as exc:
+            logger.debug("No se pudo consultar la jornada %s en rounds: %s", jornada, exc)
+            return None
 
     async def create_match(
         self,
@@ -332,10 +356,12 @@ class ScheduleService:
             )
 
             # 7. Persistencia Atómica en Base de Datos
+            id_round = await self._resolve_id_round(jornada, team1_season_division_id)
             async with transactional_session(self.session_factory) as session:
                 match_repo = MatchRepository(session)
                 match = await match_repo.create(
                     jornada=jornada,
+                    id_round=id_round,
                     id_season_division=team1_season_division_id,
                     division=division,
                     team1_id=team1_id,
@@ -353,6 +379,7 @@ class ScheduleService:
                 match=match,
                 channel=created_channel,
                 channel_mention=created_channel.mention,
+                id_round_missing=id_round is None,
             )
 
         except Exception as exc:

@@ -14,6 +14,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -38,6 +39,9 @@ class Match(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "matches"
 
     jornada: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Jornada del lado web (rounds.id). La gobierna RCL-Next: el bot solo la enlaza
+    # cuando ya existe, nunca la crea.
+    id_round: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     id_season_division: Mapped[uuid.UUID] = mapped_column(
         Uuid,
         ForeignKey(

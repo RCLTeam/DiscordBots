@@ -270,6 +270,18 @@ class ScheduleCog(commands.Cog, name="Schedule"):
                 errors_text = errors_text[:1000] + " ... (truncado)"
             embed.add_field(name="Incidencias Reportadas", value=errors_text, inline=False)
 
+        sin_round = sum(1 for m in result.matches if m.success and m.id_round_missing)
+        if sin_round:
+            embed.add_field(
+                name="Calendario Web",
+                value=(
+                    f"{sin_round} partido(s) sin enlazar: la jornada {jornada} todavía no "
+                    "existe en el calendario de la web, así que no aparecerán allí. "
+                    "Créala en RCL-Next y vuelve a importar si necesitas el enlace."
+                ),
+                inline=False,
+            )
+
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     @app_commands.command(
