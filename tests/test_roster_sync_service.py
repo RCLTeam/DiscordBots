@@ -19,13 +19,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 import pytest
 import pytest_asyncio
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from liga_bot.bot import LigaBot
 from liga_bot.config import Settings
 from liga_bot.models.enums import AppRole, Division, RosterMovementAction, RosterRole
-from liga_bot.models.roster import DiscordUser, Team
+from liga_bot.models.roster import DiscordUser, Player, Team
 from liga_bot.repositories.roster_repo import (
     AuditLogRepository,
     RosterMovementRepository,
@@ -1141,3 +1141,72 @@ class TestTransferPlayer:
                 new_position=RosterRole.TOP,
                 actor_id="999000",
             )
+
+
+# ===========================================================================
+# 8. Pruebas de alta de cuentas de juego (ensure_player)
+# ===========================================================================
+
+
+class TestEnsurePlayer:
+    """Alta e idempotencia de la cuenta de juego en la tabla players."""
+
+    @pytest.mark.asyncio
+    async def test_creates_player_linked_to_discord_user(
+        self,
+        roster_sync_service: RosterSyncService,
+        session_factory: async_sessionmaker[AsyncSession],
+    ):
+        """La primera cuenta de un usuario se crea, se vincula y queda como principal."""
+        member = create_mock_member(600100, name="Ninym")
+
+        player = await roster_sync_service.ensure_player(
+            member=member, game_name="Ninym", riot_tag="EUW"
+        )
+
+        assert player.game_name == "Ninym"
+        assert player.riot_tag == "EUW"
+        assert player.discord_user_id == "600100"
+        assert player.is_main is True
+
+        async with session_factory() as session:
+            # El DiscordUser se crea también, por integridad referencial
+            assert await session.get(DiscordUser, "600100") is not None
+
+    @pytest.mark.asyncio
+    async def test_is_idempotent_for_same_account(
+        self,
+        roster_sync_service: RosterSyncService,
+        session_factory: async_sessionmaker[AsyncSession],
+    ):
+        """Repetir el alta con los mismos datos no duplica la cuenta."""
+        member = create_mock_member(600101, name="Hiperxp")
+
+        first = await roster_sync_service.ensure_player(
+            member=member, game_name="Hiperxp", riot_tag="EUW"
+        )
+        second = await roster_sync_service.ensure_player(
+            member=member, game_name="Hiperxp", riot_tag="EUW"
+        )
+
+        assert first.id == second.id
+        async with session_factory() as session:
+            result = await session.execute(
+                select(Player).where(Player.discord_user_id == "600101")
+            )
+            assert len(result.scalars().all()) == 1
+
+    @pytest.mark.asyncio
+    async def test_second_account_is_not_main(
+        self,
+        roster_sync_service: RosterSyncService,
+    ):
+        """Una segunda cuenta del mismo usuario no se marca como principal."""
+        member = create_mock_member(600102, name="Smurf")
+
+        await roster_sync_service.ensure_player(member=member, game_name="Cuenta1", riot_tag="EUW")
+        second = await roster_sync_service.ensure_player(
+            member=member, game_name="Cuenta2", riot_tag="EUW"
+        )
+
+        assert second.is_main is False

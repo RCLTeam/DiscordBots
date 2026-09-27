@@ -16,12 +16,13 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 import discord
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from liga_bot.config import Settings, get_settings
 from liga_bot.database import get_session_factory, transactional_session
 from liga_bot.models.enums import AppRole, RosterMovementAction, RosterRole
-from liga_bot.models.roster import DiscordUser, Team, TeamMembership
+from liga_bot.models.roster import DiscordUser, Player, Team, TeamMembership
 from liga_bot.repositories.roster_repo import (
     AuditLogRepository,
     RosterMovementRepository,
@@ -379,6 +380,72 @@ class RosterSyncService:
 
         async with transactional_session(self.session_factory) as s:
             return await _do_removed(s)
+
+    async def ensure_player(
+        self,
+        member: discord.Member,
+        game_name: str,
+        riot_tag: str | None = None,
+        session: AsyncSession | None = None,
+    ) -> Player:
+        """
+        Garantiza la cuenta de juego del miembro en la tabla players:
+        - Asegura primero su registro en discord_users (integridad referencial).
+        - Reutiliza la cuenta existente con el mismo (game_name, riot_tag), vinculándola
+          al usuario si estaba suelta; si no existe, la crea.
+        - La primera cuenta de un usuario queda marcada como principal (is_main).
+        """
+
+        async def _do_ensure(s: AsyncSession) -> Player:
+            user_id_str = _clean_user_id(member.id)
+            if user_id_str is None:
+                raise RosterSyncError("Identificador de usuario de Discord inválido.")
+
+            await self._ensure_discord_user(
+                session=s,
+                discord_id=user_id_str,
+                username=member.name,
+                global_name=member.global_name,
+            )
+
+            clean_name = game_name.strip()
+            if not clean_name:
+                raise RosterSyncError("El nombre de invocador no puede estar vacío.")
+            clean_tag = (riot_tag or "").strip() or None
+
+            existing = await s.execute(
+                select(Player).where(
+                    Player.game_name == clean_name,
+                    Player.riot_tag == clean_tag,
+                )
+            )
+            player = existing.scalars().first()
+
+            if player is not None:
+                if player.discord_user_id != user_id_str:
+                    player.discord_user_id = user_id_str
+                    await s.flush()
+                return player
+
+            owned = await s.execute(select(Player).where(Player.discord_user_id == user_id_str))
+            is_first = owned.scalars().first() is None
+
+            player = Player(
+                discord_user_id=user_id_str,
+                game_name=clean_name,
+                riot_tag=clean_tag,
+                is_main=is_first,
+            )
+            s.add(player)
+            await s.flush()
+            await s.refresh(player)
+            return player
+
+        if session is not None:
+            return await _do_ensure(session)
+
+        async with transactional_session(self.session_factory) as s:
+            return await _do_ensure(s)
 
     async def list_team_tags(self, session: AsyncSession | None = None) -> list[str]:
         """Tags de todos los equipos registrados, para normalizar apodos."""

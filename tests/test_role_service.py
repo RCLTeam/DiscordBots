@@ -9,15 +9,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 import pytest
 import pytest_asyncio
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from liga_bot.bot import LigaBot
 from liga_bot.config import Settings
-from liga_bot.models.enums import Division, RoleRequestStatus
+from liga_bot.models.enums import Division, RoleRequestStatus, RosterRole
+from liga_bot.models.roster import Player
 from liga_bot.models.team import Team
 from liga_bot.repositories.role_request_repo import RoleRequestRepository
+from liga_bot.repositories.roster_repo import TeamMembershipRepository
 from liga_bot.services.role_service import RoleService
+from liga_bot.services.roster_sync_service import RosterSyncService
 
 
 # ---------------------------------------------------------------------------
@@ -1288,3 +1291,139 @@ class TestRoleServiceLifecycleIntegration:
         assert ok_create2 is True
         assert chan2 is not None
         assert chan2.id != chan1.id
+
+
+# ===========================================================================
+# 9. Persistencia transaccional al confirmar el rol
+# ===========================================================================
+
+
+class TestConfirmRoleRequestPersistence:
+    """La confirmación registra la cuenta de juego y la plantilla de forma atómica."""
+
+    @pytest_asyncio.fixture
+    async def service_con_roster(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        clean_settings: Settings,
+    ) -> tuple[RoleService, RosterSyncService]:
+        """RoleService con RosterSyncService inyectado a través del bot."""
+        roster = RosterSyncService(session_factory=session_factory, settings=clean_settings)
+        bot = MagicMock()
+        bot.roster_sync_service = roster
+        service = RoleService(session_factory=session_factory, settings=clean_settings, bot=bot)
+        return service, roster
+
+    @staticmethod
+    async def _preparar(
+        session_factory,
+        clean_settings,
+        user_id: int,
+        canal_id: int,
+        equipo: str,
+        role_id: int,
+    ):
+        """Crea el equipo, el guild simulado y la solicitud pendiente."""
+        async with session_factory() as session:
+            session.add(
+                Team(
+                    name=equipo,
+                    tag="PER",
+                    division=Division.PREMIER,
+                    discord_role_id=role_id,
+                )
+            )
+            await session.commit()
+
+        team_role = create_mock_role(role_id, equipo)
+        guild = create_mock_guild(clean_settings, roles=[team_role])
+        staff = create_mock_member(900001, name="StaffBoss", guild=guild)
+        member = create_mock_member(user_id, name="Jugador", guild=guild)
+        member.global_name = None
+        member.avatar = None
+        staff.global_name = None
+        staff.avatar = None
+        guild._members_map[user_id] = member
+
+        async with session_factory() as session:
+            repo = RoleRequestRepository(session)
+            await repo.create_request(
+                user_id=user_id,
+                nombre_lol="JugadorLoL",
+                riot_tag="EUW",
+                equipo=equipo,
+                canal_id=canal_id,
+                posicion="mid",
+            )
+            await session.commit()
+
+        return guild, staff, member
+
+    @pytest.mark.asyncio
+    async def test_confirm_registers_player_and_membership(
+        self,
+        service_con_roster: tuple[RoleService, RosterSyncService],
+        session_factory: async_sessionmaker[AsyncSession],
+        clean_settings: Settings,
+    ):
+        """Confirmar da de alta la cuenta en players y la membresía con su posición."""
+        service, _ = service_con_roster
+        guild, staff, _ = await self._preparar(
+            session_factory, clean_settings, 700100, 778001, "Persistencia FC", 889001
+        )
+
+        ok, msg = await service.confirm_role_request(
+            guild=guild, channel_id=778001, staff_member=staff
+        )
+
+        assert ok is True, msg
+        async with session_factory() as session:
+            player = (
+                (await session.execute(select(Player).where(Player.discord_user_id == "700100")))
+                .scalars()
+                .first()
+            )
+            assert player is not None
+            assert player.game_name == "JugadorLoL"
+            assert player.riot_tag == "EUW"
+
+            memberships = await TeamMembershipRepository(session).list_by_user("700100")
+            assert len(memberships) == 1
+            assert memberships[0].role == RosterRole.MID
+
+            req = await RoleRequestRepository(session).get_by_channel_id(778001)
+            assert req.estado == RoleRequestStatus.APPROVED
+
+    @pytest.mark.asyncio
+    async def test_failed_membership_rolls_back_player(
+        self,
+        service_con_roster: tuple[RoleService, RosterSyncService],
+        session_factory: async_sessionmaker[AsyncSession],
+        clean_settings: Settings,
+    ):
+        """Si falla el alta de plantilla, no queda ni la cuenta ni la solicitud aprobada."""
+        service, roster = service_con_roster
+        guild, staff, _ = await self._preparar(
+            session_factory, clean_settings, 700101, 778002, "Rollback FC", 889002
+        )
+
+        with patch.object(
+            roster, "transfer_player", AsyncMock(side_effect=RuntimeError("fallo simulado"))
+        ):
+            ok, msg = await service.confirm_role_request(
+                guild=guild, channel_id=778002, staff_member=staff
+            )
+
+        assert ok is False
+        assert "No se ha aplicado ningún cambio." in msg
+
+        async with session_factory() as session:
+            player = (
+                (await session.execute(select(Player).where(Player.discord_user_id == "700101")))
+                .scalars()
+                .first()
+            )
+            assert player is None
+
+            req = await RoleRequestRepository(session).get_by_channel_id(778002)
+            assert req.estado == RoleRequestStatus.PENDING

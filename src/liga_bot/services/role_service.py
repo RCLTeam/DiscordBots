@@ -325,130 +325,152 @@ class RoleService:
         - Asigna el rol del equipo solicitado si existe en el servidor.
         - Remueve el rol 'Sin Verificar' si está presente.
         - Actualiza el apodo del miembro con formato '<TAG> <NombreLoL>' (máx 32 caracteres).
-        - Actualiza el registro a estado APPROVED en base de datos registrando el staff_id.
+        - Registra en una única transacción la cuenta de juego (players), la membresía
+          con su posición y el estado APPROVED: si algo falla, se revierte todo.
         - Retorna (True, f"Rol {req.equipo} confirmado para {member.display_name}.") o error.
         """
-        async with transactional_session(self.session_factory) as session:
-            repo = RoleRequestRepository(session)
-            req = await repo.get_by_channel_id(channel_id)
-            if req is None or req.estado != RoleRequestStatus.PENDING:
-                return False, "No hay solicitud pendiente asociada a este canal."
+        try:
+            async with transactional_session(self.session_factory) as session:
+                repo = RoleRequestRepository(session)
+                req = await repo.get_by_channel_id(channel_id)
+                if req is None or req.estado != RoleRequestStatus.PENDING:
+                    return False, "No hay solicitud pendiente asociada a este canal."
 
-            # Resolver miembro solicitante en el servidor
-            member = guild.get_member(req.user_id)
-            if member is None:
-                try:
-                    member = await guild.fetch_member(req.user_id)
-                except (discord.NotFound, discord.HTTPException):
-                    member = None
-
-            if member is None:
-                return False, "El usuario solicitante no se encuentra en el servidor."
-
-            # Resolver el equipo en base de datos: su discord_role_id manda sobre el
-            # nombre, que puede no coincidir literalmente con el rol de Discord.
-            team_repo = TeamRepository(session)
-            team = await team_repo.get_by_name(req.equipo)
-
-            role = None
-            if team is not None:
-                role = guild.get_role(team.discord_role_id)
-            if role is None:
-                role = discord.utils.get(guild.roles, name=req.equipo)
-
-            if role is not None:
-                try:
-                    await member.add_roles(role)
-                except (discord.Forbidden, discord.HTTPException) as exc:
-                    logger.warning(
-                        "No se pudo asignar el rol '%s' a %s: %s",
-                        req.equipo,
-                        member.display_name,
-                        exc,
-                    )
-            else:
-                logger.warning(
-                    "El rol del equipo '%s' (discord_role_id=%s) no se encontró en el "
-                    "servidor %s: revisa el ID sembrado con seed-teams.",
-                    req.equipo,
-                    team.discord_role_id if team is not None else "desconocido",
-                    guild.name,
-                )
-
-            # Remover rol 'Sin Verificar' si está presente
-            if self.settings.sin_verificar_role_id > 0:
-                sin_verificar = discord.utils.get(
-                    guild.roles, id=self.settings.sin_verificar_role_id
-                )
-                if sin_verificar is None:
-                    sin_verificar = guild.get_role(self.settings.sin_verificar_role_id)
-                if sin_verificar is not None and sin_verificar in member.roles:
+                # Resolver miembro solicitante en el servidor
+                member = guild.get_member(req.user_id)
+                if member is None:
                     try:
-                        await member.remove_roles(sin_verificar)
-                    except (discord.Forbidden, discord.HTTPException) as exc:
-                        logger.warning(
-                            "No se pudo remover rol sin verificar de %s: %s",
-                            member.display_name,
-                            exc,
-                        )
+                        member = await guild.fetch_member(req.user_id)
+                    except (discord.NotFound, discord.HTTPException):
+                        member = None
 
-            # Actualizar apodo: "<TAG> <NombreLoL>", sin el Riot Tag
-            nick = req.nombre_lol
-            if team is not None:
-                known_tags = [t.tag for t in await team_repo.list_all()]
-                nick = apply_team_tag(nick, team.tag, known_tags)
-            else:
-                logger.warning(
-                    "El equipo '%s' no existe en base de datos: no se aplica tag al apodo.",
-                    req.equipo,
-                )
-            nick = nick[:32]
-            try:
-                await member.edit(nick=nick)
-            except discord.Forbidden:
-                logger.warning(
-                    "Sin permisos para cambiar el apodo de %s a '%s': el bot necesita "
-                    "'Gestionar apodos' y un rol por encima del miembro (los dueños del "
-                    "servidor nunca pueden ser renombrados).",
-                    member.display_name,
-                    nick,
-                )
-            except discord.HTTPException as exc:
-                logger.warning(
-                    "No se pudo actualizar el apodo de %s a '%s': %s",
-                    member.display_name,
-                    nick,
-                    exc,
-                )
+                if member is None:
+                    return False, "El usuario solicitante no se encuentra en el servidor."
 
-            # Registrar la plantilla con la posición solicitada, si la hay
-            if req.posicion and role is not None:
+                # Resolver el equipo en base de datos: su discord_role_id manda sobre el
+                # nombre, que puede no coincidir literalmente con el rol de Discord.
+                team_repo = TeamRepository(session)
+                team = await team_repo.get_by_name(req.equipo)
+
+                role = None
+                if team is not None:
+                    role = guild.get_role(team.discord_role_id)
+                if role is None:
+                    role = discord.utils.get(guild.roles, name=req.equipo)
+
+                if role is None:
+                    logger.warning(
+                        "El rol del equipo '%s' (discord_role_id=%s) no se encontró en el "
+                        "servidor %s: revisa el ID sembrado con seed-teams.",
+                        req.equipo,
+                        team.discord_role_id if team is not None else "desconocido",
+                        guild.name,
+                    )
+
+                # Persistencia atómica: cuenta de juego, plantilla y estado de la solicitud
+                # comparten la sesión, así que un fallo en cualquiera revierte todo el bloque.
                 roster_service = getattr(self.bot, "roster_sync_service", None)
                 if roster_service is not None:
-                    try:
+                    await roster_service.ensure_player(
+                        member=member,
+                        game_name=req.nombre_lol,
+                        riot_tag=req.riot_tag,
+                        session=session,
+                    )
+                    if req.posicion and role is not None:
                         await roster_service.transfer_player(
                             member=member,
                             team_role=role,
                             new_position=req.posicion,
                             actor_id=staff_member.id,
+                            session=session,
                         )
-                    except Exception as exc:
-                        logger.error(
-                            "No se pudo registrar la plantilla de %s en '%s' como %s: %s",
-                            member.display_name,
+                else:
+                    logger.warning(
+                        "RosterSyncService no disponible: no se registra la plantilla de %s.",
+                        member.display_name,
+                    )
+
+                await repo.update_status(
+                    request_id=req.id,
+                    estado=RoleRequestStatus.APPROVED,
+                    staff_id=staff_member.id,
+                )
+
+                # A partir de aquí, cambios en Discord: si fallan se registran, pero no
+                # revierten la base de datos (Discord no participa en la transacción).
+                if role is not None:
+                    try:
+                        await member.add_roles(role)
+                    except (discord.Forbidden, discord.HTTPException) as exc:
+                        logger.warning(
+                            "No se pudo asignar el rol '%s' a %s: %s",
                             req.equipo,
-                            req.posicion,
+                            member.display_name,
                             exc,
                         )
 
-            # Actualizar registro en BD a APPROVED con staff_id
-            await repo.update_status(
-                request_id=req.id,
-                estado=RoleRequestStatus.APPROVED,
-                staff_id=staff_member.id,
+                # Remover rol 'Sin Verificar' si está presente
+                if self.settings.sin_verificar_role_id > 0:
+                    sin_verificar = discord.utils.get(
+                        guild.roles, id=self.settings.sin_verificar_role_id
+                    )
+                    if sin_verificar is None:
+                        sin_verificar = guild.get_role(self.settings.sin_verificar_role_id)
+                    if sin_verificar is not None and sin_verificar in member.roles:
+                        try:
+                            await member.remove_roles(sin_verificar)
+                        except (discord.Forbidden, discord.HTTPException) as exc:
+                            logger.warning(
+                                "No se pudo remover rol sin verificar de %s: %s",
+                                member.display_name,
+                                exc,
+                            )
+
+                # Actualizar apodo: "<TAG> <NombreLoL>", sin el Riot Tag
+                nick = req.nombre_lol
+                if team is not None:
+                    known_tags = [t.tag for t in await team_repo.list_all()]
+                    nick = apply_team_tag(nick, team.tag, known_tags)
+                else:
+                    logger.warning(
+                        "El equipo '%s' no existe en base de datos: no se aplica tag al apodo.",
+                        req.equipo,
+                    )
+                nick = nick[:32]
+                try:
+                    await member.edit(nick=nick)
+                except discord.Forbidden:
+                    logger.warning(
+                        "Sin permisos para cambiar el apodo de %s a '%s': el bot necesita "
+                        "'Gestionar apodos' y un rol por encima del miembro (los dueños del "
+                        "servidor nunca pueden ser renombrados).",
+                        member.display_name,
+                        nick,
+                    )
+                except discord.HTTPException as exc:
+                    logger.warning(
+                        "No se pudo actualizar el apodo de %s a '%s': %s",
+                        member.display_name,
+                        nick,
+                        exc,
+                    )
+
+                equipo_nombre = req.equipo
+                member_display = member.display_name
+
+        except Exception as exc:
+            logger.error(
+                "Error al confirmar la solicitud del canal %s; transacción revertida: %s",
+                channel_id,
+                exc,
+                exc_info=True,
             )
-            equipo_nombre = req.equipo
-            member_display = member.display_name
+            return (
+                False,
+                "No se pudo registrar la confirmación en base de datos. "
+                "No se ha aplicado ningún cambio.",
+            )
 
         return True, f"Rol {equipo_nombre} confirmado para {member_display}."
 
