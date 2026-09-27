@@ -246,8 +246,10 @@ async def run_async_migrations() -> None:
             await manager.stop()
         return
 
-    # Modo estándar producción (PostgreSQL con asyncpg)
-    config.set_main_option("sqlalchemy.url", db_url)
+    # Modo estándar producción (PostgreSQL con asyncpg).
+    # configparser interpreta '%' como interpolación, así que hay que escaparlo:
+    # una contraseña con caracteres percent-encoded (p. ej. %24 para '$') lo rompería.
+    config.set_main_option("sqlalchemy.url", db_url.replace("%", "%%"))
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
