@@ -18,11 +18,14 @@ import discord
 import pytest
 
 from liga_bot.config import TEAMS_ALL, Settings
+from liga_bot.models.enums import RosterRole
 from liga_bot.ui.roles import (
     ConfirmarRolButton,
     EquipoSelect,
     EquipoSelectView,
     PanelPedirRolView,
+    PosicionSelect,
+    PosicionSelectView,
     SolicitudRolModal,
     TicketView,
 )
@@ -315,8 +318,8 @@ class TestEquipoSelect:
         )
 
     @pytest.mark.asyncio
-    async def test_callback_team_ticket_creation_success(self) -> None:
-        """Valida la creación exitosa de ticket de equipo con ConfirmarRolButton y TicketView."""
+    async def test_posicion_callback_creates_ticket(self) -> None:
+        """El desplegable de posición crea el ticket incluyendo la posición elegida."""
         ticket_channel = make_mock_channel(channel_id=444, name="rol-faker")
         service = make_mock_role_service()
         service.create_role_request_ticket = AsyncMock(
@@ -324,17 +327,17 @@ class TestEquipoSelect:
         )
         interaction = make_mock_interaction(role_service=service)
 
-        select = EquipoSelect(nombre_lol="Faker", riot_tag="KR1")
-        select.values = ["Vanguard Gaming"]
+        select = PosicionSelect(nombre_lol="Faker", riot_tag="KR1", equipo="Vanguard Gaming")
+        select.values = ["mid"]
 
         await select.callback(interaction)
 
         # 1. Defer efímero
         interaction.response.defer.assert_awaited_once_with(ephemeral=True)
 
-        # 2. Creación de ticket en RoleService
+        # 2. Creación de ticket en RoleService, con la posición seleccionada
         service.create_role_request_ticket.assert_awaited_once_with(
-            interaction.guild, interaction.user, "Faker", "KR1", "Vanguard Gaming"
+            interaction.guild, interaction.user, "Faker", "KR1", "Vanguard Gaming", "mid"
         )
 
         # 3. Prompt en el canal del ticket con vista de ticket
@@ -357,16 +360,16 @@ class TestEquipoSelect:
         )
 
     @pytest.mark.asyncio
-    async def test_callback_team_ticket_creation_failure(self) -> None:
-        """Valida que si falla la creación del ticket se envíe el mensaje de error por followup."""
+    async def test_posicion_callback_ticket_failure(self) -> None:
+        """Si falla la creación del ticket, el error llega al jugador por followup."""
         service = make_mock_role_service()
         service.create_role_request_ticket = AsyncMock(
             return_value=(False, "Ya tienes una solicitud de rol pendiente.", None)
         )
         interaction = make_mock_interaction(role_service=service)
 
-        select = EquipoSelect(nombre_lol="Faker", riot_tag="KR1")
-        select.values = ["Vanguard Gaming"]
+        select = PosicionSelect(nombre_lol="Faker", riot_tag="KR1", equipo="Vanguard Gaming")
+        select.values = ["top"]
 
         await select.callback(interaction)
 
@@ -374,6 +377,24 @@ class TestEquipoSelect:
         interaction.followup.send.assert_awaited_once_with(
             "Ya tienes una solicitud de rol pendiente.", ephemeral=True
         )
+
+    @pytest.mark.asyncio
+    async def test_team_selection_asks_for_position(self) -> None:
+        """Elegir equipo no crea el ticket todavía: primero pregunta la posición."""
+        service = make_mock_role_service()
+        interaction = make_mock_interaction(role_service=service)
+
+        select = EquipoSelect(nombre_lol="Faker", riot_tag="KR1")
+        select.values = ["Vanguard Gaming"]
+
+        await select.callback(interaction)
+
+        service.create_role_request_ticket.assert_not_awaited()
+        _, kwargs = interaction.response.send_message.call_args
+        view = kwargs.get("view")
+        assert isinstance(view, PosicionSelectView)
+        assert view.select.equipo == "Vanguard Gaming"
+        assert [opt.value for opt in view.select.options] == [r.value for r in RosterRole]
 
     @pytest.mark.asyncio
     async def test_callback_without_role_service_reports_error(self) -> None:

@@ -42,6 +42,7 @@ from liga_bot.ui.roles import (
     ConfirmarRolButton,
     EquipoSelectView,
     PanelPedirRolView,
+    PosicionSelectView,
     SolicitudRolModal,
     TicketView,
 )
@@ -445,10 +446,23 @@ class TestFullLifecycleOfficialTeamApproval:
 
         await select_view.select.callback(inter_select)
 
+        # El equipo abre el desplegable de posición, todavía sin crear el ticket
+        posicion_view: PosicionSelectView = inter_select.response.send_message.call_args.kwargs[
+            "view"
+        ]
+        assert isinstance(posicion_view, PosicionSelectView)
+
+        # 3b. El miembro selecciona su posición
+        posicion_view.select.values = ["mid"]
+        inter_posicion = make_mock_interaction(
+            user=new_member, guild=guild, role_service=e2e_role_service
+        )
+        await posicion_view.select.callback(inter_posicion)
+
         # Verificación de respuesta diferida y notificación efímera con mención
-        inter_select.response.defer.assert_awaited_once_with(ephemeral=True)
-        inter_select.followup.send.assert_awaited_once()
-        followup_msg = inter_select.followup.send.await_args[0][0]
+        inter_posicion.response.defer.assert_awaited_once_with(ephemeral=True)
+        inter_posicion.followup.send.assert_awaited_once()
+        followup_msg = inter_posicion.followup.send.await_args[0][0]
         assert "Ticket creado en" in followup_msg
 
         # Verificación del canal de ticket creado en Discord
@@ -774,11 +788,12 @@ class TestDuplicateRequestPrevention:
         assert channel1 is not None
 
         # 2. Intento de segunda solicitud a través del componente EquipoSelect
-        component_select = EquipoSelectView(
+        component_select = PosicionSelectView(
             nombre_lol="MultiRequester",
             riot_tag="RCL",
+            equipo="Vanguard Gaming",
         ).select
-        component_select.values = ["Vanguard Gaming"]
+        component_select.values = ["top"]
 
         inter_second = make_mock_interaction(
             user=member, guild=guild, role_service=e2e_role_service

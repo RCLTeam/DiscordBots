@@ -209,6 +209,7 @@ class RoleService:
         nombre_lol: str,
         riot_tag: str,
         equipo: str,
+        posicion: str | None = None,
     ) -> tuple[bool, str, discord.TextChannel | None]:
         """
         Crea un canal privado de ticket para solicitud de rol:
@@ -295,6 +296,7 @@ class RoleService:
                     riot_tag=riot_tag,
                     equipo=equipo,
                     canal_id=channel.id,
+                    posicion=posicion,
                 )
         except Exception as exc:
             logger.error(
@@ -418,6 +420,26 @@ class RoleService:
                     nick,
                     exc,
                 )
+
+            # Registrar la plantilla con la posición solicitada, si la hay
+            if req.posicion and role is not None:
+                roster_service = getattr(self.bot, "roster_sync_service", None)
+                if roster_service is not None:
+                    try:
+                        await roster_service.transfer_player(
+                            member=member,
+                            team_role=role,
+                            new_position=req.posicion,
+                            actor_id=staff_member.id,
+                        )
+                    except Exception as exc:
+                        logger.error(
+                            "No se pudo registrar la plantilla de %s en '%s' como %s: %s",
+                            member.display_name,
+                            req.equipo,
+                            req.posicion,
+                            exc,
+                        )
 
             # Actualizar registro en BD a APPROVED con staff_id
             await repo.update_status(

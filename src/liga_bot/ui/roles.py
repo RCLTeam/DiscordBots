@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 import discord
 
 from liga_bot.config import TEAMS_ALL, get_settings
+from liga_bot.models.enums import RosterRole
 
 if TYPE_CHECKING:
     pass
@@ -193,39 +194,15 @@ class EquipoSelect(discord.ui.Select[Any]):
             else:
                 await interaction.response.send_message(msg, ephemeral=True)
         else:
-            await interaction.response.defer(ephemeral=True)
-            ok, msg, channel = await role_service.create_role_request_ticket(
-                guild,
-                member,
-                self.nombre_lol,
-                self.riot_tag,
-                equipo,
+            await interaction.response.send_message(
+                f"Equipo **{equipo}** seleccionado. ¿En qué posición juegas?",
+                view=PosicionSelectView(
+                    nombre_lol=self.nombre_lol,
+                    riot_tag=self.riot_tag,
+                    equipo=equipo,
+                ),
+                ephemeral=True,
             )
-            if ok and channel is not None:
-                embed = discord.Embed(
-                    title="Nueva Solicitud de Rol",
-                    description=(
-                        f"**Usuario:** {interaction.user.mention}\n"
-                        f"**Nombre en LoL:** {self.nombre_lol}\n"
-                        f"**Riot Tag:** {self.riot_tag}\n"
-                        f"**Equipo solicitado:** {equipo}\n\n"
-                        "Un miembro del staff revisará la solicitud y confirmará o denegará el rol."
-                    ),
-                    color=discord.Color.blue(),
-                )
-                embed.set_footer(text="Usa los botones de abajo para gestionar la solicitud.")
-                ticket_view = TicketView(user_id=member.id, equipo=equipo)
-                await channel.send(
-                    content=f"Solicitud de rol para {interaction.user.mention}:",
-                    embed=embed,
-                    view=ticket_view,
-                )
-                await interaction.followup.send(
-                    f"Ticket creado en {channel.mention}.",
-                    ephemeral=True,
-                )
-            else:
-                await interaction.followup.send(msg, ephemeral=True)
 
 
 class EquipoSelectView(discord.ui.View):
@@ -248,6 +225,134 @@ class EquipoSelectView(discord.ui.View):
             riot_tag=riot_tag,
             free_role_name=free_role_name,
             teams=teams,
+        )
+        self.add_item(self.select)
+
+
+# ---------------------------------------------------------------------------
+# 2b. Desplegable de Posición de Plantilla
+# ---------------------------------------------------------------------------
+
+POSICION_DESCRIPCIONES: dict[RosterRole, str] = {
+    RosterRole.TOP: "Línea superior",
+    RosterRole.JUNGLE: "Jungla",
+    RosterRole.MID: "Línea central",
+    RosterRole.ADC: "Tirador",
+    RosterRole.SUPPORT: "Support",
+    RosterRole.SUBSTITUTE: "Suplente",
+    RosterRole.COACH: "Entrenador",
+    RosterRole.STAFF: "Cuerpo técnico",
+    RosterRole.PARTNERS: "Colaborador",
+}
+
+
+class PosicionSelect(discord.ui.Select[Any]):
+    """Desplegable con las posiciones de plantilla disponibles (RosterRole)."""
+
+    def __init__(self, nombre_lol: str, riot_tag: str, equipo: str) -> None:
+        self.nombre_lol: str = nombre_lol
+        self.riot_tag: str = riot_tag
+        self.equipo: str = equipo
+
+        super().__init__(
+            placeholder="Selecciona tu posición en el equipo...",
+            min_values=1,
+            max_values=1,
+            options=[
+                discord.SelectOption(
+                    label=posicion.value.capitalize(),
+                    value=posicion.value,
+                    description=descripcion,
+                )
+                for posicion, descripcion in POSICION_DESCRIPCIONES.items()
+            ],
+        )
+
+    @property
+    def values(self) -> list[str]:
+        """Lista de valores seleccionados por el usuario."""
+        return self._values
+
+    @values.setter
+    def values(self, val: list[str]) -> None:
+        self._values = val
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        """Crea el ticket de verificación incluyendo la posición elegida."""
+        if not self.values:
+            return
+
+        posicion = self.values[0]
+        role_service = getattr(interaction.client, "role_service", None)
+        if role_service is None:
+            await interaction.response.send_message(
+                "El servicio de roles no está disponible.",
+                ephemeral=True,
+            )
+            return
+
+        member = interaction.user
+        guild = interaction.guild
+        if guild is None:
+            guild = interaction.client.get_guild(role_service.settings.guild_id)
+            member = guild.get_member(interaction.user.id) if guild is not None else None
+            if member is None:
+                await interaction.response.send_message(
+                    "No se te ha encontrado en el servidor de la liga. "
+                    "Entra en el servidor y vuelve a intentarlo.",
+                    ephemeral=True,
+                )
+                return
+
+        await interaction.response.defer(ephemeral=True)
+        ok, msg, channel = await role_service.create_role_request_ticket(
+            guild,
+            member,
+            self.nombre_lol,
+            self.riot_tag,
+            self.equipo,
+            posicion,
+        )
+        if not ok or channel is None:
+            await interaction.followup.send(msg, ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title="Nueva Solicitud de Rol",
+            description=(
+                f"**Usuario:** {interaction.user.mention}\n"
+                f"**Nombre en LoL:** {self.nombre_lol}\n"
+                f"**Riot Tag:** {self.riot_tag}\n"
+                f"**Equipo solicitado:** {self.equipo}\n"
+                f"**Posición:** {posicion}\n\n"
+                "Un miembro del staff revisará la solicitud y confirmará o denegará el rol."
+            ),
+            color=discord.Color.blue(),
+        )
+        embed.set_footer(text="Usa los botones de abajo para gestionar la solicitud.")
+        await channel.send(
+            content=f"Solicitud de rol para {interaction.user.mention}:",
+            embed=embed,
+            view=TicketView(user_id=member.id, equipo=self.equipo),
+        )
+        await interaction.followup.send(f"Ticket creado en {channel.mention}.", ephemeral=True)
+
+
+class PosicionSelectView(discord.ui.View):
+    """Vista efímera que contiene el desplegable de posición."""
+
+    def __init__(
+        self,
+        nombre_lol: str,
+        riot_tag: str,
+        equipo: str,
+        timeout: float | None = 180.0,
+    ) -> None:
+        super().__init__(timeout=timeout)
+        self.select: PosicionSelect = PosicionSelect(
+            nombre_lol=nombre_lol,
+            riot_tag=riot_tag,
+            equipo=equipo,
         )
         self.add_item(self.select)
 

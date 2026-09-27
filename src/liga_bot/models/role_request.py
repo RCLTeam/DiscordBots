@@ -21,6 +21,7 @@ class RoleRequest(Base):
     nombre_lol: Mapped[str] = mapped_column(String(100), nullable=False)
     riot_tag: Mapped[str] = mapped_column(String(20), nullable=False)
     equipo: Mapped[str] = mapped_column(String(100), nullable=False)
+    posicion: Mapped[str | None] = mapped_column(String(20), nullable=True)
     canal_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     estado: Mapped[RoleRequestStatus] = mapped_column(
         Enum(RoleRequestStatus, name="rolerequeststatus", native_enum=True),

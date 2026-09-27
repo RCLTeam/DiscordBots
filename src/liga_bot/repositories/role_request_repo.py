@@ -23,6 +23,7 @@ class RoleRequestRepository(BaseRepository[RoleRequest]):
         riot_tag: str,
         equipo: str,
         canal_id: int | None = None,
+        posicion: str | None = None,
     ) -> RoleRequest:
         """
         Crea y persiste una nueva solicitud de rol en estado PENDING.
@@ -33,6 +34,7 @@ class RoleRequestRepository(BaseRepository[RoleRequest]):
             nombre_lol=nombre_lol,
             riot_tag=riot_tag,
             equipo=equipo,
+            posicion=posicion,
             canal_id=canal_id,
             estado=RoleRequestStatus.PENDING,
         )
