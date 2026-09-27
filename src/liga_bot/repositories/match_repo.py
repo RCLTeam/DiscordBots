@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from liga_bot.models.enums import Division, MatchStatus
 from liga_bot.models.match import Match
+from liga_bot.models.roster import SeasonDivision
 from liga_bot.repositories.base import BaseRepository
 
 
@@ -18,6 +19,37 @@ class MatchRepository(BaseRepository[Match]):
 
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, Match)
+
+    async def create(
+        self,
+        entity: Match | None = None,
+        id_season_division: UUID | str | None = None,
+        division: Division | str | None = None,
+        **kwargs: Any,
+    ) -> Match:
+        """Persiste un nuevo partido en la base de datos.
+
+        Acepta id_season_division directamente y division como parámetro opcional
+        para compatibilidad hacia atrás.
+        """
+        if id_season_division is not None:
+            parsed_sd_id = (
+                id_season_division
+                if isinstance(id_season_division, UUID)
+                else UUID(str(id_season_division))
+            )
+            if entity is not None:
+                entity.id_season_division = parsed_sd_id
+            else:
+                kwargs["id_season_division"] = parsed_sd_id
+
+        if division is not None:
+            if entity is not None:
+                entity.division = division
+            else:
+                kwargs["division"] = division
+
+        return await super().create(entity=entity, **kwargs)
 
     def _apply_eager_teams(self, stmt: Any, with_teams: bool) -> Any:
         if with_teams:
@@ -115,7 +147,7 @@ class MatchRepository(BaseRepository[Match]):
         stmt = select(Match).where(Match.jornada == jornada)
         if division is not None:
             div_val = division.value if hasattr(division, "value") else division
-            stmt = stmt.where(Match.division == div_val)
+            stmt = stmt.join(Match.season_division).where(SeasonDivision.division_name == div_val)
         stmt = self._apply_eager_teams(stmt, with_teams)
         stmt = stmt.order_by(Match.scheduled_at.asc().nulls_last(), Match.created_at.asc())
         result = await self._session.execute(stmt)

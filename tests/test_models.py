@@ -19,9 +19,13 @@ from liga_bot.models import Base, Division, Match, MatchStatus, Team, TicketNoti
 # Conjunto canónico de tablas compartidas gobernadas por RCL-Next
 SHARED_TABLES: set[str] = {
     "teams",
-    "team_memberships",
+    "matches",
+    "seasons",
+    "divisions",
+    "seasons_divisions",
     "discord_users",
     "players",
+    "team_memberships",
     "roster_movements",
     "audit_logs",
 }
@@ -65,13 +69,13 @@ class TestMetadataAndParity:
         assert expected_tables.issubset(set(Base.metadata.tables.keys()))
 
     def test_include_object_filters_shared_tables(self):
-        """Verifica que include_object excluya correctamente las 6 tablas compartidas."""
+        """Verifica que include_object excluya correctamente las 10 tablas compartidas."""
         for table_name in SHARED_TABLES:
             assert include_object(None, table_name, "table", False, None) is False
             assert include_object(None, table_name, "table", True, None) is False
 
-        # Tablas gestionadas por LigaBot deben incluirse
-        for table_name in ["matches", "ticket_notices", "role_requests"]:
+        # Tablas gestionadas exclusivamente por LigaBot deben incluirse
+        for table_name in ["ticket_notices", "role_requests"]:
             assert include_object(None, table_name, "table", False, None) is True
             assert include_object(None, table_name, "table", True, None) is True
 
@@ -115,7 +119,13 @@ class TestTeamModel:
         assert team.name == "KOI Squad"
         assert team.tag == "KOI"
         assert team.slug == "koi-squad"
-        assert team.division == Division.PREMIER
+
+        # Cargar con joined relationship para evaluar division dinámica sin greenlet error
+        stmt = select(Team).where(Team.id == team.id)
+        res = await session.execute(stmt)
+        loaded_team = res.scalar_one()
+        assert loaded_team.division == Division.PREMIER
+
         assert team.discord_role_id == 123456789012345678
         assert isinstance(team.created_at, datetime)
         assert "KOI Squad" in repr(team)
@@ -172,10 +182,10 @@ class TestTeamModel:
 
     @pytest.mark.asyncio
     async def test_tag_length_constraint_rejection(self, session: AsyncSession):
-        """Verifica que un tag con más de 4 caracteres sea rechazado por el CheckConstraint/DB."""
+        """Verifica que un tag con más de 16 caracteres sea rechazado por el CheckConstraint/DB."""
         team = Team(
             name="Giantx",
-            tag="GIANTX",  # 6 caracteres, supera el límite de 4
+            tag="A" * 17,  # 17 caracteres, supera el límite de 16
             slug="giantx",
             division=Division.PREMIER,
             discord_role_id=444444444444444444,

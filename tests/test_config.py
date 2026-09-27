@@ -186,7 +186,8 @@ def test_alembic_cli_with_pglite_file_path(tmp_path):
         text=True,
     )
     assert res1.returncode == 0, f"Alembic upgrade failed: {res1.stderr}"
-    assert "Running upgrade  -> 001, initial_schema" in (res1.stdout + res1.stderr)
+    assert "0000, initial_shared_tables" in (res1.stdout + res1.stderr)
+    assert "0001, bot_tables" in (res1.stdout + res1.stderr)
     assert (db_path / "pglite_manager.js").exists()
     assert (db_path / "package.json").exists()
     assert str(db_path / ".s.PGSQL.5432") in (db_path / "pglite_manager.js").read_text()
@@ -199,7 +200,6 @@ def test_alembic_cli_with_pglite_file_path(tmp_path):
         text=True,
     )
     assert res2.returncode == 0, f"Second Alembic upgrade failed: {res2.stderr}"
-    assert "Running upgrade  -> 001, initial_schema" in (res2.stdout + res2.stderr)
 
 
 def test_alembic_cli_default_fallback_without_env_var():
@@ -217,4 +217,5 @@ def test_alembic_cli_default_fallback_without_env_var():
         text=True,
     )
     assert res.returncode == 0, f"Alembic default upgrade failed: {res.stderr}"
-    assert "Running upgrade  -> 001, initial_schema" in (res.stdout + res.stderr)
+    assert "0000, initial_shared_tables" in (res.stdout + res.stderr)
+    assert "0001, bot_tables" in (res.stdout + res.stderr)

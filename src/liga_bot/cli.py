@@ -29,7 +29,7 @@ from liga_bot.database import (
 )
 from liga_bot.models.enums import Division
 from liga_bot.repositories.team_repo import TeamRepository
-from liga_bot.utils.formatting import normalize_slug, normalize_tag
+from liga_bot.utils.formatting import normalize_tag
 
 logger = logging.getLogger("liga_bot.cli")
 
@@ -229,6 +229,52 @@ class SeedStats(TypedDict):
     total: int
 
 
+async def _ensure_default_seasons_divisions(session: Any) -> None:
+    """Asegura la existencia de temporadas y divisiones por defecto para integridad referencial."""
+    try:
+        from liga_bot.models.roster import DivisionModel, Season, SeasonDivision
+        from liga_bot.models.team import (
+            DEFAULT_ASCEND_SEASON_DIVISION_ID,
+            DEFAULT_PREMIER_SEASON_DIVISION_ID,
+        )
+
+        season = await session.get(Season, "default")
+        if season is None:
+            season = Season(name="default")
+            session.add(season)
+            await session.flush()
+
+        for div_name in ("PREMIER", "ASCEND"):
+            div_m = await session.get(DivisionModel, div_name)
+            if div_m is None:
+                div_m = DivisionModel(name=div_name)
+                session.add(div_m)
+                await session.flush()
+
+        sd_premier = await session.get(SeasonDivision, DEFAULT_PREMIER_SEASON_DIVISION_ID)
+        if sd_premier is None:
+            sd_premier = SeasonDivision(
+                id=DEFAULT_PREMIER_SEASON_DIVISION_ID,
+                season_name="default",
+                division_name="PREMIER",
+            )
+            session.add(sd_premier)
+
+        sd_ascend = await session.get(SeasonDivision, DEFAULT_ASCEND_SEASON_DIVISION_ID)
+        if sd_ascend is None:
+            sd_ascend = SeasonDivision(
+                id=DEFAULT_ASCEND_SEASON_DIVISION_ID,
+                season_name="default",
+                division_name="ASCEND",
+            )
+            session.add(sd_ascend)
+
+        await session.flush()
+    except Exception:
+        # Si la tabla seasons_divisions no existe o no aplica, continuar con resiliencia
+        pass
+
+
 async def seed_teams(
     session_factory: async_sessionmaker,
     teams_data: Sequence[TeamSeedData],
@@ -245,6 +291,7 @@ async def seed_teams(
     ]
 
     async with transactional_session(session_factory) as session:
+        await _ensure_default_seasons_divisions(session)
         repo = TeamRepository(session)
 
         if clear_existing:
@@ -257,7 +304,6 @@ async def seed_teams(
             stats["total"] += 1
             name = team_info["name"]
             tag = normalize_tag(team_info["tag"])
-            slug = normalize_slug(name)
             division = team_info["division"]
             role_id = team_info["discord_role_id"]
 
@@ -271,7 +317,6 @@ async def seed_teams(
                 await repo.create(
                     name=name,
                     tag=tag,
-                    slug=slug,
                     division=division,
                     discord_role_id=role_id,
                 )
@@ -289,7 +334,6 @@ async def seed_teams(
                         existing,
                         name=name,
                         tag=tag,
-                        slug=slug,
                         division=division,
                         discord_role_id=role_id,
                     )

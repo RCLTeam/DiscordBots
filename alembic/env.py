@@ -8,8 +8,6 @@ import sqlalchemy as sa
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
-from sqlalchemy.ext.compiler import compiles
-from sqlalchemy.schema import DropTable
 
 from alembic import context
 
@@ -59,9 +57,13 @@ except ImportError:
 # Quedan estrictamente excluidas de las migraciones y autogenerate de Alembic en DiscordBots.
 SHARED_TABLES: set[str] = {
     "teams",
-    "team_memberships",
+    "matches",
+    "seasons",
+    "divisions",
+    "seasons_divisions",
     "discord_users",
     "players",
+    "team_memberships",
     "roster_movements",
     "audit_logs",
 }
@@ -77,25 +79,14 @@ def include_object(
     """Excluye tablas compartidas de RCL-Next y objetos asociados de Alembic."""
     if type_ == "table" and name in SHARED_TABLES:
         return False
+    if isinstance(object, sa.Table) and getattr(object, "name", None) in SHARED_TABLES:
+        return False
     table = getattr(object, "table", None)
     if table is not None:
         table_name = getattr(table, "name", None)
         if table_name in SHARED_TABLES:
             return False
     return True
-
-
-@compiles(DropTable, "postgresql")
-def _compile_drop_table(element, compiler, **kw):
-    table_name = getattr(element.element, "name", None)
-    if table_name == "teams":
-        return (
-            "DROP TABLE IF EXISTS audit_logs, roster_movements, "
-            "team_memberships, players, discord_users CASCADE; "
-            + compiler.visit_drop_table(element, **kw)
-            + " CASCADE"
-        )
-    return compiler.visit_drop_table(element, **kw)
 
 
 def get_database_url() -> str:
@@ -155,34 +146,6 @@ def do_run_migrations(connection: Connection) -> None:
 
     with context.begin_transaction():
         context.run_migrations()
-
-        # Si se ejecuta con conexión inyectada (entorno de pruebas local / test fixtures):
-        if config.attributes.get("connection") is not None:
-            import liga_bot.models.roster  # noqa: F401
-            from liga_bot.models.base import Base
-
-            inspector = sa.inspect(connection)
-            tables = set(inspector.get_table_names())
-            if "teams" in tables:
-                shared_tables_to_create = [
-                    Base.metadata.tables[tbl]
-                    for tbl in [
-                        "discord_users",
-                        "players",
-                        "team_memberships",
-                        "roster_movements",
-                        "audit_logs",
-                    ]
-                    if tbl in Base.metadata.tables
-                ]
-                Base.metadata.create_all(connection, tables=shared_tables_to_create)
-            else:
-                connection.execute(
-                    sa.text(
-                        "DROP TABLE IF EXISTS audit_logs, roster_movements, "
-                        "team_memberships, players, discord_users CASCADE"
-                    )
-                )
 
 
 def _prepare_pglite_config(raw_path: str | None):

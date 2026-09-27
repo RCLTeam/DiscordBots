@@ -11,12 +11,19 @@ class Division(str, enum.Enum):
 
 
 class MatchStatus(str, enum.Enum):
-    """Ciclo de vida y estado operativo de un partido."""
+    """Ciclo de vida y estado de un partido alineado con match_status en PostgreSQL."""
 
-    PENDIENTE = "PENDIENTE"
-    CANAL_CREADO = "CANAL_CREADO"
-    JUGADO = "JUGADO"
-    CANCELADO = "CANCELADO"
+    SCHEDULED = "scheduled"
+    LIVE = "live"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+    FORFEIT = "forfeit"
+
+    # Aliases de compatibilidad con código existente
+    PENDIENTE = "scheduled"
+    CANAL_CREADO = "scheduled"
+    JUGADO = "completed"
+    CANCELADO = "cancelled"
 
 
 class RoleRequestStatus(str, enum.Enum):
