@@ -473,7 +473,7 @@ class TestEnumIntegrityAndTransitions:
 
 
 class TestAlembicMigrationStress:
-    """Estrés de reversibilidad e idempotencia repetida de la migración Alembic 002."""
+    """Estrés de reversibilidad e idempotencia repetida de la migración Alembic 0001."""
 
     @pytest.mark.asyncio
     async def test_repeated_downgrade_upgrade_cycles(self, async_engine: AsyncEngine):
@@ -483,12 +483,12 @@ class TestAlembicMigrationStress:
 
             def do_repeated_cycles(sync_conn):
                 cfg.attributes["connection"] = sync_conn
-                # Ciclo 1: 002 -> 001 -> head
-                command.downgrade(cfg, "001")
+                # Ciclo 1: head -> 0000 -> head
+                command.downgrade(cfg, "0000")
                 command.upgrade(cfg, "head")
 
-                # Ciclo 2: 002 -> 001 -> head
-                command.downgrade(cfg, "001")
+                # Ciclo 2: head -> 0000 -> head
+                command.downgrade(cfg, "0000")
                 command.upgrade(cfg, "head")
 
             await conn.run_sync(do_repeated_cycles)

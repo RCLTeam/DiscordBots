@@ -197,10 +197,10 @@ async def test_base_repo_update_attributes(db_session: AsyncSession):
         name="Dignitas",
         tag="DIG",
         slug="dignitas",
-        division=Division.ASCEND,
+        division=Division.PREMIER,
         discord_role_id=100000000000000006,
     )
-    updated = await repo.update(team, tag="DIGN", division=Division.PREMIER)
+    updated = await repo.update(team, tag="DIGN")
     assert updated.tag == "DIGN"
     assert updated.division == Division.PREMIER
 
@@ -333,17 +333,8 @@ async def test_team_repo_get_by_role_id_snowflake(team_repo: TeamRepository):
 
 @pytest.mark.asyncio
 async def test_team_repo_get_by_slug(team_repo: TeamRepository):
-    """Verifica búsqueda por slug normalizado."""
-    await team_repo.create(
-        name="Movistar Riders",
-        tag="MRS",
-        slug="movistar-riders",
-        division=Division.PREMIER,
-        discord_role_id=200000000000000005,
-    )
-    found = await team_repo.get_by_slug("movistar-riders")
-    assert found is not None
-    assert found.tag == "MRS"
+    """Verifica que get_by_slug fue eliminado conforme a R3."""
+    assert not hasattr(team_repo, "get_by_slug")
 
 
 @pytest.mark.asyncio
@@ -383,7 +374,7 @@ async def test_team_repo_list_by_division_filtering_and_order(team_repo: TeamRep
 
 @pytest.mark.asyncio
 async def test_team_repo_list_all_ordering(team_repo: TeamRepository):
-    """Verifica list_all ordenado por división y nombre."""
+    """Verifica list_all ordenado alfabéticamente por nombre conforme a R3."""
     await team_repo.create(
         name="Zeta",
         tag="ZET",
@@ -401,11 +392,11 @@ async def test_team_repo_list_all_ordering(team_repo: TeamRepository):
 
     all_teams = await team_repo.list_all()
     assert len(all_teams) == 2
-    # In PostgreSQL enum definition, PREMIER was defined before ASCEND
-    assert all_teams[0].division == Division.PREMIER
-    assert all_teams[0].name == "Zeta"
-    assert all_teams[1].division == Division.ASCEND
-    assert all_teams[1].name == "Alpha"
+    # R3: list_all ordena por Team.name.asc()
+    assert all_teams[0].division == Division.ASCEND
+    assert all_teams[0].name == "Alpha"
+    assert all_teams[1].division == Division.PREMIER
+    assert all_teams[1].name == "Zeta"
 
 
 @pytest.mark.asyncio
@@ -462,10 +453,11 @@ async def test_team_repo_update_and_delete(team_repo: TeamRepository):
         name="Team Queso",
         tag="TQ",
         slug="team-queso",
-        division=Division.ASCEND,
+        division=Division.PREMIER,
         discord_role_id=200000000000000014,
     )
-    updated = await team_repo.update(team, division=Division.PREMIER)
+    updated = await team_repo.update(team, tag="TQ2")
+    assert updated.tag == "TQ2"
     assert updated.division == Division.PREMIER
 
     await team_repo.delete(team)
@@ -689,12 +681,12 @@ async def test_match_repo_list_by_status(match_repo: MatchRepository, team_repo:
     pending = await match_repo.list_by_status(MatchStatus.PENDIENTE)
     assert len(pending) == 1
 
-    await match_repo.update_status(m, MatchStatus.CANAL_CREADO)
+    await match_repo.update_status(m, MatchStatus.LIVE)
     pending_after = await match_repo.list_by_status(MatchStatus.PENDIENTE)
     assert len(pending_after) == 0
 
-    canal_creado = await match_repo.list_by_status(MatchStatus.CANAL_CREADO)
-    assert len(canal_creado) == 1
+    live = await match_repo.list_by_status(MatchStatus.LIVE)
+    assert len(live) == 1
 
 
 @pytest.mark.asyncio

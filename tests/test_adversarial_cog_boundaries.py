@@ -653,7 +653,7 @@ async def test_teams_idempotent_lifecycle_updates_and_conflicts(clean_teams_db, 
         rol=create_mock_role(8001),
         nombre="Equipo Alfa Renombrado",
         tag="ALFR",
-        division="ASCEND",
+        division="PREMIER",
     )
     embed_rename = inter_a_rename.followup.send.await_args.kwargs["embed"]
     assert "Actualizado" in embed_rename.title
@@ -663,7 +663,7 @@ async def test_teams_idempotent_lifecycle_updates_and_conflicts(clean_teams_db, 
         team_a = await repo.get_by_role_id(8001)
         assert team_a.name == "Equipo Alfa Renombrado"
         assert team_a.tag == "ALFR"
-        assert team_a.division == Division.ASCEND
+        assert team_a.division == Division.PREMIER
 
     # 3. Actualización de Equipo A con mismo nombre pero nuevo rol 8003
     inter_a_newrole = create_mock_interaction(user=staff, guild=guild)
@@ -673,7 +673,7 @@ async def test_teams_idempotent_lifecycle_updates_and_conflicts(clean_teams_db, 
         rol=create_mock_role(8003),
         nombre="Equipo Alfa Renombrado",
         tag="ALFR",
-        division="ASCEND",
+        division="PREMIER",
     )
     embed_newrole = inter_a_newrole.followup.send.await_args.kwargs["embed"]
     assert "Actualizado" in embed_newrole.title

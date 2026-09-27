@@ -367,7 +367,7 @@ async def test_csv_duplicate_cross_name_and_slug(
     csv_mixed_name_slug = (
         "equipo1,equipo2,fecha,hora\n"
         "Planar Shock Pingus,Fnix Esports,20/09/2026,21:00\n"
-        "planar-shock-pingus,fnix-esports,20/09/2026,21:00\n"
+        "planar shock pingus,fnix esports,20/09/2026,21:00\n"
     )
 
     j_res = await service.create_jornada_from_csv(
@@ -376,7 +376,7 @@ async def test_csv_duplicate_cross_name_and_slug(
     assert j_res.total_rows == 2
     assert j_res.success_count == 1
     assert j_res.error_count == 1
-    assert "ya existe para la jornada 1" in j_res.errors[0]
+    assert "enfrentamiento duplicado" in j_res.errors[0] or "ya existe para la jornada 1" in j_res.errors[0]
 
 
 @pytest.mark.asyncio

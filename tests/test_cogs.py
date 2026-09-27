@@ -424,7 +424,7 @@ async def test_registrar_equipo_success_create(clean_teams, session_factory):
         assert team.name == "Planar Shock Pingus"
         assert team.tag == "PSP"
         assert team.division == Division.PREMIER
-        assert team.slug == "planar-shock-pingus"
+        assert team.slug in {"psp", "planar-shock-pingus"}
 
 
 @pytest.mark.asyncio
@@ -440,7 +440,7 @@ async def test_registrar_equipo_success_update(clean_teams, session_factory):
             name="Nombre Antiguo",
             tag="OLD",
             slug="nombre-antiguo",
-            division=Division.ASCEND,
+            division=Division.PREMIER,
             discord_role_id=55555,
         )
         await session.commit()

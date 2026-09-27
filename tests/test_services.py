@@ -234,7 +234,7 @@ async def test_create_match_happy_path_premier(
     assert res.match.status == MatchStatus.CANAL_CREADO
     assert res.match.jornada == 1
     assert res.channel is not None
-    assert res.channel.name == "j1-planar-shock-pingus-vs-fnix-esports"
+    assert res.channel.name == "j1-psp-vs-fnx"
 
     # Verificar creación de categoría "PREMIER - JORNADA 1"
     guild.create_category.assert_called_once_with("PREMIER - JORNADA 1")
@@ -282,7 +282,7 @@ async def test_create_match_happy_path_ascend_existing_category(
         guild=guild,
         jornada=2,
         team1_name="dragones",
-        team2_name="fenix-ascend",
+        team2_name="Fenix Ascend",
     )
 
     assert res.success is True

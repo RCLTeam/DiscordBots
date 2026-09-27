@@ -362,18 +362,18 @@ class TestRoleRequestModelDatabaseRoundtrip:
 
     @pytest.mark.asyncio
     async def test_alembic_002_downgrade_and_reupgrade(self, migrated_db: AsyncEngine):
-        """Verifica la reversibilidad limpia de la migración 002 (downgrade y re-upgrade)."""
+        """Verifica la reversibilidad limpia de la migración bot_tables 0001 (downgrade a 0000 y re-upgrade a head)."""
         cfg = Config("alembic.ini")
         async with migrated_db.connect() as conn:
 
             def do_migration_cycle(sync_conn):
                 cfg.attributes["connection"] = sync_conn
-                # Revertir migración 002 a 001
-                command.downgrade(cfg, "001")
+                # Revertir migración 0001 a 0000
+                command.downgrade(cfg, "0000")
                 tables_after_downgrade = inspect(sync_conn).get_table_names()
                 assert "role_requests" not in tables_after_downgrade
 
-                # Re-aplicar migración 002 hasta head
+                # Re-aplicar migración 0001 hasta head
                 command.upgrade(cfg, "head")
                 tables_after_upgrade = inspect(sync_conn).get_table_names()
                 assert "role_requests" in tables_after_upgrade

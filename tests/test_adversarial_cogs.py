@@ -365,7 +365,7 @@ async def test_registrar_equipo_idempotency_and_conflict_handling(clean_teams_db
         rol=create_mock_role(1001),
         nombre="Team Alfa Plus",
         tag="ALFP",
-        division="ASCEND",
+        division="PREMIER",
     )
     embed_update = inter_a_update.followup.send.await_args.kwargs["embed"]
     assert "Actualizado" in embed_update.title
@@ -376,7 +376,7 @@ async def test_registrar_equipo_idempotency_and_conflict_handling(clean_teams_db
         assert updated is not None
         assert updated.name == "Team Alfa Plus"
         assert updated.tag == "ALFP"
-        assert updated.division == Division.ASCEND
+        assert updated.division == Division.PREMIER
 
     # 3. Crear equipo B
     inter_b = create_mock_interaction(user=staff_member, guild=guild)
