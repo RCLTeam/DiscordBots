@@ -42,3 +42,21 @@ jobs:
         env:
           DATABASE_URL: "pglite:///:memory:"
         run: uv run python -m liga_bot.cli seed-teams
+
+  deploy:
+    name: Deploy to Production
+    needs: quality-and-tests
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-discord-bot
+      cancel-in-progress: false
+    steps:
+      - name: Trigger CD script on VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ vars.SERVER_HOST }}
+          username: ${{ vars.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script_stop: true
+          script: /usr/local/sbin/actualizarDiscordBot
