@@ -616,8 +616,8 @@ class TestFullLifecycleFreeAgentAssignment:
         assert free_role in member.roles
         # - Remoción del rol "Sin Verificar"
         assert sin_verificar_role not in member.roles
-        # - Apodo formateado a "SoloQueueWarrior #1337"
-        assert member.nick == "SoloQueueWarrior #1337"
+        # - Apodo con el nombre de invocador, sin Riot Tag
+        assert member.nick == "SoloQueueWarrior"
         # - Cero canales de tickets creados
         assert len(guild.channels) == 0
 

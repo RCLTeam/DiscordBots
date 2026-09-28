@@ -23,6 +23,7 @@ import discord
 
 from liga_bot.config import TEAMS_ALL, get_settings
 from liga_bot.models.enums import RosterRole
+from liga_bot.utils.formatting import build_opgg_url
 
 if TYPE_CHECKING:
     pass
@@ -317,6 +318,7 @@ class PosicionSelect(discord.ui.Select[Any]):
             await interaction.followup.send(msg, ephemeral=True)
             return
 
+        opgg_url = build_opgg_url(self.nombre_lol, self.riot_tag)
         embed = discord.Embed(
             title="Nueva Solicitud de Rol",
             description=(
@@ -324,8 +326,9 @@ class PosicionSelect(discord.ui.Select[Any]):
                 f"**Nombre en LoL:** {self.nombre_lol}\n"
                 f"**Riot Tag:** {self.riot_tag}\n"
                 f"**Equipo solicitado:** {self.equipo}\n"
-                f"**Posición:** {posicion}\n\n"
-                "Un miembro del staff revisará la solicitud y confirmará o denegará el rol."
+                f"**Posición:** {posicion}\n"
+                f"**Perfil op.gg:** {opgg_url}\n\n"
+                "Comprueba que el enlace abre la cuenta correcta antes de confirmar el rol."
             ),
             color=discord.Color.blue(),
         )

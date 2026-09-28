@@ -15,6 +15,7 @@ import re
 import unicodedata
 from collections.abc import Iterable
 from typing import Any, Final
+from urllib.parse import quote
 
 from liga_bot.config import DEFAULT_REGLAMENTO_CHANNEL
 
@@ -108,6 +109,26 @@ def normalize_tag(tag: str, max_length: int = 4) -> str:
     cleaned = "".join(c for c in tag.strip() if not c.isspace())
     upper_tag = cleaned.upper()
     return upper_tag[:max_length]
+
+
+OPGG_DEFAULT_REGION: Final[str] = "euw"
+
+
+def build_opgg_url(
+    game_name: str,
+    riot_tag: str | None = None,
+    region: str = OPGG_DEFAULT_REGION,
+) -> str:
+    """
+    Construye el enlace al perfil de op.gg de una cuenta de League of Legends.
+
+    Formato: https://op.gg/es/lol/summoners/<region>/<NombreInvocador>-<RiotTag>
+    Los espacios y caracteres especiales se codifican para que el enlace sea válido.
+    """
+    cleaned_name = game_name.strip()
+    cleaned_tag = (riot_tag or "").strip().lstrip("#")
+    slug = f"{cleaned_name}-{cleaned_tag}" if cleaned_tag else cleaned_name
+    return f"https://op.gg/es/lol/summoners/{region}/{quote(slug, safe='')}"
 
 
 def apply_team_tag(nick: str, team_tag: str, known_tags: Iterable[str]) -> str:

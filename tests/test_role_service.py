@@ -419,7 +419,7 @@ class TestAssignFreeRole:
         free_role = discord.utils.get(guild.roles, name=clean_settings.free_role_name)
         member.remove_roles.assert_awaited_once_with(sin_verificar_role)
         member.add_roles.assert_awaited_once_with(free_role)
-        member.edit.assert_awaited_once_with(nick="Faker #KR1")
+        member.edit.assert_awaited_once_with(nick="Faker")
 
         # Verificación en Base de Datos
         repo = RoleRequestRepository(db_session)
@@ -515,11 +515,11 @@ class TestAssignFreeRole:
     async def test_assign_free_role_nickname_truncated_to_32_chars(
         self, role_service: RoleService, clean_settings: Settings
     ):
-        """Si el nombre y tag superan los 32 caracteres, el nick se trunca a 32."""
+        """Si el nombre de invocador supera los 32 caracteres, el nick se trunca."""
         guild = create_mock_guild(clean_settings)
         member = create_mock_member(200006, name="LongNameUser", guild=guild)
 
-        very_long_name = "SuperMegaUltraLongSummonerName"
+        very_long_name = "SuperMegaUltraLongSummonerNameDeMasDe32"
         very_long_tag = "Tag12345"
 
         ok, _ = await role_service.assign_free_role(
@@ -529,7 +529,7 @@ class TestAssignFreeRole:
         )
 
         assert ok is True
-        expected_nick = f"{very_long_name} #{very_long_tag}"[:32]
+        expected_nick = very_long_name[:32]
         assert len(expected_nick) == 32
         member.edit.assert_awaited_once_with(nick=expected_nick)
 

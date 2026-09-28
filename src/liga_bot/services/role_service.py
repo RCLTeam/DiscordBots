@@ -132,7 +132,7 @@ class RoleService:
         - Busca el rol con nombre settings.free_role_name (por defecto 'Libre') en el servidor.
         - Remueve el rol 'Sin Verificar' si el miembro lo posee.
         - Añade el rol de agente libre al miembro.
-        - Actualiza el apodo del miembro con formato 'NombreLoL #RiotTag' (máximo 32 caracteres).
+        - Actualiza el apodo del miembro con su nombre de invocador (máximo 32 caracteres).
         - Registra la solicitud con estado APPROVED en BD para trazabilidad y auditoría.
         - Retorna (True, 'Rol Libre asignado correctamente.') o tupla con error descriptivo.
         """
@@ -169,7 +169,7 @@ class RoleService:
             return False, f"Error al asignar rol '{self.settings.free_role_name}': {exc}"
 
         # Actualizar apodo en Discord (hasta 32 caracteres)
-        nick = f"{nombre_lol} #{riot_tag}"[:32]
+        nick = nombre_lol[:32]
         try:
             await member.edit(nick=nick)
         except (discord.Forbidden, discord.HTTPException) as exc:

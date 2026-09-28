@@ -12,6 +12,7 @@ from liga_bot.utils.formatting import (
     MENSAJE_1,
     MENSAJE_2,
     apply_team_tag,
+    build_opgg_url,
     format_match_channel_name,
     format_mensaje_1,
     format_mensaje_2,
@@ -241,3 +242,30 @@ def test_apply_team_tag_ignores_first_word_that_is_not_a_tag():
 def test_apply_team_tag_without_tag_returns_nick():
     """Sin tag de equipo, el apodo no se modifica."""
     assert apply_team_tag("Ninym", "", KNOWN_TAGS) == "Ninym"
+
+
+# ---------------------------------------------------------------------------
+# build_opgg_url
+# ---------------------------------------------------------------------------
+
+
+def test_build_opgg_url_nombre_y_tag():
+    """El enlace usa el formato <nombre>-<tag> sobre la región por defecto."""
+    assert build_opgg_url("Ninym", "Shiro") == "https://op.gg/es/lol/summoners/euw/Ninym-Shiro"
+
+
+def test_build_opgg_url_admite_almohadilla():
+    """El Riot Tag se acepta con o sin '#'."""
+    assert build_opgg_url("Ninym", "#Shiro") == build_opgg_url("Ninym", "Shiro")
+
+
+def test_build_opgg_url_codifica_caracteres_especiales():
+    """Los espacios y caracteres no ASCII se codifican para que el enlace sea válido."""
+    url = build_opgg_url("Planar Shock", "EUW1")
+    assert url == "https://op.gg/es/lol/summoners/euw/Planar%20Shock-EUW1"
+    assert " " not in url
+
+
+def test_build_opgg_url_sin_tag():
+    """Sin Riot Tag, el enlace queda solo con el nombre de invocador."""
+    assert build_opgg_url("Solo", None) == "https://op.gg/es/lol/summoners/euw/Solo"
