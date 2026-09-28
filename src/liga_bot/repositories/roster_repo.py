@@ -16,7 +16,8 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -222,6 +223,88 @@ class TeamMembershipRepository(BaseRepository[TeamMembership]):
         await self._session.flush()
         await self._session.refresh(membership)
         return membership
+
+    async def insert_if_not_exists(
+        self,
+        team_id: UUID | str,
+        discord_user_id: str | int,
+        role: RosterRole | str = RosterRole.STAFF,
+        is_captain: bool = False,
+    ) -> TeamMembership | None:
+        """
+        Inserta atómicamente una membresía de equipo si no existe, utilizando
+        PostgreSQL ON CONFLICT (team_id, discord_user_id) DO NOTHING.
+
+        Retorna:
+        - TeamMembership si se insertó exitosamente una nueva fila.
+        - None si ocurrió un conflicto (la membresía ya existía).
+        """
+        clean_team_id = _clean_uuid(team_id)
+        if clean_team_id is None:
+            raise ValueError(f"Identificador de equipo inválido: {team_id!r}")
+
+        clean_user_id = _clean_user_id(discord_user_id)
+        if clean_user_id is None:
+            raise ValueError("El discord_user_id no puede ser nulo ni vacío.")
+
+        role_enum = role if isinstance(role, RosterRole) else RosterRole(role)
+
+        stmt = (
+            pg_insert(TeamMembership)
+            .values(
+                team_id=clean_team_id,
+                discord_user_id=clean_user_id,
+                role=role_enum,
+                is_captain=is_captain,
+            )
+            .on_conflict_do_nothing(index_elements=["team_id", "discord_user_id"])
+            .returning(TeamMembership)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalars().first()
+
+    async def upsert(
+        self,
+        team_id: UUID | str,
+        discord_user_id: str | int,
+        role: RosterRole | str,
+        is_captain: bool = False,
+    ) -> TeamMembership:
+        """
+        Inserta o actualiza incondicionalmente una membresía de equipo utilizando
+        PostgreSQL ON CONFLICT (team_id, discord_user_id) DO UPDATE.
+        Reservado exclusivamente para transferencias explícitas de jugadores (transfer_player).
+        """
+        clean_team_id = _clean_uuid(team_id)
+        if clean_team_id is None:
+            raise ValueError(f"Identificador de equipo inválido: {team_id!r}")
+
+        clean_user_id = _clean_user_id(discord_user_id)
+        if clean_user_id is None:
+            raise ValueError("El discord_user_id no puede ser nulo ni vacío.")
+
+        role_enum = role if isinstance(role, RosterRole) else RosterRole(role)
+
+        stmt = (
+            pg_insert(TeamMembership)
+            .values(
+                team_id=clean_team_id,
+                discord_user_id=clean_user_id,
+                role=role_enum,
+                is_captain=is_captain,
+            )
+            .on_conflict_do_update(
+                index_elements=["team_id", "discord_user_id"],
+                set_={
+                    "role": role_enum,
+                    "is_captain": is_captain,
+                    "updated_at": func.now(),
+                },
+            )
+            .returning(TeamMembership)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalars().one()
 
     async def update_role(
         self,

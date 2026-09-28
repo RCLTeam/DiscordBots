@@ -1459,8 +1459,7 @@ async def test_resolve_id_round_con_jornada_existente(
     )
     await db_session.execute(
         text(
-            "INSERT INTO rounds (id, id_season_division) VALUES (:id, :sd) "
-            "ON CONFLICT DO NOTHING"
+            "INSERT INTO rounds (id, id_season_division) VALUES (:id, :sd) ON CONFLICT DO NOTHING"
         ),
         {"id": 3, "sd": str(DEFAULT_PREMIER_SEASON_DIVISION_ID)},
     )
