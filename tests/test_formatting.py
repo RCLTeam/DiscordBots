@@ -6,6 +6,7 @@ nombres de canal para Discord y plantillas verbatim de mensajes de coordinación
 """
 
 import string
+from datetime import datetime, timezone
 
 from liga_bot.config import DEFAULT_REGLAMENTO_CHANNEL
 from liga_bot.utils.formatting import (
@@ -19,6 +20,7 @@ from liga_bot.utils.formatting import (
     normalize_name,
     normalize_slug,
     normalize_tag,
+    parse_scheduled_at,
 )
 
 # ---------------------------------------------------------------------------
@@ -269,3 +271,27 @@ def test_build_opgg_url_codifica_caracteres_especiales():
 def test_build_opgg_url_sin_tag():
     """Sin Riot Tag, el enlace queda solo con el nombre de invocador."""
     assert build_opgg_url("Solo", None) == "https://op.gg/es/lol/summoners/euw/Solo"
+
+
+# ---------------------------------------------------------------------------
+# parse_scheduled_at
+# ---------------------------------------------------------------------------
+
+
+def test_parse_scheduled_at_horario_verano():
+    """En horario de verano (CEST, UTC+2) las 17:00 de la liga son 15:00 UTC."""
+    dt = parse_scheduled_at("02/10/2026", "17:00")
+    assert dt == datetime(2026, 10, 2, 15, 0, tzinfo=timezone.utc)
+
+
+def test_parse_scheduled_at_horario_invierno():
+    """En horario de invierno (CET, UTC+1) las 19:00 de la liga son 18:00 UTC."""
+    dt = parse_scheduled_at("15/01/2027", "19:00")
+    assert dt == datetime(2027, 1, 15, 18, 0, tzinfo=timezone.utc)
+
+
+def test_parse_scheduled_at_entrada_invalida():
+    """Una fecha u hora con formato incorrecto devuelve None en lugar de lanzar."""
+    assert parse_scheduled_at("2026-10-02", "17:00") is None
+    assert parse_scheduled_at("02/10/2026", "25:00") is None
+    assert parse_scheduled_at("", "") is None

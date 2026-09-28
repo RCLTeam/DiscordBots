@@ -8,7 +8,7 @@ import csv
 import io
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 import discord
@@ -26,6 +26,7 @@ from liga_bot.utils.formatting import (
     format_match_channel_name,
     format_mensaje_1,
     format_mensaje_2,
+    parse_scheduled_at,
 )
 
 if TYPE_CHECKING:
@@ -490,12 +491,7 @@ class ScheduleService:
 
             scheduled_dt: datetime | None = None
             if fecha_str and hora_str:
-                try:
-                    scheduled_dt = datetime.strptime(
-                        f"{fecha_str} {hora_str}", "%d/%m/%Y %H:%M"
-                    ).replace(tzinfo=timezone.utc)
-                except ValueError:
-                    scheduled_dt = None
+                scheduled_dt = parse_scheduled_at(fecha_str, hora_str)
 
             res = await self.create_match(
                 guild=guild,

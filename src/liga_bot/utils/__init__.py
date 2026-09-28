@@ -11,6 +11,7 @@ from liga_bot.utils.formatting import (
     normalize_name,
     normalize_slug,
     normalize_tag,
+    parse_scheduled_at,
 )
 
 __all__ = [
@@ -23,5 +24,6 @@ __all__ = [
     "format_mensaje_2",
     "normalize_name",
     "normalize_slug",
+    "parse_scheduled_at",
     "normalize_tag",
 ]

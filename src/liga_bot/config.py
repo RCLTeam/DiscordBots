@@ -24,6 +24,8 @@ DEFAULT_TICKETS_CATEGORY_NAMES: Final[tuple[str, ...]] = (
     "TICKETS-FICHAJES-ASCEND",
     "TICKETS-ADMINISTRACION",
 )
+# Zona horaria en la que el staff escribe los horarios de los partidos.
+LEAGUE_TIMEZONE: Final[str] = "Europe/Madrid"
 DEFAULT_TICKET_REVISION_HOURS: Final[int] = 24
 DEFAULT_TICKET_AVISO_MARCADOR: Final[str] = "⚠️ TICKET_SIN_RESPUESTA"
 

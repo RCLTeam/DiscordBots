@@ -14,10 +14,12 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections.abc import Iterable
+from datetime import datetime, timezone
 from typing import Any, Final
 from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
-from liga_bot.config import DEFAULT_REGLAMENTO_CHANNEL
+from liga_bot.config import DEFAULT_REGLAMENTO_CHANNEL, LEAGUE_TIMEZONE
 
 # ---------------------------------------------------------------------------
 # Plantillas verbatim de mensajes de coordinación (liga_bot.py:57-86)
@@ -112,6 +114,23 @@ def normalize_tag(tag: str, max_length: int = 4) -> str:
 
 
 OPGG_DEFAULT_REGION: Final[str] = "euw"
+
+
+def parse_scheduled_at(fecha: str, hora: str) -> datetime | None:
+    """
+    Convierte 'DD/MM/YYYY' y 'HH:MM' de la liga a un datetime en UTC.
+
+    Los horarios se escriben en hora local española (LEAGUE_TIMEZONE), así que
+    hay que anclarlos a esa zona antes de pasarlos a UTC: interpretarlos como
+    UTC directamente desplazaba los partidos una o dos horas según el horario
+    de verano. Retorna None si el formato no es válido.
+    """
+    try:
+        local_dt = datetime.strptime(f"{fecha.strip()} {hora.strip()}", "%d/%m/%Y %H:%M")
+    except (ValueError, AttributeError):
+        return None
+
+    return local_dt.replace(tzinfo=ZoneInfo(LEAGUE_TIMEZONE)).astimezone(timezone.utc)
 
 
 def build_opgg_url(

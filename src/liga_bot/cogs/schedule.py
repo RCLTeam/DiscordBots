@@ -5,7 +5,7 @@ Schedule cog for LigaBot managing match provisioning and CSV imports.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 import discord
@@ -22,6 +22,7 @@ from liga_bot.services.schedule_service import (
     ScheduleService,
     StreamUrlResult,
 )
+from liga_bot.utils.formatting import parse_scheduled_at
 
 if TYPE_CHECKING:
     from discord.ext.commands import Bot
@@ -117,12 +118,7 @@ class ScheduleCog(commands.Cog, name="Schedule"):
         hora_clean = hora.strip() if hora else None
 
         if fecha_clean and hora_clean:
-            try:
-                scheduled_dt = datetime.strptime(
-                    f"{fecha_clean} {hora_clean}", "%d/%m/%Y %H:%M"
-                ).replace(tzinfo=timezone.utc)
-            except ValueError:
-                scheduled_dt = None
+            scheduled_dt = parse_scheduled_at(fecha_clean, hora_clean)
 
         await interaction.response.defer(ephemeral=True)
 
