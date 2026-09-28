@@ -96,6 +96,10 @@ class LigaBot(commands.Bot):
         devuelve 500 en ese endpoint de forma intermitente. La sesión ya está
         autenticada en ese punto y el gateway envía los mismos datos en el
         evento READY, así que el arranque puede continuar.
+
+        Ese fallo aborta también el setup_hook() que discord.py invoca a
+        continuación, así que hay que ejecutarlo aquí: sin él no se cargarían
+        los Cogs ni arrancaría el WebSocket Bridge.
         """
         try:
             await super().login(token)
@@ -107,6 +111,7 @@ class LigaBot(commands.Bot):
                 "La sesión está iniciada; se continúa y los datos llegarán en el READY.",
                 exc,
             )
+            await self.setup_hook()
 
     async def setup_hook(self) -> None:
         """

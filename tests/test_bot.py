@@ -258,8 +258,13 @@ async def test_login_tolera_500_de_application_info():
     with (
         patch.object(discord.Client, "login", AsyncMock(side_effect=error)),
         patch.object(LigaBot, "user", MagicMock()),
+        patch.object(LigaBot, "setup_hook", AsyncMock()) as setup_hook,
     ):
         await bot.login("token")  # no debe propagar
+
+    # discord.py aborta su setup_hook() al fallar: hay que ejecutarlo igualmente,
+    # o el bot se conectaría sin Cogs ni WebSocket Bridge.
+    setup_hook.assert_awaited_once()
 
 
 @pytest.mark.asyncio
