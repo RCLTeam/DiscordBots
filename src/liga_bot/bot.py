@@ -88,6 +88,26 @@ class LigaBot(commands.Bot):
         self.suggestion_service: SuggestionService | None = suggestion_service
         self.websocket_bridge_service: WebsocketBridgeService | None = websocket_bridge_service
 
+    async def login(self, token: str) -> None:
+        """
+        Inicia sesión tolerando fallos del endpoint /applications/@me.
+
+        discord.py consulta application_info() al final del login y Discord
+        devuelve 500 en ese endpoint de forma intermitente. La sesión ya está
+        autenticada en ese punto y el gateway envía los mismos datos en el
+        evento READY, así que el arranque puede continuar.
+        """
+        try:
+            await super().login(token)
+        except discord.DiscordServerError as exc:
+            if self.user is None:
+                raise
+            logger.warning(
+                "Discord respondió %s al pedir la información de la aplicación. "
+                "La sesión está iniciada; se continúa y los datos llegarán en el READY.",
+                exc,
+            )
+
     async def setup_hook(self) -> None:
         """
         Hook asíncrono de inicialización previo al inicio del bot.

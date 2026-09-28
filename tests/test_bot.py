@@ -11,6 +11,7 @@ Verifica:
 
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
+import discord
 import pytest
 from discord.ext import commands, tasks
 
@@ -239,3 +240,39 @@ def test_setup_logging_levels():
 
     settings_debug = Settings(log_level="DEBUG")
     setup_logging(settings_debug)
+
+
+# ---------------------------------------------------------------------------
+# Tolerancia a fallos del endpoint /applications/@me
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_login_tolera_500_de_application_info():
+    """Un 500 de Discord tras autenticar no aborta el arranque."""
+    bot = LigaBot(settings=Settings(discord_token="x"))
+    respuesta = MagicMock()
+    respuesta.status = 500
+    error = discord.DiscordServerError(respuesta, "500: Internal Server Error")
+
+    with (
+        patch.object(discord.Client, "login", AsyncMock(side_effect=error)),
+        patch.object(LigaBot, "user", MagicMock()),
+    ):
+        await bot.login("token")  # no debe propagar
+
+
+@pytest.mark.asyncio
+async def test_login_propaga_500_si_no_hay_sesion():
+    """Si el fallo ocurre antes de autenticar, el error sí se propaga."""
+    bot = LigaBot(settings=Settings(discord_token="x"))
+    respuesta = MagicMock()
+    respuesta.status = 500
+    error = discord.DiscordServerError(respuesta, "500: Internal Server Error")
+
+    with (
+        patch.object(discord.Client, "login", AsyncMock(side_effect=error)),
+        patch.object(LigaBot, "user", None),
+        pytest.raises(discord.DiscordServerError),
+    ):
+        await bot.login("token")
