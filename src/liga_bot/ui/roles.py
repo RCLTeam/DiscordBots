@@ -386,6 +386,55 @@ def build_panel_rol_embed() -> discord.Embed:
     return embed
 
 
+def build_welcome_dm_blocked_embed(member: discord.Member) -> discord.Embed:
+    """
+    Construye un embed dorado de advertencia para moderadores cuando un miembro
+    tiene los mensajes directos (DMs) bloqueados o cerrados al unirse.
+    """
+    embed = discord.Embed(
+        title="⚠️ Alerta de Moderación: DM de Bienvenida No Entregado",
+        description=(
+            f"El usuario {member.mention} (`{member.display_name}`, ID: `{member.id}`) "
+            "tiene los mensajes directos restringidos o bloqueados y no ha podido recibir "
+            "el panel de bienvenida ni las instrucciones para `/pedir-rol`.\n\n"
+            "**Acción recomendada:** Contactar al usuario por un canal público o "
+            "asignarle el rol correspondiente manualmente."
+        ),
+        color=discord.Color.gold(),
+        timestamp=discord.utils.utcnow(),
+    )
+    embed.add_field(name="Usuario", value=f"{member.mention} ({member.name})", inline=True)
+    embed.add_field(name="ID de Usuario", value=str(member.id), inline=True)
+    embed.set_footer(text="RCL · Moderación")
+    return embed
+
+
+def build_welcome_dm_error_embed(member: discord.Member, exc: Exception) -> discord.Embed:
+    """
+    Construye un embed rojo de alerta de sistema para moderadores cuando ocurre
+    un error inesperado al intentar enviar el DM de bienvenida.
+    """
+    error_msg = f"{type(exc).__name__}: {exc}".replace("```", "'''")
+    embed = discord.Embed(
+        title="🚨 Alerta de Sistema: Fallo al Enviar DM de Bienvenida",
+        description=(
+            f"Ocurrió un error inesperado al intentar enviar el mensaje directo de bienvenida "
+            f"a {member.mention} (`{member.display_name}`, ID: `{member.id}`)."
+        ),
+        color=discord.Color.red(),
+        timestamp=discord.utils.utcnow(),
+    )
+    embed.add_field(name="Usuario", value=f"{member.mention} ({member.name})", inline=True)
+    embed.add_field(name="ID de Usuario", value=str(member.id), inline=True)
+    embed.add_field(
+        name="Detalle del Error",
+        value=f"```{error_msg}```" if len(error_msg) < 1000 else f"```{error_msg[:1000]}...```",
+        inline=False,
+    )
+    embed.set_footer(text="RCL · Alerta de Sistema")
+    return embed
+
+
 class PanelPedirRolView(discord.ui.View):
     """
     Vista persistente (timeout=None) publicada en el canal de bienvenida / pedir-rol.
@@ -449,10 +498,18 @@ class ConfirmarRolButton(
     async def callback(self, interaction: discord.Interaction) -> None:
         """
         Callback de confirmación de rol:
+        - Valida que el invocador no sea el propio solicitante (anti-self-approval).
         - Valida que el invocador sea miembro del staff.
         - Delega la asignación del rol, actualización de apodo y persistencia a RoleService.
         - Notifica la confirmación en el canal y programa su eliminación tras 5 segundos.
         """
+        if interaction.user.id == self.user_id:
+            await interaction.response.send_message(
+                "❌ No puedes confirmar ni denegar tu propia solicitud de rol.",
+                ephemeral=True,
+            )
+            return
+
         from liga_bot.cogs.permissions import is_staff
 
         staff_check = is_staff(interaction.user)
@@ -545,10 +602,18 @@ class TicketView(discord.ui.View):
     ) -> None:
         """
         Callback para denegar la solicitud de rol:
+        - Valida que el invocador no sea el propio solicitante (anti-self-approval).
         - Valida que el invocador sea miembro del staff.
         - Delega la denegación y actualización transaccional a RoleService.
         - Notifica la denegación en el canal y programa su eliminación tras 5 segundos.
         """
+        if self.user_id is not None and interaction.user.id == self.user_id:
+            await interaction.response.send_message(
+                "❌ No puedes confirmar ni denegar tu propia solicitud de rol.",
+                ephemeral=True,
+            )
+            return
+
         from liga_bot.cogs.permissions import is_staff
 
         staff_check = is_staff(interaction.user)
@@ -580,10 +645,16 @@ class TicketView(discord.ui.View):
             )
             self._schedule_deletion(interaction.channel)
         else:
-            await interaction.response.send_message(
-                f"Error: {msg}",
-                ephemeral=True,
-            )
+            if "No puedes confirmar ni denegar tu propia solicitud de rol" in msg:
+                await interaction.response.send_message(
+                    f"❌ {msg}",
+                    ephemeral=True,
+                )
+            else:
+                await interaction.response.send_message(
+                    f"Error: {msg}",
+                    ephemeral=True,
+                )
 
     def _schedule_deletion(
         self, channel: discord.abc.GuildChannel | None, delay: float = 5.0
@@ -613,4 +684,7 @@ __all__ = [
     "PanelPedirRolView",
     "SolicitudRolModal",
     "TicketView",
+    "build_panel_rol_embed",
+    "build_welcome_dm_blocked_embed",
+    "build_welcome_dm_error_embed",
 ]

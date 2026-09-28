@@ -110,6 +110,10 @@ class Settings(BaseSettings):
         default=0,
         description="ID de categoría de Discord para tickets de verificación de rol.",
     )
+    moderators_channel_id: int = Field(
+        default=1548038711697080494,
+        description="ID del canal de moderadores (#moderators-only) para alertas del sistema.",
+    )
     free_role_name: str = Field(
         default="Libre",
         description="Nombre del rol asignado a agentes libres.",

@@ -253,14 +253,18 @@ class RosterSyncService:
             if existing is not None:
                 return existing
 
-            # 4. Crear membresía con rol no competitivo por defecto
+            # 4. Insertar atómicamente si no existe (evita colisiones concurrentes)
             assigned_role = self.default_join_role
-            membership = await membership_repo.create(
+            membership = await membership_repo.insert_if_not_exists(
                 team_id=team.id,
                 discord_user_id=user_id_str,
                 role=assigned_role,
                 is_captain=False,
             )
+            if membership is None:
+                # Ocurrió un conflicto concurrente; recuperamos la membresía existente sin mutar
+                existing = await membership_repo.get(team.id, user_id_str)
+                return existing
 
             # 5. Registrar movimiento en roster_movements
             movement_repo = RosterMovementRepository(s)
@@ -550,7 +554,7 @@ class RosterSyncService:
                     after=None,
                 )
 
-            membership = await membership_repo.create(
+            membership = await membership_repo.upsert(
                 team_id=team.id,
                 discord_user_id=user_id_str,
                 role=position,

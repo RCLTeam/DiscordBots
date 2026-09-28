@@ -22,7 +22,12 @@ from liga_bot.database import get_session_factory, transactional_session
 from liga_bot.models.enums import RoleRequestStatus
 from liga_bot.repositories.role_request_repo import RoleRequestRepository
 from liga_bot.repositories.team_repo import TeamRepository
-from liga_bot.ui.roles import PanelPedirRolView, build_panel_rol_embed
+from liga_bot.ui.roles import (
+    PanelPedirRolView,
+    build_panel_rol_embed,
+    build_welcome_dm_blocked_embed,
+    build_welcome_dm_error_embed,
+)
 from liga_bot.utils.formatting import apply_team_tag
 
 if TYPE_CHECKING:
@@ -88,9 +93,30 @@ class RoleService:
                 return False
 
         # Intentar enviar mensaje directo informativo de bienvenida
+        await self.send_welcome_dm(member)
+
+        return True
+
+    async def send_welcome_dm(self, member: discord.Member) -> bool:
+        """
+        Intenta enviar el mensaje directo de bienvenida con el panel de solicitud de rol.
+
+        Si la entrega falla:
+        - Si es por DMs cerrados o bloqueados (discord.Forbidden o código 50007),
+          envía una alerta dorada de advertencia a #moderators-only.
+        - Si es por una excepción inesperada (HTTPException distinta, error de red, etc.),
+          envía una alerta roja con el error en bloque de código a #moderators-only.
+
+        El envío de alertas al canal de moderación cuenta con manejo defensivo para que
+        ningún fallo bloquee o interrumpa la incorporación del usuario.
+
+        Retorna True si el DM se envió exitosamente, o False si falló la entrega.
+        """
         try:
+            guild = getattr(member, "guild", None)
+            guild_name = getattr(guild, "name", None) or "la liga"
             welcome_msg = (
-                f"¡Bienvenido/a a **{member.guild.name}**!\n\n"
+                f"¡Bienvenido/a a **{guild_name}**!\n\n"
                 "Para acceder a los canales de la liga y registrarte en un equipo, "
                 "solicita tu rol con el botón de abajo, desde el panel del servidor "
                 "o con el comando `/pedir-rol`."
@@ -100,20 +126,97 @@ class RoleService:
                 embed=build_panel_rol_embed(),
                 view=PanelPedirRolView(),
             )
-        except (discord.Forbidden, discord.HTTPException) as exc:
-            logger.info(
-                "No se pudo enviar DM de bienvenida a %s (DMs cerrados o bloqueados): %s",
-                member.display_name,
-                exc,
-            )
+            return True
         except Exception as exc:
-            logger.warning(
-                "Excepción inesperada al enviar mensaje directo de bienvenida a %s: %s",
-                member.display_name,
-                exc,
+            is_blocked_dm = (
+                isinstance(exc, discord.Forbidden) or getattr(exc, "code", None) == 50007
             )
+            if is_blocked_dm:
+                logger.info(
+                    "No se pudo enviar DM de bienvenida a %s (DMs cerrados o bloqueados): %s",
+                    member.display_name,
+                    exc,
+                )
+                alert_embed = build_welcome_dm_blocked_embed(member)
+            else:
+                logger.warning(
+                    "Excepción inesperada al enviar mensaje directo de bienvenida a %s: %s",
+                    member.display_name,
+                    exc,
+                )
+                alert_embed = build_welcome_dm_error_embed(member, exc)
 
-        return True
+            await self._notify_moderators_channel(member, alert_embed)
+            return False
+
+    async def _notify_moderators_channel(
+        self, member: discord.Member, embed: discord.Embed
+    ) -> None:
+        """
+        Envía un embed de alerta al canal de moderadores configurado en settings.
+        Defensivo: captura cualquier excepción y registra en logs para
+        garantizar que nunca propague un error ni interrumpa el flujo del bot.
+        """
+        channel_id = self.settings.moderators_channel_id
+        if not channel_id or channel_id <= 0:
+            logger.debug("moderators_channel_id no configurado (> 0); se omite alerta.")
+            return
+
+        try:
+            channel = None
+            guild = getattr(member, "guild", None)
+            if guild is not None:
+                if hasattr(guild, "get_channel") and callable(guild.get_channel):
+                    channel = guild.get_channel(channel_id)
+                if (
+                    channel is None
+                    and hasattr(guild, "fetch_channel")
+                    and callable(guild.fetch_channel)
+                ):
+                    try:
+                        channel = await guild.fetch_channel(channel_id)
+                    except Exception as fetch_exc:
+                        logger.debug(
+                            "No se pudo obtener canal %s vía guild.fetch_channel: %s",
+                            channel_id,
+                            fetch_exc,
+                        )
+
+            if channel is None and self.bot is not None:
+                if hasattr(self.bot, "get_channel") and callable(self.bot.get_channel):
+                    channel = self.bot.get_channel(channel_id)
+                if (
+                    channel is None
+                    and hasattr(self.bot, "fetch_channel")
+                    and callable(self.bot.fetch_channel)
+                ):
+                    try:
+                        channel = await self.bot.fetch_channel(channel_id)
+                    except Exception as bot_fetch_exc:
+                        logger.debug(
+                            "No se pudo obtener canal %s vía bot.fetch_channel: %s",
+                            channel_id,
+                            bot_fetch_exc,
+                        )
+
+            if channel is not None and hasattr(channel, "send") and callable(channel.send):
+                await channel.send(embed=embed)
+                logger.info(
+                    "Alerta de DM de bienvenida enviada a moderadores (%s) para %s.",
+                    channel_id,
+                    member.display_name,
+                )
+            else:
+                logger.warning(
+                    "Canal de moderadores (%s) no encontrado o no válido para enviar alerta.",
+                    channel_id,
+                )
+        except Exception as alert_exc:
+            logger.error(
+                "Fallo defensivo al enviar alerta de moderación al canal %s: %s",
+                channel_id,
+                alert_exc,
+            )
 
     async def list_team_names(self) -> list[str]:
         """Nombres de los equipos registrados en base de datos (división, nombre)."""
@@ -322,11 +425,11 @@ class RoleService:
         Confirma y aprueba una solicitud de rol pendiente asociada a un canal de ticket:
         - Localiza la solicitud en estado PENDING correspondiente al channel_id.
         - Resuelve el miembro solicitante en el servidor (caché o API).
-        - Asigna el rol del equipo solicitado si existe en el servidor.
-        - Remueve el rol 'Sin Verificar' si está presente.
-        - Actualiza el apodo del miembro con formato '<TAG> <NombreLoL>' (máx 32 caracteres).
-        - Registra en una única transacción la cuenta de juego (players), la membresía
-          con su posición y el estado APPROVED: si algo falla, se revierte todo.
+        - Fase 1: Registra en transacción atómica de BD la cuenta de juego (players),
+          la membresía con su posición y el estado APPROVED; la transacción se confirma (COMMIT).
+        - Si la transacción en BD falla o se revierte, nunca se invoca add_roles ni Discord.
+        - Fase 2: Tras el commit exitoso en BD, asigna el rol del equipo si existe,
+          remueve 'Sin Verificar' y actualiza el apodo del miembro ('<TAG> <NombreLoL>').
         - Retorna (True, f"Rol {req.equipo} confirmado para {member.display_name}.") o error.
         """
         try:
@@ -335,6 +438,9 @@ class RoleService:
                 req = await repo.get_by_channel_id(channel_id)
                 if req is None or req.estado != RoleRequestStatus.PENDING:
                     return False, "No hay solicitud pendiente asociada a este canal."
+
+                if staff_member.id == req.user_id:
+                    return False, "No puedes confirmar ni denegar tu propia solicitud de rol."
 
                 # Resolver miembro solicitante en el servidor
                 member = guild.get_member(req.user_id)
@@ -397,65 +503,16 @@ class RoleService:
                     staff_id=staff_member.id,
                 )
 
-                # A partir de aquí, cambios en Discord: si fallan se registran, pero no
-                # revierten la base de datos (Discord no participa en la transacción).
-                if role is not None:
-                    try:
-                        await member.add_roles(role)
-                    except (discord.Forbidden, discord.HTTPException) as exc:
-                        logger.warning(
-                            "No se pudo asignar el rol '%s' a %s: %s",
-                            req.equipo,
-                            member.display_name,
-                            exc,
-                        )
-
-                # Remover rol 'Sin Verificar' si está presente
-                if self.settings.sin_verificar_role_id > 0:
-                    sin_verificar = discord.utils.get(
-                        guild.roles, id=self.settings.sin_verificar_role_id
-                    )
-                    if sin_verificar is None:
-                        sin_verificar = guild.get_role(self.settings.sin_verificar_role_id)
-                    if sin_verificar is not None and sin_verificar in member.roles:
-                        try:
-                            await member.remove_roles(sin_verificar)
-                        except (discord.Forbidden, discord.HTTPException) as exc:
-                            logger.warning(
-                                "No se pudo remover rol sin verificar de %s: %s",
-                                member.display_name,
-                                exc,
-                            )
-
-                # Actualizar apodo: "<TAG> <NombreLoL>", sin el Riot Tag
-                nick = req.nombre_lol
+                # Obtener tags conocidos antes del commit para formateo de apodo
+                known_tags: list[str] = []
+                team_tag = team.tag if team is not None else None
                 if team is not None:
                     known_tags = [t.tag for t in await team_repo.list_all()]
-                    nick = apply_team_tag(nick, team.tag, known_tags)
-                else:
-                    logger.warning(
-                        "El equipo '%s' no existe en base de datos: no se aplica tag al apodo.",
-                        req.equipo,
-                    )
-                nick = nick[:32]
-                try:
-                    await member.edit(nick=nick)
-                except discord.Forbidden:
-                    logger.warning(
-                        "Sin permisos para cambiar el apodo de %s a '%s': el bot necesita "
-                        "'Gestionar apodos' y un rol por encima del miembro (los dueños del "
-                        "servidor nunca pueden ser renombrados).",
-                        member.display_name,
-                        nick,
-                    )
-                except discord.HTTPException as exc:
-                    logger.warning(
-                        "No se pudo actualizar el apodo de %s a '%s': %s",
-                        member.display_name,
-                        nick,
-                        exc,
-                    )
 
+                # Capturar variables de estado antes de salir de la sesión transaccional
+                target_member = member
+                target_role = role
+                nombre_lol = req.nombre_lol
                 equipo_nombre = req.equipo
                 member_display = member.display_name
 
@@ -470,6 +527,62 @@ class RoleService:
                 False,
                 "No se pudo registrar la confirmación en base de datos. "
                 "No se ha aplicado ningún cambio.",
+            )
+
+        # A partir de aquí, cambios en Discord: la base de datos YA se ha confirmado (COMMIT).
+        # Si las llamadas de Discord fallan, se registran, pero la BD ya es consistente y segura.
+        if target_role is not None:
+            try:
+                await target_member.add_roles(target_role)
+            except (discord.Forbidden, discord.HTTPException) as exc:
+                logger.warning(
+                    "No se pudo asignar el rol '%s' a %s: %s",
+                    equipo_nombre,
+                    member_display,
+                    exc,
+                )
+
+        # Remover rol 'Sin Verificar' si está presente
+        if self.settings.sin_verificar_role_id > 0:
+            sin_verificar = discord.utils.get(guild.roles, id=self.settings.sin_verificar_role_id)
+            if sin_verificar is None:
+                sin_verificar = guild.get_role(self.settings.sin_verificar_role_id)
+            if sin_verificar is not None and sin_verificar in target_member.roles:
+                try:
+                    await target_member.remove_roles(sin_verificar)
+                except (discord.Forbidden, discord.HTTPException) as exc:
+                    logger.warning(
+                        "No se pudo remover rol sin verificar de %s: %s",
+                        member_display,
+                        exc,
+                    )
+
+        # Actualizar apodo: "<TAG> <NombreLoL>", sin el Riot Tag
+        nick = nombre_lol
+        if team_tag is not None:
+            nick = apply_team_tag(nick, team_tag, known_tags)
+        else:
+            logger.warning(
+                "El equipo '%s' no existe en base de datos: no se aplica tag al apodo.",
+                equipo_nombre,
+            )
+        nick = nick[:32]
+        try:
+            await target_member.edit(nick=nick)
+        except discord.Forbidden:
+            logger.warning(
+                "Sin permisos para cambiar el apodo de %s a '%s': el bot necesita "
+                "'Gestionar apodos' y un rol por encima del miembro (los dueños del "
+                "servidor nunca pueden ser renombrados).",
+                member_display,
+                nick,
+            )
+        except discord.HTTPException as exc:
+            logger.warning(
+                "No se pudo actualizar el apodo de %s a '%s': %s",
+                member_display,
+                nick,
+                exc,
             )
 
         return True, f"Rol {equipo_nombre} confirmado para {member_display}."
@@ -499,6 +612,9 @@ class RoleService:
             req = await repo.get_by_channel_id(channel_id)
             if req is None or req.estado != RoleRequestStatus.PENDING:
                 return False, "No hay solicitud pendiente asociada a este canal."
+
+            if staff_member.id == req.user_id:
+                return False, "No puedes confirmar ni denegar tu propia solicitud de rol."
 
             await repo.update_status(
                 request_id=req.id,
