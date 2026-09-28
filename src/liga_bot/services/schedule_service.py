@@ -127,10 +127,7 @@ class ScheduleService:
         try:
             async with transactional_session(self.session_factory) as session:
                 result = await session.execute(
-                    text(
-                        "SELECT id FROM rounds "
-                        "WHERE id = :jornada AND id_season_division = :sd"
-                    ),
+                    text("SELECT id FROM rounds WHERE id = :jornada AND id_season_division = :sd"),
                     {"jornada": jornada, "sd": season_division_id},
                 )
                 row = result.first()

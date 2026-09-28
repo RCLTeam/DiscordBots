@@ -1191,9 +1191,7 @@ class TestEnsurePlayer:
 
         assert first.id == second.id
         async with session_factory() as session:
-            result = await session.execute(
-                select(Player).where(Player.discord_user_id == "600101")
-            )
+            result = await session.execute(select(Player).where(Player.discord_user_id == "600101"))
             assert len(result.scalars().all()) == 1
 
     @pytest.mark.asyncio
