@@ -1,4 +1,4 @@
-[⬅️ Volver a Tickets](../tickets/README.md) | [Siguiente: Estrategia de Pruebas ➡️](../../testing/README.md)
+[⬅️ Volver a Tickets](../tickets/README.md) | [Siguiente: Cartelera y Casters ➡️](../casters/README.md)
 
 ---
 

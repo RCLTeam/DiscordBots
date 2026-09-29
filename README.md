@@ -73,6 +73,11 @@ Diseñado bajo una arquitectura modular por capas desacopladas (*vertical slices
   - Servidor WebSocket local seguro con autenticación mediante supertoken secreto.
   - Recepción de sugerencias desde el portal web RCL-Next y publicación automática en canales designados de Discord.
   - Limitador de tasa por ventana deslizante (*Sliding Window Rate Limiter*) para mitigar ataques de denegación de servicio.
+- **Cartelera Interactiva de Casters y Retransmisiones**:
+  - Comando slash `/panel-casters` (y alias `/cartelera-casters`) para publicar y actualizar tarjetas de partidos por jornada en canales de Discord.
+  - Botones dinámicos persistentes ante reinicio (`DynamicItem`) para postulación interactiva en 3 roles: Castear (abierto), Retransmitir (Solo PC, exclusivo) y Ambas mezcladas (Caster + PC, exclusivo), con botón de desapuntado autónomo.
+  - Doble garantía de exclusividad de streamer en capa de servicio y a nivel relacional en PostgreSQL (`uq_match_casters_single_streamer`), con desactivación reactiva de botones en caliente.
+  - Publicación incremental idempotente (`match_caster_cards`), prevención de mensajes duplicados y sincronización in-place automática de horarios modificados.
 
 ---
 
@@ -141,8 +146,10 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │       └── ci.yml                            # Pipeline de CI (linting, tipado estricto y ejecución de tests)
 ├── alembic/                                  # Entorno de migraciones de base de datos relacional
 │   ├── versions/                             # Scripts secuenciales de migración versionada
-│   │   ├── 001_initial_schema.py             # Migración inicial: tablas teams, matches y ticket_notices
-│   │   └── 002_role_requests.py              # Migración de roles: tablas role_requests, discord_users, team_memberships
+│   │   ├── 0000_initial_shared_tables.py     # Tablas compartidas iniciales
+│   │   ├── 0001_bot_tables.py                # Tablas específicas del bot
+│   │   ├── 0002_match_round.py               # Enlace con jornadas
+│   │   └── 0003_match_casters.py             # Migración de casters: tablas match_casters y match_caster_cards
 │   ├── env.py                                # Configuración de ejecución asíncrona de Alembic con SQLAlchemy
 │   └── script.py.mako                        # Plantilla Mako para generación de nuevas revisiones de migración
 ├── docs/                                     # Centro neurálgico de documentación técnica granular
@@ -176,6 +183,12 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │   │   │   ├── commands.md                   # Comandos slash (/crear-partido, /importar-jornada, /crear-jornada, /stream_url, /stream_url_live)
 │   │   │   ├── persistence.md                # Persistencia relacional de partidos, URLs de stream y validación de divisiones
 │   │   │   └── services.md                   # Orquestación de creación segura de canales y plantillas oficiales
+│   │   ├── casters/                          # Cartelera interactiva de casters y retransmisiones
+│   │   │   ├── README.md                     # Índice del módulo de casters y panel de retransmisión
+│   │   │   ├── commands.md                   # Comandos slash (/panel-casters, /cartelera-casters)
+│   │   │   ├── persistence.md                # Modelos MatchCaster, MatchCasterCard y migración 0003
+│   │   │   ├── services.md                   # Lógica de asignación, exclusividad e idempotencia de tarjetas
+│   │   │   └── ui.md                         # Embeds, vistas MatchCasterView y botones persistentes DynamicItem
 │   │   ├── tickets/                          # Auditoría y supervisión de tickets de soporte y fichajes
 │   │   │   ├── README.md                     # Índice del módulo de tickets y soporte
 │   │   │   ├── commands.md                   # Comandos slash de revisión manual y configuración (/revisar-tickets)
@@ -199,6 +212,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │       │   ├── __init__.py                   # Exportación de cogs principales del sistema
 │       │   ├── admin.py                      # Comandos administrativos de bajo nivel y utilidades
 │       │   ├── admin_cog.py                  # Cog de sincronización de comandos slash (/sync, /sincronizar)
+│       │   ├── casters.py                    # Cog de cartelera interactiva de casters y retransmisiones
 │       │   ├── permissions.py                # Verificadores de permisos y decoradores de autorización por rol
 │       │   ├── roles.py                      # Cog y listeners para el flujo de verificación de roles
 │       │   ├── roster.py                     # Implementación interna de comandos de gestión de plantillas
@@ -212,6 +226,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │       ├── models/                           # Modelos declarativos SQLAlchemy 2.0 (esquemas relacionales)
 │       │   ├── __init__.py                   # Exportación de modelos para registro en metadata
 │       │   ├── base.py                       # Clase base declarativa (AsyncAttrs, DeclarativeBase, UUIDPrimaryKey)
+│       │   ├── caster.py                     # Entidades MatchCaster, MatchCasterCard y enum CasterRole
 │       │   ├── enums.py                      # Enumeraciones Python respaldadas por tipos ENUM de PostgreSQL
 │       │   ├── match.py                      # Entidad Match (partidos, canales de Discord, fechas y estados)
 │       │   ├── role_request.py               # Entidad RoleRequest (solicitudes de rol, apodos y resoluciones)
@@ -221,6 +236,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │       ├── repositories/                     # Capa de abstracción y persistencia relacional (patrón Repository)
 │       │   ├── __init__.py                   # Exportación de repositorios del sistema
 │       │   ├── base.py                       # Repositorio base genérico asíncrono con operaciones CRUD estándar
+│       │   ├── caster_repo.py                # Consultas para asignaciones de casters y tarjetas de partidos
 │       │   ├── match_repo.py                 # Consultas especializadas sobre partidos y fechas de juego
 │       │   ├── role_request_repo.py          # Consultas para solicitudes de rol por usuario y estado
 │       │   ├── roster_repo.py                # Consultas atómicas de membresías de equipo y conciliación de roles
@@ -229,6 +245,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │       ├── services/                         # Capa de servicios de dominio y orquestación de negocio
 │       │   ├── __init__.py                   # Exportación de servicios inyectables en el contenedor del bot
 │       │   ├── bridge_protocol.py            # Serialización, validación y deserialización de mensajes WebSocket
+│       │   ├── caster_service.py             # Orquestación de casteo, exclusividad de streamer e idempotencia
 │       │   ├── rate_limiter.py               # Algoritmo de ventana deslizante para limitación de tasa por IP/origen
 │       │   ├── role_service.py               # Lógica de verificación de solicitudes de rol y asignación atómica
 │       │   ├── roster_sync_service.py        # Conciliación y sincronización de roles de equipo con Discord
@@ -238,6 +255,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │       │   └── websocket_bridge_service.py   # Servidor WebSocket asíncrono aiohttp para integración con RCL-Next
 │       ├── ui/                               # Componentes interactivos de usuario de Discord (discord.ui)
 │       │   ├── __init__.py                   # Exportación de vistas y componentes interactivos
+│       │   ├── casters.py                    # Embeds, vistas y botones persistentes DynamicItem para casters
 │       │   ├── roles.py                      # Formularios modales y vistas con botones de aprobación de roles
 │       │   └── roster.py                     # Vistas interactivas de confirmación y selección de plantillas
 │       ├── utils/                            # Utilidades auxiliares y funciones de formateo
@@ -501,6 +519,11 @@ Toda la documentación técnica se encuentra modularizada bajo el directorio [`d
     - [Comandos Slash (`commands.md`)](docs/features/schedule/commands.md)
     - [Servicio de Partidos y Canales (`services.md`)](docs/features/schedule/services.md)
     - [Persistencia de Enfrentamientos (`persistence.md`)](docs/features/schedule/persistence.md)
+  - 🎙️ [**Cartelera y Casters (`docs/features/casters/README.md`)**](docs/features/casters/README.md):
+    - [Comandos Slash (`commands.md`)](docs/features/casters/commands.md)
+    - [Servicio de Casters (`services.md`)](docs/features/casters/services.md)
+    - [Componentes UI y DynamicItem (`ui.md`)](docs/features/casters/ui.md)
+    - [Persistencia Relacional (`persistence.md`)](docs/features/casters/persistence.md)
 - 🧪 [**Subsistema de Testing (`docs/testing/README.md`)**](docs/testing/README.md):
   - [Estrategia de Pruebas (`strategy.md`)](docs/testing/strategy.md): Pirámide de 4 niveles, fixtures y aislamiento.
   - [Catálogo de Suites (`suites.md`)](docs/testing/suites.md): Detalle de las 49 suites y distribución de casos.
