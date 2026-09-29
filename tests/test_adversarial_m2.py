@@ -208,8 +208,7 @@ class TestHighConcurrencyRaceConditions:
             caster_service.assign_caster(sample_match.id, uid, CasterRole.STREAMER)
             for uid in streamer_uids
         ] + [
-            caster_service.assign_caster(sample_match.id, uid, CasterRole.BOTH)
-            for uid in both_uids
+            caster_service.assign_caster(sample_match.id, uid, CasterRole.BOTH) for uid in both_uids
         ]
 
         results = await asyncio.gather(*tasks)
@@ -345,8 +344,7 @@ class TestHighConcurrencyRaceConditions:
         assert len(successes) == 1, f"Expected 1 winner, got {len(successes)}"
         assert len(failures) == 1, f"Expected 1 failure, got {len(failures)}"
         assert (
-            failures[0].error
-            == "Ya hay una persona asignada a la retransmisión de este partido."
+            failures[0].error == "Ya hay una persona asignada a la retransmisión de este partido."
         )
         assert failures[0].data.has_streamer is True
 
@@ -515,13 +513,17 @@ class TestRapidTogglingAndStateInvariants:
         # Verificación final en BD
         async with session_factory() as session:
             streamers = (
-                await session.execute(
-                    select(MatchCaster).where(
-                        MatchCaster.match_id == sample_match.id,
-                        MatchCaster.caster_role.in_([CasterRole.STREAMER, CasterRole.BOTH]),
+                (
+                    await session.execute(
+                        select(MatchCaster).where(
+                            MatchCaster.match_id == sample_match.id,
+                            MatchCaster.caster_role.in_([CasterRole.STREAMER, CasterRole.BOTH]),
+                        )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             assert len(streamers) <= 1, (
                 f"Invariant violated: found {len(streamers)} streamers in DB!"
             )
@@ -536,9 +538,7 @@ class TestEdgeInputsAndBoundaries:
     """Challenge 3: Edge inputs, negative IDs, zero, empty/whitespace strings, bigints."""
 
     @pytest.mark.asyncio
-    async def test_negative_user_id(
-        self, caster_service: CasterService, sample_match: Match
-    ):
+    async def test_negative_user_id(self, caster_service: CasterService, sample_match: Match):
         """ID de usuario negativo es rechazado limpiamente."""
         neg_uid = -12345
         res = await caster_service.assign_caster(sample_match.id, neg_uid, CasterRole.CASTER)
@@ -549,9 +549,7 @@ class TestEdgeInputsAndBoundaries:
         assert rem_res.error == "ID de usuario de Discord inválido."
 
     @pytest.mark.asyncio
-    async def test_zero_user_id(
-        self, caster_service: CasterService, sample_match: Match
-    ):
+    async def test_zero_user_id(self, caster_service: CasterService, sample_match: Match):
         """ID de usuario cero es rechazado limpiamente."""
         res = await caster_service.assign_caster(sample_match.id, 0, CasterRole.STREAMER)
         assert res.success is False
@@ -598,23 +596,17 @@ class TestEdgeInputsAndBoundaries:
         assert "Rol de casteo inválido" in res2.error
 
     @pytest.mark.asyncio
-    async def test_invalid_role_name(
-        self, caster_service: CasterService, sample_match: Match
-    ):
+    async def test_invalid_role_name(self, caster_service: CasterService, sample_match: Match):
         """Rol inválido (ej. 'ADMIN', 'CO_STREAMER') es rechazado limpiamente."""
         res = await caster_service.assign_caster(sample_match.id, 123, "CO_STREAMER")
         assert res.success is False
         assert "Rol de casteo inválido" in res.error
 
     @pytest.mark.asyncio
-    async def test_max_bigint_user_id(
-        self, caster_service: CasterService, sample_match: Match
-    ):
+    async def test_max_bigint_user_id(self, caster_service: CasterService, sample_match: Match):
         """Límite superior de PostgreSQL BIGINT (2^63 - 1 = 9223372036854775807)."""
         max_bigint = 9223372036854775807
-        res = await caster_service.assign_caster(
-            sample_match.id, max_bigint, CasterRole.STREAMER
-        )
+        res = await caster_service.assign_caster(sample_match.id, max_bigint, CasterRole.STREAMER)
         assert res.success is True
         assert res.data.streamer.discord_user_id == max_bigint
 
@@ -625,19 +617,17 @@ class TestEdgeInputsAndBoundaries:
         """Desbordamiento de BIGINT (2^63 = 9223372036854775808): cómo reacciona."""
         overflow_val = 9223372036854775808
         try:
-            await caster_service.assign_caster(
-                sample_match.id, overflow_val, CasterRole.CASTER
-            )
+            await caster_service.assign_caster(sample_match.id, overflow_val, CasterRole.CASTER)
         except (DataError, DBAPIError):
             assert True
 
     @pytest.mark.asyncio
-    async def test_empty_string_user_id(
-        self, caster_service: CasterService, sample_match: Match
-    ):
+    async def test_empty_string_user_id(self, caster_service: CasterService, sample_match: Match):
         """user_id como string vacío es rechazado limpiamente."""
         res: CasterAssignmentResult = await caster_service.assign_caster(
-            sample_match.id, "", CasterRole.CASTER  # type: ignore[arg-type]
+            sample_match.id,
+            "",
+            CasterRole.CASTER,  # type: ignore[arg-type]
         )
         assert res.success is False
         assert res.error == "ID de usuario de Discord inválido."
@@ -648,7 +638,9 @@ class TestEdgeInputsAndBoundaries:
     ):
         """user_id como whitespace string es rechazado limpiamente."""
         res: CasterAssignmentResult = await caster_service.assign_caster(
-            sample_match.id, "   ", CasterRole.CASTER  # type: ignore[arg-type]
+            sample_match.id,
+            "   ",
+            CasterRole.CASTER,  # type: ignore[arg-type]
         )
         assert res.success is False
         assert res.error == "ID de usuario de Discord inválido."

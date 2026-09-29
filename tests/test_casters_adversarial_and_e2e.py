@@ -56,21 +56,16 @@ async def clean_database(
     _engine_locks[migrated_db] = asyncio.Lock()
     async with session_factory() as s:
         await s.execute(
-            text(
-                "TRUNCATE TABLE match_casters, match_caster_cards, matches, teams CASCADE;"
-            )
+            text("TRUNCATE TABLE match_casters, match_caster_cards, matches, teams CASCADE;")
         )
         await s.commit()
     yield
     _engine_locks[migrated_db] = asyncio.Lock()
     async with session_factory() as s:
         await s.execute(
-            text(
-                "TRUNCATE TABLE match_casters, match_caster_cards, matches, teams CASCADE;"
-            )
+            text("TRUNCATE TABLE match_casters, match_caster_cards, matches, teams CASCADE;")
         )
         await s.commit()
-
 
 
 @pytest.fixture
@@ -117,9 +112,7 @@ def make_mock_user(
     return user
 
 
-def make_mock_channel(
-    channel_id: int = 987654321, name: str = "casters-panel"
-) -> MagicMock:
+def make_mock_channel(channel_id: int = 987654321, name: str = "casters-panel") -> MagicMock:
     """Crea un mock de discord.TextChannel."""
     chan = MagicMock(spec=discord.TextChannel)
     chan.id = channel_id
@@ -214,7 +207,6 @@ async def create_db_teams(
         return t1, t2
 
 
-
 async def create_db_match(
     session_factory: async_sessionmaker[AsyncSession],
     team1_id: uuid.UUID,
@@ -260,9 +252,7 @@ class TestTier1FeatureCoverage:
         test_settings: Settings,
     ) -> None:
         """Verifica la ejecución E2E del comando /panel-casters con partidos reales."""
-        t1, t2 = await create_db_teams(
-            session_factory, "Fnatic", "G2 Esports"
-        )
+        t1, t2 = await create_db_teams(session_factory, "Fnatic", "G2 Esports")
         m1 = await create_db_match(session_factory, t1.id, t2.id, jornada=1)
 
         channel = make_mock_channel(channel_id=987654321)
@@ -290,9 +280,7 @@ class TestTier1FeatureCoverage:
             session_factory=session_factory,
         )
 
-        await cog.panel_casters.callback(
-            cog, interaction, jornada=1, canal=channel
-        )
+        await cog.panel_casters.callback(cog, interaction, jornada=1, canal=channel)
 
         interaction.response.defer.assert_awaited_once_with(ephemeral=True)
         channel.send.assert_awaited_once()
@@ -327,9 +315,7 @@ class TestTier1FeatureCoverage:
         test_settings: Settings,
     ) -> None:
         """Verifica la ejecución E2E del comando alias /cartelera-casters."""
-        t1, t2 = await create_db_teams(
-            session_factory, "Movistar KOI", "Team Heretics"
-        )
+        t1, t2 = await create_db_teams(session_factory, "Movistar KOI", "Team Heretics")
         m1 = await create_db_match(session_factory, t1.id, t2.id, jornada=1)
 
         channel = make_mock_channel(channel_id=987654321)
@@ -353,9 +339,7 @@ class TestTier1FeatureCoverage:
             session_factory=session_factory,
         )
 
-        await cog.cartelera_casters.callback(
-            cog, interaction, jornada=1, canal=channel
-        )
+        await cog.cartelera_casters.callback(cog, interaction, jornada=1, canal=channel)
 
         channel.send.assert_awaited_once()
         card = await caster_service.get_card(m1.id, channel.id)
@@ -379,9 +363,7 @@ class TestTier1FeatureCoverage:
         3. Ambas mezcladas (both) -> Muestra (Caster + PC), botones stream/both deshabilitados.
         4. Desapuntarse (leave) -> Restablece vacante, botones stream/both rehabilitados.
         """
-        t1, t2 = await create_db_teams(
-            session_factory, "GiantX", "MAD Lions KOI"
-        )
+        t1, t2 = await create_db_teams(session_factory, "GiantX", "MAD Lions KOI")
         match = await create_db_match(session_factory, t1.id, t2.id, jornada=1)
 
         user_id = 888111222
@@ -453,9 +435,9 @@ class TestTier1FeatureCoverage:
         embed_both: discord.Embed = kwargs_both["embed"]
         view_both: MatchCasterView = kwargs_both["view"]
 
-        streamer_both_field = [
-            f.value for f in embed_both.fields if f.name == "📺 Retransmisión"
-        ][0]
+        streamer_both_field = [f.value for f in embed_both.fields if f.name == "📺 Retransmisión"][
+            0
+        ]
         assert f"<@{user_id}> (Caster + PC)" == streamer_both_field
         assert view_both.btn_stream.disabled is True
         assert view_both.btn_both.disabled is True
@@ -532,16 +514,12 @@ class TestTier2BoundaryAndCornerCases:
         assert res_caster.success is True
 
         # 3. Registrar tarjeta con snowflakes extremos
-        card = await caster_service.record_card(
-            match.id, max_snowflake_channel, max_snowflake_msg
-        )
+        card = await caster_service.record_card(match.id, max_snowflake_channel, max_snowflake_msg)
         assert card.channel_id == max_snowflake_channel
         assert card.message_id == max_snowflake_msg
 
         # 4. Validar recuperación desde BD
-        recovered_card = await caster_service.get_card(
-            match.id, max_snowflake_channel
-        )
+        recovered_card = await caster_service.get_card(match.id, max_snowflake_channel)
         assert recovered_card is not None
         assert recovered_card.message_id == max_snowflake_msg
 
@@ -552,12 +530,14 @@ class TestTier2BoundaryAndCornerCases:
 
         # 5. Renderizado en embed sin desbordamiento ni truncamiento
         embed = build_match_caster_embed(match, casters_data)
-        assert f"<@{max_snowflake_user}> (Solo PC)" in [
-            f.value for f in embed.fields if f.name == "📺 Retransmisión"
-        ][0]
-        assert f"<@{min_snowflake_user}>" in [
-            f.value for f in embed.fields if f.name == "🎙️ Casters"
-        ][0]
+        assert (
+            f"<@{max_snowflake_user}> (Solo PC)"
+            in [f.value for f in embed.fields if f.name == "📺 Retransmisión"][0]
+        )
+        assert (
+            f"<@{min_snowflake_user}>"
+            in [f.value for f in embed.fields if f.name == "🎙️ Casters"][0]
+        )
 
         # 6. Ejecución de botón con interacción de usuario max_snowflake
         user_max = make_mock_user(user_id=max_snowflake_user)
@@ -582,9 +562,7 @@ class TestTier2BoundaryAndCornerCases:
         y funcione el flujo.
         """
         t1, t2 = await create_db_teams(session_factory)
-        match = await create_db_match(
-            session_factory, t1.id, t2.id, jornada=1, scheduled_at=None
-        )
+        match = await create_db_match(session_factory, t1.id, t2.id, jornada=1, scheduled_at=None)
 
         casters_data = await caster_service.get_match_casters_data(match.id)
         embed = build_match_caster_embed(match, casters_data)
@@ -775,9 +753,7 @@ class TestTier3CrossFeatureInteractions:
         btn_stream = CasterActionButton(action="stream", match_id=match.id)
         btn_both = CasterActionButton(action="both", match_id=match.id)
 
-        await asyncio.gather(
-            btn_stream.callback(inter_stream), btn_both.callback(inter_both)
-        )
+        await asyncio.gather(btn_stream.callback(inter_stream), btn_both.callback(inter_both))
 
         assert (
             inter_stream.response.edit_message.await_count
@@ -1056,9 +1032,7 @@ class TestTier4RealWorldScenarios:
             caster_service=caster_service,
             session_factory=session_factory,
         )
-        await cog.panel_casters.callback(
-            cog, inter_sync, jornada=1, canal=channel
-        )
+        await cog.panel_casters.callback(cog, inter_sync, jornada=1, canal=channel)
 
         mock_msg.edit.assert_awaited_once()
         updated_embed: discord.Embed = mock_msg.edit.await_args[1]["embed"]
@@ -1069,9 +1043,9 @@ class TestTier4RealWorldScenarios:
         assert f"<t:{new_ts}:F>" in horario_val
 
         # Validar preservación de streamer y caster
-        retransmision_val = [
-            f.value for f in updated_embed.fields if f.name == "📺 Retransmisión"
-        ][0]
+        retransmision_val = [f.value for f in updated_embed.fields if f.name == "📺 Retransmisión"][
+            0
+        ]
         assert "<@4001> (Solo PC)" in retransmision_val
         casters_val = [f.value for f in updated_embed.fields if f.name == "🎙️ Casters"][0]
         assert "<@4002>" in casters_val
@@ -1098,9 +1072,7 @@ class TestTier4RealWorldScenarios:
         match = await create_db_match(session_factory, t1.id, t2.id, jornada=1)
 
         # Simular nueva instancia fresca de bot tras reinicio
-        fresh_service = CasterService(
-            session_factory=session_factory, settings=test_settings
-        )
+        fresh_service = CasterService(session_factory=session_factory, settings=test_settings)
 
         custom_id = f"caster:stream:{match.id}"
         pattern = CasterActionButton.__discord_ui_compiled_template__
@@ -1184,9 +1156,7 @@ class TestTier5AdversarialCoverageHardening:
         new_message_id = 999222
 
         # Preinsertar la tarjeta con el message_id que será 'eliminado'
-        await caster_service.record_card(
-            match.id, channel.id, stale_message_id
-        )
+        await caster_service.record_card(match.id, channel.id, stale_message_id)
 
         # Simular que fetch_message lanza NotFound
         channel.fetch_message = AsyncMock(

@@ -54,9 +54,7 @@ class CasterService:
         self.settings = settings or get_settings()
         self.bot = bot
 
-    async def _build_casters_data(
-        self, repo: CasterRepository, match_id: UUID
-    ) -> MatchCastersData:
+    async def _build_casters_data(self, repo: CasterRepository, match_id: UUID) -> MatchCastersData:
         """Construye la proyección de estado MatchCastersData a partir de las asignaciones."""
         assignments = await repo.get_match_assignments(match_id)
         streamer = next(
@@ -64,9 +62,7 @@ class CasterService:
             None,
         )
         has_streamer = streamer is not None
-        casters = [
-            c for c in assignments if c.caster_role in (CasterRole.CASTER, CasterRole.BOTH)
-        ]
+        casters = [c for c in assignments if c.caster_role in (CasterRole.CASTER, CasterRole.BOTH)]
         return MatchCastersData(
             has_streamer=has_streamer,
             streamer=streamer,
@@ -180,9 +176,7 @@ class CasterService:
                 error="Error de integridad en la asignación.",
             )
 
-    async def remove_caster(
-        self, match_id: UUID | str, user_id: Any
-    ) -> CasterAssignmentResult:
+    async def remove_caster(self, match_id: UUID | str, user_id: Any) -> CasterAssignmentResult:
         """Desasigna a un usuario del partido y devuelve el nuevo estado."""
         clean_id = _clean_uuid(match_id)
         if clean_id is None:
@@ -220,9 +214,7 @@ class CasterService:
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
-    async def get_matches_for_jornada(
-        self, jornada: int | None = None
-    ) -> Sequence[Match]:
+    async def get_matches_for_jornada(self, jornada: int | None = None) -> Sequence[Match]:
         """Obtiene los partidos de una jornada con equipos y casters cargados eager.
 
         Si jornada es None, resuelve automáticamente la última jornada activa.
@@ -279,9 +271,7 @@ class CasterService:
             repo = CasterRepository(session)
             return await repo.record_card(match_id, channel_id, message_id)
 
-    async def get_card(
-        self, match_id: UUID | str, channel_id: int
-    ) -> MatchCasterCard | None:
+    async def get_card(self, match_id: UUID | str, channel_id: int) -> MatchCasterCard | None:
         """Obtiene el registro de tarjeta publicada de un partido en un canal."""
         async with transactional_session(self.session_factory) as session:
             repo = CasterRepository(session)
@@ -293,17 +283,13 @@ class CasterService:
             repo = CasterRepository(session)
             return await repo.delete_card(match_id, channel_id)
 
-    async def list_cards_for_channel(
-        self, channel_id: int
-    ) -> Sequence[MatchCasterCard]:
+    async def list_cards_for_channel(self, channel_id: int) -> Sequence[MatchCasterCard]:
         """Lista todas las tarjetas publicadas en un canal."""
         async with transactional_session(self.session_factory) as session:
             repo = CasterRepository(session)
             return await repo.list_cards_for_channel(channel_id)
 
-    async def get_unposted_matches(
-        self, jornada: int, channel_id: int
-    ) -> Sequence[Match]:
+    async def get_unposted_matches(self, jornada: int, channel_id: int) -> Sequence[Match]:
         """Obtiene los partidos de la jornada que no tienen tarjeta publicada en el canal."""
         async with transactional_session(self.session_factory) as session:
             repo = CasterRepository(session)

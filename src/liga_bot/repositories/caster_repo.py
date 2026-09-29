@@ -57,9 +57,7 @@ class CasterRepository(BaseRepository[MatchCaster]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, MatchCaster)
 
-    async def get_match_assignments(
-        self, match_id: UUID | str
-    ) -> Sequence[MatchCaster]:
+    async def get_match_assignments(self, match_id: UUID | str) -> Sequence[MatchCaster]:
         """Recupera todas las asignaciones de un partido ordenadas cronológicamente."""
         clean_id = _clean_uuid(match_id)
         if clean_id is None:
@@ -73,9 +71,7 @@ class CasterRepository(BaseRepository[MatchCaster]):
         result = await self._session.execute(stmt)
         return result.scalars().all()
 
-    async def get_user_assignment(
-        self, match_id: UUID | str, user_id: Any
-    ) -> MatchCaster | None:
+    async def get_user_assignment(self, match_id: UUID | str, user_id: Any) -> MatchCaster | None:
         """Recupera la asignación específica de un usuario en un partido."""
         clean_id = _clean_uuid(match_id)
         clean_uid = _clean_user_id(user_id)
@@ -92,9 +88,7 @@ class CasterRepository(BaseRepository[MatchCaster]):
         result = await self._session.execute(stmt)
         return result.scalars().first()
 
-    async def get_streamer_assignment(
-        self, match_id: UUID | str
-    ) -> MatchCaster | None:
+    async def get_streamer_assignment(self, match_id: UUID | str) -> MatchCaster | None:
         """Recupera la asignación activa que retransmite el partido (rol STREAMER o BOTH)."""
         clean_id = _clean_uuid(match_id)
         if clean_id is None:
@@ -208,9 +202,7 @@ class CasterRepository(BaseRepository[MatchCaster]):
         await self._session.refresh(entity)
         return entity
 
-    async def get_card(
-        self, match_id: UUID | str, channel_id: int
-    ) -> MatchCasterCard | None:
+    async def get_card(self, match_id: UUID | str, channel_id: int) -> MatchCasterCard | None:
         """Obtiene el registro de tarjeta publicada para un partido y canal."""
         clean_id = _clean_uuid(match_id)
         if clean_id is None:
@@ -238,9 +230,7 @@ class CasterRepository(BaseRepository[MatchCaster]):
         await self._session.flush()
         return True
 
-    async def list_cards_for_channel(
-        self, channel_id: int
-    ) -> Sequence[MatchCasterCard]:
+    async def list_cards_for_channel(self, channel_id: int) -> Sequence[MatchCasterCard]:
         """Lista todas las tarjetas publicadas en un canal específico."""
         stmt = (
             select(MatchCasterCard)
@@ -251,14 +241,9 @@ class CasterRepository(BaseRepository[MatchCaster]):
         result = await self._session.execute(stmt)
         return result.scalars().all()
 
-    async def list_unposted_matches(
-        self, jornada: int, channel_id: int
-    ) -> Sequence[Match]:
+    async def list_unposted_matches(self, jornada: int, channel_id: int) -> Sequence[Match]:
         """Lista partidos de una jornada que aún no tienen tarjeta registrada en un canal."""
-        subquery = (
-            select(MatchCasterCard.match_id)
-            .where(MatchCasterCard.channel_id == channel_id)
-        )
+        subquery = select(MatchCasterCard.match_id).where(MatchCasterCard.channel_id == channel_id)
         stmt = (
             select(Match)
             .where(

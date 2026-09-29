@@ -405,9 +405,7 @@ class TestCasterActionButtonRegexAndProperties:
         mock_item = MagicMock(spec=discord.ui.Button)
         mock_item.disabled = True
 
-        reconstructed = await CasterActionButton.from_custom_id(
-            interaction, mock_item, regex_match
-        )
+        reconstructed = await CasterActionButton.from_custom_id(interaction, mock_item, regex_match)
 
         assert reconstructed.action == action
         assert reconstructed.match_id == m_id

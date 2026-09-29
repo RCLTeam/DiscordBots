@@ -101,9 +101,7 @@ class TestConcurrencyAndRaceConditions:
         await sp1.commit()
 
         # Verify only c1 exists
-        res = await session.execute(
-            select(MatchCaster).where(MatchCaster.match_id == match_id)
-        )
+        res = await session.execute(select(MatchCaster).where(MatchCaster.match_id == match_id))
         rows = res.scalars().all()
         assert len(rows) == 1
         assert rows[0].discord_user_id == 100000000000000001
@@ -209,9 +207,7 @@ class TestConcurrencyAndRaceConditions:
         await session.flush()
         await sp2.commit()
 
-        res = await session.execute(
-            select(MatchCaster).where(MatchCaster.match_id == match_id)
-        )
+        res = await session.execute(select(MatchCaster).where(MatchCaster.match_id == match_id))
         rows = res.scalars().all()
         assert len(rows) == 1
         assert rows[0].discord_user_id == 400000000000000002
@@ -244,9 +240,7 @@ class TestConcurrencyAndRaceConditions:
             await session.flush()
             await sp.commit()
 
-        res = await session.execute(
-            select(MatchCaster).where(MatchCaster.match_id == match_id)
-        )
+        res = await session.execute(select(MatchCaster).where(MatchCaster.match_id == match_id))
         rows = res.scalars().all()
         assert len(rows) == 4
 
@@ -489,9 +483,7 @@ class TestBoundaryCases:
         session.add(caster)
         await session.flush()
 
-        res = await session.execute(
-            select(MatchCaster).where(MatchCaster.id == caster.id)
-        )
+        res = await session.execute(select(MatchCaster).where(MatchCaster.id == caster.id))
         refetched = res.scalar_one()
 
         assert refetched.created_at is not None
@@ -668,9 +660,7 @@ class TestCascadeDeleteRollbackVsCommit:
         c1_id = c1.id
         c2_id = c2.id
 
-        res = await session.execute(
-            select(Match).where(Match.id == match_id)
-        )
+        res = await session.execute(select(Match).where(Match.id == match_id))
         match_obj = res.scalar_one()
         assert len(match_obj.casters) == 2
 

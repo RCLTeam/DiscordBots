@@ -27,9 +27,7 @@ def upgrade() -> None:
     # 1. Creación de ENUM nativo de PostgreSQL para 'caster_role'
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
-        caster_role_enum = postgresql.ENUM(
-            "CASTER", "STREAMER", "BOTH", name="caster_role"
-        )
+        caster_role_enum = postgresql.ENUM("CASTER", "STREAMER", "BOTH", name="caster_role")
         caster_role_enum.create(bind, checkfirst=True)
         caster_role_type = postgresql.ENUM(
             "CASTER",
@@ -109,9 +107,7 @@ def upgrade() -> None:
             name="fk_match_caster_cards_match_id_matches",
             ondelete="CASCADE",
         ),
-        sa.UniqueConstraint(
-            "match_id", "channel_id", name="uq_match_caster_cards_match_channel"
-        ),
+        sa.UniqueConstraint("match_id", "channel_id", name="uq_match_caster_cards_match_channel"),
     )
 
     # 5. Creación de índices para 'match_caster_cards'
@@ -142,7 +138,5 @@ def downgrade() -> None:
     # 3. Eliminación limpia de tipo ENUM en PostgreSQL/PGlite
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
-        caster_role_enum = postgresql.ENUM(
-            "CASTER", "STREAMER", "BOTH", name="caster_role"
-        )
+        caster_role_enum = postgresql.ENUM("CASTER", "STREAMER", "BOTH", name="caster_role")
         caster_role_enum.drop(bind, checkfirst=True)

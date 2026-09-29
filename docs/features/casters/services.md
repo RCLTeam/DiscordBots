@@ -55,18 +55,14 @@ class CasterAssignmentResult:
 A partir de las asignaciones almacenadas en `match_casters` para un partido, el servicio clasifica los roles y extrae la proyección:
 
 ```python
-async def _build_casters_data(
-    self, repo: CasterRepository, match_id: UUID
-) -> MatchCastersData:
+async def _build_casters_data(self, repo: CasterRepository, match_id: UUID) -> MatchCastersData:
     assignments = await repo.get_match_assignments(match_id)
     streamer = next(
         (c for c in assignments if c.caster_role in (CasterRole.STREAMER, CasterRole.BOTH)),
         None,
     )
     has_streamer = streamer is not None
-    casters = [
-        c for c in assignments if c.caster_role in (CasterRole.CASTER, CasterRole.BOTH)
-    ]
+    casters = [c for c in assignments if c.caster_role in (CasterRole.CASTER, CasterRole.BOTH)]
     return MatchCastersData(
         has_streamer=has_streamer,
         streamer=streamer,

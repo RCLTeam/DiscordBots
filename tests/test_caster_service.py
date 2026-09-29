@@ -146,9 +146,7 @@ class TestCasterServiceAssignments:
     ):
         """Asignar rol STREAMER activa has_streamer y rellena la entidad streamer."""
         user_id = 200000000000000001
-        res = await caster_service.assign_caster(
-            sample_match.id, user_id, CasterRole.STREAMER
-        )
+        res = await caster_service.assign_caster(sample_match.id, user_id, CasterRole.STREAMER)
 
         assert res.success is True
         assert res.data is not None
@@ -165,9 +163,7 @@ class TestCasterServiceAssignments:
     ):
         """Asignar rol BOTH cuenta como streamer y como caster."""
         user_id = 300000000000000001
-        res = await caster_service.assign_caster(
-            sample_match.id, user_id, CasterRole.BOTH
-        )
+        res = await caster_service.assign_caster(sample_match.id, user_id, CasterRole.BOTH)
 
         assert res.success is True
         assert res.data is not None
@@ -184,14 +180,10 @@ class TestCasterServiceAssignments:
     ):
         """Si ya existe un streamer, otro usuario no puede asignarse como STREAMER."""
         u1, u2 = 400000000000000001, 400000000000000002
-        res1 = await caster_service.assign_caster(
-            sample_match.id, u1, CasterRole.STREAMER
-        )
+        res1 = await caster_service.assign_caster(sample_match.id, u1, CasterRole.STREAMER)
         assert res1.success is True
 
-        res2 = await caster_service.assign_caster(
-            sample_match.id, u2, CasterRole.STREAMER
-        )
+        res2 = await caster_service.assign_caster(sample_match.id, u2, CasterRole.STREAMER)
         assert res2.success is False
         assert res2.action == "assign"
         assert res2.error == "Ya hay una persona asignada a la retransmisión de este partido."
@@ -207,9 +199,7 @@ class TestCasterServiceAssignments:
         u1, u2 = 500000000000000001, 500000000000000002
         await caster_service.assign_caster(sample_match.id, u1, CasterRole.STREAMER)
 
-        res2 = await caster_service.assign_caster(
-            sample_match.id, u2, CasterRole.BOTH
-        )
+        res2 = await caster_service.assign_caster(sample_match.id, u2, CasterRole.BOTH)
         assert res2.success is False
         assert res2.error == "Ya hay una persona asignada a la retransmisión de este partido."
         assert res2.data.streamer.discord_user_id == u1
@@ -222,9 +212,7 @@ class TestCasterServiceAssignments:
         u1, u2 = 600000000000000001, 600000000000000002
         await caster_service.assign_caster(sample_match.id, u1, CasterRole.BOTH)
 
-        res2 = await caster_service.assign_caster(
-            sample_match.id, u2, CasterRole.STREAMER
-        )
+        res2 = await caster_service.assign_caster(sample_match.id, u2, CasterRole.STREAMER)
         assert res2.success is False
         assert res2.error == "Ya hay una persona asignada a la retransmisión de este partido."
 
@@ -236,9 +224,7 @@ class TestCasterServiceAssignments:
         user_id = 700000000000000001
         await caster_service.assign_caster(sample_match.id, user_id, CasterRole.CASTER)
 
-        res = await caster_service.assign_caster(
-            sample_match.id, user_id, CasterRole.STREAMER
-        )
+        res = await caster_service.assign_caster(sample_match.id, user_id, CasterRole.STREAMER)
         assert res.success is True
         assert res.data.has_streamer is True
         assert res.data.streamer.discord_user_id == user_id
@@ -282,9 +268,7 @@ class TestCasterServiceAssignments:
         self, caster_service: CasterService, sample_match: Match
     ):
         """Permite pasar roles como strings válidos."""
-        res = await caster_service.assign_caster(
-            sample_match.id, 111111, "STREAMER"
-        )
+        res = await caster_service.assign_caster(sample_match.id, 111111, "STREAMER")
         assert res.success is True
         assert res.data.has_streamer is True
 
@@ -293,20 +277,14 @@ class TestCasterServiceAssignments:
         self, caster_service: CasterService, sample_match: Match
     ):
         """Retorna error legible si se proporciona un rol inválido."""
-        res = await caster_service.assign_caster(
-            sample_match.id, 111111, "INVALID_ROLE"
-        )
+        res = await caster_service.assign_caster(sample_match.id, 111111, "INVALID_ROLE")
         assert res.success is False
         assert "Rol de casteo inválido" in res.error
 
     @pytest.mark.asyncio
-    async def test_assign_caster_invalid_match_id(
-        self, caster_service: CasterService
-    ):
+    async def test_assign_caster_invalid_match_id(self, caster_service: CasterService):
         """Retorna error de identificador inválido si el match_id no es un UUID válido."""
-        res = await caster_service.assign_caster(
-            "not-a-valid-uuid", 111111, CasterRole.CASTER
-        )
+        res = await caster_service.assign_caster("not-a-valid-uuid", 111111, CasterRole.CASTER)
         assert res.success is False
         assert res.error == "Identificador de partido inválido."
 
@@ -320,9 +298,7 @@ class TestCasterServiceRemoval:
     """Pruebas para desasignaciones de casters y streamers."""
 
     @pytest.mark.asyncio
-    async def test_remove_caster_success(
-        self, caster_service: CasterService, sample_match: Match
-    ):
+    async def test_remove_caster_success(self, caster_service: CasterService, sample_match: Match):
         """Desasignar a un caster lo retira de la lista de casters."""
         u1, u2 = 100001, 100002
         await caster_service.assign_caster(sample_match.id, u1, CasterRole.CASTER)
@@ -365,9 +341,7 @@ class TestCasterServiceRemoval:
         assert len(res.data.casters) == 0
 
     @pytest.mark.asyncio
-    async def test_remove_caster_invalid_match_id(
-        self, caster_service: CasterService
-    ):
+    async def test_remove_caster_invalid_match_id(self, caster_service: CasterService):
         """Retorna error si el match_id no es un UUID válido."""
         res = await caster_service.remove_caster("bad-uuid", 12345)
         assert res.success is False
@@ -441,9 +415,7 @@ class TestJornadaAndMatchesResolution:
     """Pruebas para resolución de jornadas activas y consulta de partidos con relaciones."""
 
     @pytest.mark.asyncio
-    async def test_get_active_jornada_empty_returns_none(
-        self, caster_service: CasterService
-    ):
+    async def test_get_active_jornada_empty_returns_none(self, caster_service: CasterService):
         """Si no hay partidos registrados, get_active_jornada retorna None."""
         active = await caster_service.get_active_jornada()
         assert active is None
@@ -575,9 +547,7 @@ class TestCardIdempotencyAndPublication:
         assert fetched.message_id == 222222
 
     @pytest.mark.asyncio
-    async def test_delete_card(
-        self, caster_service: CasterService, sample_match: Match
-    ):
+    async def test_delete_card(self, caster_service: CasterService, sample_match: Match):
         """delete_card elimina el registro de tarjeta y retorna True si existía."""
         channel_id = 1550210628361392278
         await caster_service.record_card(sample_match.id, channel_id, 123456)
@@ -729,36 +699,28 @@ class TestCasterRepositoryDirect:
     """Pruebas unitarias directas sobre métodos de CasterRepository."""
 
     @pytest.mark.asyncio
-    async def test_repo_get_match_assignments_invalid_uuid(
-        self, db_session: AsyncSession
-    ):
+    async def test_repo_get_match_assignments_invalid_uuid(self, db_session: AsyncSession):
         """get_match_assignments retorna lista vacía ante UUID inválido sin error de BD."""
         repo = CasterRepository(db_session)
         res = await repo.get_match_assignments("invalid-uuid")
         assert res == []
 
     @pytest.mark.asyncio
-    async def test_repo_get_user_assignment_invalid_uuid(
-        self, db_session: AsyncSession
-    ):
+    async def test_repo_get_user_assignment_invalid_uuid(self, db_session: AsyncSession):
         """get_user_assignment retorna None ante UUID inválido."""
         repo = CasterRepository(db_session)
         res = await repo.get_user_assignment("invalid-uuid", 123)
         assert res is None
 
     @pytest.mark.asyncio
-    async def test_repo_get_streamer_assignment_invalid_uuid(
-        self, db_session: AsyncSession
-    ):
+    async def test_repo_get_streamer_assignment_invalid_uuid(self, db_session: AsyncSession):
         """get_streamer_assignment retorna None ante UUID inválido."""
         repo = CasterRepository(db_session)
         res = await repo.get_streamer_assignment("invalid-uuid")
         assert res is None
 
     @pytest.mark.asyncio
-    async def test_repo_assign_raises_on_invalid_uuid(
-        self, db_session: AsyncSession
-    ):
+    async def test_repo_assign_raises_on_invalid_uuid(self, db_session: AsyncSession):
         """assign lanza ValueError si el match_id no es convertible a UUID."""
         repo = CasterRepository(db_session)
         with pytest.raises(ValueError) as exc:
@@ -766,35 +728,27 @@ class TestCasterRepositoryDirect:
         assert "Identificador de partido inválido" in str(exc.value)
 
     @pytest.mark.asyncio
-    async def test_repo_remove_returns_false_on_invalid_uuid(
-        self, db_session: AsyncSession
-    ):
+    async def test_repo_remove_returns_false_on_invalid_uuid(self, db_session: AsyncSession):
         """remove retorna False ante UUID inválido."""
         repo = CasterRepository(db_session)
         res = await repo.remove("bad-uuid", 123)
         assert res is False
 
     @pytest.mark.asyncio
-    async def test_repo_record_card_raises_on_invalid_uuid(
-        self, db_session: AsyncSession
-    ):
+    async def test_repo_record_card_raises_on_invalid_uuid(self, db_session: AsyncSession):
         """record_card lanza ValueError si match_id es inválido."""
         repo = CasterRepository(db_session)
         with pytest.raises(ValueError):
             await repo.record_card("bad-uuid", 123, 456)
 
     @pytest.mark.asyncio
-    async def test_repo_get_card_returns_none_on_invalid_uuid(
-        self, db_session: AsyncSession
-    ):
+    async def test_repo_get_card_returns_none_on_invalid_uuid(self, db_session: AsyncSession):
         """get_card retorna None ante UUID inválido."""
         repo = CasterRepository(db_session)
         assert await repo.get_card("bad-uuid", 123) is None
 
     @pytest.mark.asyncio
-    async def test_repo_delete_card_returns_false_on_invalid_uuid(
-        self, db_session: AsyncSession
-    ):
+    async def test_repo_delete_card_returns_false_on_invalid_uuid(self, db_session: AsyncSession):
         """delete_card retorna False ante UUID inválido."""
         repo = CasterRepository(db_session)
         assert await repo.delete_card("bad-uuid", 123) is False
@@ -820,16 +774,12 @@ class TestCasterServiceEdgeCasesAndAdversarial:
         )
         monkeypatch.setattr(CasterRepository, "assign", mock_assign)
 
-        res = await caster_service.assign_caster(
-            sample_match.id, 999999, CasterRole.STREAMER
-        )
+        res = await caster_service.assign_caster(sample_match.id, 999999, CasterRole.STREAMER)
         assert res.success is False
         assert res.error == "Ya hay una persona asignada a la retransmisión de este partido."
 
     @pytest.mark.asyncio
-    async def test_get_match_casters_data_non_existent_match(
-        self, caster_service: CasterService
-    ):
+    async def test_get_match_casters_data_non_existent_match(self, caster_service: CasterService):
         """Consultar casters de un partido inexistente retorna estructura vacía segura."""
         import uuid
 
@@ -840,9 +790,7 @@ class TestCasterServiceEdgeCasesAndAdversarial:
         assert data.casters == []
 
     @pytest.mark.asyncio
-    async def test_get_match_casters_data_invalid_uuid(
-        self, caster_service: CasterService
-    ):
+    async def test_get_match_casters_data_invalid_uuid(self, caster_service: CasterService):
         """Consultar casters con UUID corrupto retorna estructura vacía sin error de BD."""
         data = await caster_service.get_match_casters_data("malformed-uuid-12345")
         assert data.has_streamer is False
@@ -850,9 +798,7 @@ class TestCasterServiceEdgeCasesAndAdversarial:
         assert data.casters == []
 
     @pytest.mark.asyncio
-    async def test_get_unposted_matches_empty_jornada(
-        self, caster_service: CasterService
-    ):
+    async def test_get_unposted_matches_empty_jornada(self, caster_service: CasterService):
         """get_unposted_matches retorna lista vacía para jornadas sin partidos."""
         unposted = await caster_service.get_unposted_matches(999, channel_id=12345)
         assert unposted == []
@@ -874,9 +820,7 @@ class TestCasterServiceEdgeCasesAndAdversarial:
         self, caster_service: CasterService, sample_match: Match
     ):
         """String numérico válido de user_id es parseado y asignado como entero."""
-        res = await caster_service.assign_caster(
-            sample_match.id, "123456789", CasterRole.CASTER
-        )
+        res = await caster_service.assign_caster(sample_match.id, "123456789", CasterRole.CASTER)
         assert res.success is True
         assert len(res.data.casters) == 1
         assert res.data.casters[0].discord_user_id == 123456789
@@ -906,9 +850,7 @@ class TestCasterServiceEdgeCasesAndAdversarial:
             assert res_assign.success is False
             assert res_assign.error == "ID de usuario de Discord inválido."
 
-            res_remove = await caster_service.remove_caster(
-                sample_match.id, invalid_uid
-            )
+            res_remove = await caster_service.remove_caster(sample_match.id, invalid_uid)
             assert res_remove.success is False
             assert res_remove.error == "ID de usuario de Discord inválido."
 
@@ -920,9 +862,7 @@ class TestCasterServiceEdgeCasesAndAdversarial:
         import uuid
 
         non_existent_id = uuid.uuid4()
-        res = await caster_service.assign_caster(
-            non_existent_id, 123456, CasterRole.CASTER
-        )
+        res = await caster_service.assign_caster(non_existent_id, 123456, CasterRole.CASTER)
         assert res.success is False
         assert res.error == "El partido especificado no existe."
         assert res.data is not None
@@ -947,9 +887,7 @@ class TestCasterServiceEdgeCasesAndAdversarial:
         )
         monkeypatch.setattr(CasterRepository, "assign", mock_assign)
 
-        res = await caster_service.assign_caster(
-            sample_match.id, 123456, CasterRole.CASTER
-        )
+        res = await caster_service.assign_caster(sample_match.id, 123456, CasterRole.CASTER)
         assert res.success is False
         assert res.error == "Error de integridad en la asignación."
 

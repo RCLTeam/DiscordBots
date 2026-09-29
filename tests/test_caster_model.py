@@ -283,9 +283,7 @@ class TestMatchCasterModel:
         await session.delete(sample_match)
         await session.flush()
 
-        result = await session.execute(
-            select(MatchCaster).where(MatchCaster.id == caster_id)
-        )
+        result = await session.execute(select(MatchCaster).where(MatchCaster.id == caster_id))
         assert result.scalar_one_or_none() is None
 
 
@@ -382,9 +380,7 @@ class TestMatchCasterCardModel:
         await session.delete(sample_match)
         await session.flush()
 
-        result = await session.execute(
-            select(MatchCasterCard).where(MatchCasterCard.id == card_id)
-        )
+        result = await session.execute(select(MatchCasterCard).where(MatchCasterCard.id == card_id))
         assert result.scalar_one_or_none() is None
 
 
@@ -410,9 +406,7 @@ class TestMatchRelationshipsWithCasters:
         await session.flush()
 
         # Reconsultar match con sus relaciones
-        result = await session.execute(
-            select(Match).where(Match.id == sample_match.id)
-        )
+        result = await session.execute(select(Match).where(Match.id == sample_match.id))
         m = result.scalar_one()
 
         assert len(m.casters) == 1
@@ -425,18 +419,14 @@ class TestMatchRelationshipsWithCasters:
         assert m.caster_cards[0].match.id == sample_match.id
 
     @pytest.mark.asyncio
-    async def test_session_factory_fixture(
-        self, session_factory: async_sessionmaker[AsyncSession]
-    ):
+    async def test_session_factory_fixture(self, session_factory: async_sessionmaker[AsyncSession]):
         """Verifica que la fixture compartida session_factory instancie sesiones operativas."""
         async with session_factory() as sess:
             result = await sess.execute(select(MatchCaster).limit(1))
             assert result is not None
 
     @pytest.mark.asyncio
-    async def test_alembic_migration_0003_reversibility(
-        self, migrated_db: AsyncEngine
-    ):
+    async def test_alembic_migration_0003_reversibility(self, migrated_db: AsyncEngine):
         """Verifica la reversibilidad limpia de la migración 0003_match_casters
         (downgrade a 0002 y re-upgrade a head).
         """
