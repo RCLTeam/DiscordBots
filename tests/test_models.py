@@ -65,7 +65,14 @@ class TestMetadataAndParity:
 
     def test_metadata_table_registry(self):
         """Verifica que Base.metadata contenga exactamente las tablas esperadas."""
-        expected_tables = {"teams", "matches", "ticket_notices", "role_requests"}
+        expected_tables = {
+            "teams",
+            "matches",
+            "ticket_notices",
+            "role_requests",
+            "match_casters",
+            "match_caster_cards",
+        }
         assert expected_tables.issubset(set(Base.metadata.tables.keys()))
 
     def test_include_object_filters_shared_tables(self):
@@ -75,7 +82,12 @@ class TestMetadataAndParity:
             assert include_object(None, table_name, "table", True, None) is False
 
         # Tablas gestionadas exclusivamente por LigaBot deben incluirse
-        for table_name in ["ticket_notices", "role_requests"]:
+        for table_name in [
+            "ticket_notices",
+            "role_requests",
+            "match_casters",
+            "match_caster_cards",
+        ]:
             assert include_object(None, table_name, "table", False, None) is True
             assert include_object(None, table_name, "table", True, None) is True
 

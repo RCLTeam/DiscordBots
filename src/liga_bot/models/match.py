@@ -26,6 +26,7 @@ from liga_bot.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from liga_bot.models.enums import Division, MatchStatus
 
 if TYPE_CHECKING:
+    from liga_bot.models.caster import MatchCaster, MatchCasterCard
     from liga_bot.models.roster import SeasonDivision
     from liga_bot.models.team import Team
 
@@ -108,6 +109,22 @@ class Match(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         "Team",
         foreign_keys=[team2_id],
         back_populates="away_matches",
+        lazy="selectin",
+    )
+
+    # Relaciones con casters y tarjetas de publicación
+    casters: Mapped[list[MatchCaster]] = relationship(
+        "MatchCaster",
+        back_populates="match",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        lazy="selectin",
+    )
+    caster_cards: Mapped[list[MatchCasterCard]] = relationship(
+        "MatchCasterCard",
+        back_populates="match",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
         lazy="selectin",
     )
 

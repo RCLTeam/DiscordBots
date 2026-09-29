@@ -118,6 +118,17 @@ class Settings(BaseSettings):
         default="Libre",
         description="Nombre del rol asignado a agentes libres.",
     )
+    casters_channel_id: int = Field(
+        default=1550210628361392278,
+        description="ID del canal de Discord donde se publica el panel de casters.",
+    )
+    caster_role_id: int = Field(
+        default=0,
+        description=(
+            "ID del rol de Discord de caster requerido para interactuar con los botones. "
+            "0 desactiva la restricción de rol."
+        ),
+    )
 
     # Persistencia y Motores Duales
     database_url: str = Field(
