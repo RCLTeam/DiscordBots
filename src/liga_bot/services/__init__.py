@@ -1,6 +1,11 @@
 """Módulo de servicios de dominio de LigaBot."""
 
 from liga_bot.services.bridge_protocol import extract_request_id
+from liga_bot.services.caster_service import (
+    CasterAssignmentResult,
+    CasterService,
+    MatchCastersData,
+)
 from liga_bot.services.rate_limiter import SlidingWindowRateLimiter
 from liga_bot.services.role_service import RoleService
 from liga_bot.services.roster_sync_service import (
@@ -29,11 +34,14 @@ from liga_bot.services.ticket_service import (
 from liga_bot.services.websocket_bridge_service import WebsocketBridgeService
 
 __all__ = [
+    "CasterAssignmentResult",
+    "CasterService",
     "ChannelAuditDetail",
     "ChannelAuditStatus",
     "CompetitivePositionConflictError",
     "InvalidCaptainRoleError",
     "JornadaResult",
+    "MatchCastersData",
     "MatchError",
     "MatchResult",
     "PlayerNotTeamMemberError",

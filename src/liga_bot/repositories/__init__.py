@@ -3,6 +3,7 @@ Módulo de repositorios asíncronos de persistencia para LigaBot.
 """
 
 from liga_bot.repositories.base import BaseRepository
+from liga_bot.repositories.caster_repo import CasterRepository
 from liga_bot.repositories.match_repo import MatchRepository
 from liga_bot.repositories.role_request_repo import RoleRequestRepository
 from liga_bot.repositories.roster_repo import (
@@ -16,6 +17,7 @@ from liga_bot.repositories.ticket_repo import TicketNoticeRepository, TicketRepo
 __all__ = [
     "AuditLogRepository",
     "BaseRepository",
+    "CasterRepository",
     "MatchRepository",
     "RoleRequestRepository",
     "RosterMovementRepository",
