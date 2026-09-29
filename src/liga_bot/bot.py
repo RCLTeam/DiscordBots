@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from liga_bot.config import Settings, get_settings
 from liga_bot.database import close_engine, get_engine, get_session_factory
+from liga_bot.services.caster_service import CasterService
 from liga_bot.services.role_service import RoleService
 from liga_bot.services.roster_sync_service import RosterSyncService
 from liga_bot.services.schedule_service import ScheduleService
@@ -32,6 +33,7 @@ logger = logging.getLogger("liga_bot.bot")
 
 DEFAULT_EXTENSIONS: Final[tuple[str, ...]] = (
     "liga_bot.cogs.admin",
+    "liga_bot.cogs.casters",
     "liga_bot.cogs.roles",
     "liga_bot.cogs.roster",
     "liga_bot.cogs.schedule",
@@ -57,6 +59,7 @@ class LigaBot(commands.Bot):
         *,
         suggestion_service: SuggestionService | None = None,
         websocket_bridge_service: WebsocketBridgeService | None = None,
+        caster_service: CasterService | None = None,
         **kwargs: Any,
     ) -> None:
         resolved_settings = settings or get_settings()
@@ -87,6 +90,7 @@ class LigaBot(commands.Bot):
         self.roster_sync_service: RosterSyncService | None = None
         self.suggestion_service: SuggestionService | None = suggestion_service
         self.websocket_bridge_service: WebsocketBridgeService | None = websocket_bridge_service
+        self.caster_service: CasterService | None = caster_service
 
     async def login(self, token: str) -> None:
         """
@@ -174,6 +178,13 @@ class LigaBot(commands.Bot):
                 bot=self,
                 settings=self.settings,
                 suggestion_service=self.suggestion_service,
+            )
+
+        if self.caster_service is None:
+            self.caster_service = CasterService(
+                session_factory=self.session_factory,
+                settings=self.settings,
+                bot=self,
             )
 
         # 3. Carga de Cogs / Extensiones

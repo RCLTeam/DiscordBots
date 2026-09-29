@@ -8,7 +8,7 @@ import pytest
 import pytest_asyncio
 from alembic.config import Config
 from py_pglite.sqlalchemy.manager_async import SQLAlchemyAsyncPGliteManager
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from alembic import command
 from liga_bot.config import Settings, get_settings
@@ -86,3 +86,9 @@ async def session(migrated_db: AsyncEngine) -> AsyncGenerator[AsyncSession, None
         finally:
             await async_session.close()
             await trans.rollback()
+
+
+@pytest.fixture
+def session_factory(migrated_db: AsyncEngine) -> async_sessionmaker[AsyncSession]:
+    """Proporciona una fábrica async_sessionmaker vinculada a la base de datos migrada."""
+    return async_sessionmaker(bind=migrated_db, expire_on_commit=False)
