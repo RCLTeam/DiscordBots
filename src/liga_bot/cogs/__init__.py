@@ -3,6 +3,7 @@ Cogs package for LigaBot Discord presentation layer.
 """
 
 from liga_bot.cogs.admin import AdminCog
+from liga_bot.cogs.casters import CastersCog
 from liga_bot.cogs.roles import RolesCog
 from liga_bot.cogs.roster import RosterCog
 from liga_bot.cogs.schedule import ScheduleCog
@@ -11,6 +12,7 @@ from liga_bot.cogs.tickets import TicketsCog
 
 __all__ = [
     "AdminCog",
+    "CastersCog",
     "RolesCog",
     "RosterCog",
     "ScheduleCog",

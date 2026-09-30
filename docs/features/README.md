@@ -22,6 +22,7 @@ Esta separación por responsabilidades garantiza que las reglas de negocio de ca
 | [**Solicitudes de Roles**](roles/README.md) | Flujo interactivo de onboarding y verificación de miembros: comandos `/pedir-rol` y `/asignar-rol`, modales interactivos de Discord, aprobación por staff y asignación atómica de roles y apodos. | `role_service.py`, `cogs/roles/`, `ui/roles.py`, `role_request_repo.py` | [Índice Roles](roles/README.md) |
 | [**Tickets y Soporte**](tickets/README.md) | Sistema de soporte mediante tickets privados en canales dedicados de Discord, avisos de inactividad, cierre ordenado y transcripciones para el equipo de administración. | `ticket_service.py`, `cogs/tickets/`, `cogs/admin/`, `ticket_notice_repo.py` | [Índice Tickets](tickets/README.md) |
 | [**Calendario y Partidos**](schedule/README.md) | Programación de partidos de liga, seguimiento de resultados deportivos, publicación periódica de cronogramas y validación de zonas horarias. | `schedule_service.py`, `cogs/schedule/`, `match_repo.py`, `models/match.py` | [Índice Schedule](schedule/README.md) |
+| [**Cartelera y Casters**](casters/README.md) | Panel interactivo de casteo y retransmisión para partidos de liga: comandos slash, exclusividad de streamer, casteo múltiple abierto, tarjetas in-place y publicación incremental idempotente. | `cogs/casters.py`, `services/caster_service.py`, `ui/casters.py`, `repositories/caster_repo.py`, `models/caster.py` | [Índice Casters](casters/README.md) |
 
 ---
 
