@@ -224,6 +224,36 @@ class RoleService:
             teams = await TeamRepository(session).list_all()
             return [team.name for team in teams]
 
+    async def _ensure_player(
+        self,
+        member: discord.Member,
+        nombre_lol: str,
+        riot_tag: str,
+        session: AsyncSession | None = None,
+    ) -> bool:
+        """
+        Registra la cuenta de juego del miembro en la tabla players.
+
+        Se invoca en cuanto se conoce el nombre de invocador (solicitud de ticket o
+        asignación directa de Libre), no al confirmar: así el jugador queda registrado
+        aunque nunca llegue a entrar en un equipo.
+        Retorna False si el servicio de plantillas no está disponible.
+        """
+        roster_service = getattr(self.bot, "roster_sync_service", None)
+        if roster_service is None:
+            logger.warning(
+                "RosterSyncService no disponible: no se registra la cuenta de juego de %s.",
+                member.display_name,
+            )
+            return False
+        await roster_service.ensure_player(
+            member=member,
+            game_name=nombre_lol,
+            riot_tag=riot_tag,
+            session=session,
+        )
+        return True
+
     async def assign_free_role(
         self,
         member: discord.Member,
@@ -286,6 +316,12 @@ class RoleService:
         # Registrar solicitud aprobada en base de datos para trazabilidad
         try:
             async with transactional_session(self.session_factory) as session:
+                await self._ensure_player(
+                    member=member,
+                    nombre_lol=nombre_lol,
+                    riot_tag=riot_tag,
+                    session=session,
+                )
                 repo = RoleRequestRepository(session)
                 req = await repo.create_request(
                     user_id=member.id,
@@ -335,6 +371,16 @@ class RoleService:
             active = await repo.get_active_by_user(member.id)
             if active is not None:
                 return False, "Ya tienes una solicitud de rol pendiente.", None
+
+        # 1.b Registrar la cuenta de juego antes de tocar Discord: si falla, no queda
+        #     ni canal ni solicitud huérfanos.
+        try:
+            await self._ensure_player(member=member, nombre_lol=nombre_lol, riot_tag=riot_tag)
+        except Exception as exc:
+            logger.error(
+                "Error al registrar la cuenta de juego de %s: %s", member.display_name, exc
+            )
+            return False, "No se pudo registrar tu cuenta de juego en la base de datos.", None
 
         # 2. Construir sobreescritura de permisos
         overwrites: dict[Any, discord.PermissionOverwrite] = {
@@ -473,16 +519,11 @@ class RoleService:
                         guild.name,
                     )
 
-                # Persistencia atómica: cuenta de juego, plantilla y estado de la solicitud
-                # comparten la sesión, así que un fallo en cualquiera revierte todo el bloque.
+                # Persistencia atómica: plantilla y estado de la solicitud comparten la
+                # sesión, así que un fallo en cualquiera revierte todo el bloque. La cuenta
+                # de juego ya quedó registrada al abrirse el ticket.
                 roster_service = getattr(self.bot, "roster_sync_service", None)
                 if roster_service is not None:
-                    await roster_service.ensure_player(
-                        member=member,
-                        game_name=req.nombre_lol,
-                        riot_tag=req.riot_tag,
-                        session=session,
-                    )
                     if req.posicion and role is not None:
                         await roster_service.transfer_player(
                             member=member,
