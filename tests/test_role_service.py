@@ -1299,7 +1299,7 @@ class TestRoleServiceLifecycleIntegration:
 
 
 class TestConfirmRoleRequestPersistence:
-    """La confirmación registra la cuenta de juego y la plantilla de forma atómica."""
+    """La cuenta de juego se registra al pedir el rol; la confirmación crea la plantilla."""
 
     @pytest_asyncio.fixture
     async def service_con_roster(
@@ -1360,13 +1360,74 @@ class TestConfirmRoleRequestPersistence:
         return guild, staff, member
 
     @pytest.mark.asyncio
-    async def test_confirm_registers_player_and_membership(
+    async def test_ticket_registra_la_cuenta_de_juego(
         self,
         service_con_roster: tuple[RoleService, RosterSyncService],
         session_factory: async_sessionmaker[AsyncSession],
         clean_settings: Settings,
     ):
-        """Confirmar da de alta la cuenta en players y la membresía con su posición."""
+        """Abrir el ticket ya da de alta la cuenta en players, sin esperar a la confirmación."""
+        service, _ = service_con_roster
+        guild = create_mock_guild(clean_settings)
+        member = create_mock_member(700110, name="PideRol", guild=guild)
+        member.global_name = None
+        member.avatar = None
+
+        ok, msg, _ = await service.create_role_request_ticket(
+            guild=guild,
+            member=member,
+            nombre_lol="JugadorLoL",
+            riot_tag="EUW",
+            equipo="Persistencia FC",
+        )
+
+        assert ok is True, msg
+        async with session_factory() as session:
+            player = (
+                (await session.execute(select(Player).where(Player.discord_user_id == "700110")))
+                .scalars()
+                .first()
+            )
+            assert player is not None
+            assert player.game_name == "JugadorLoL"
+            assert player.riot_tag == "EUW"
+
+    @pytest.mark.asyncio
+    async def test_rol_libre_registra_la_cuenta_de_juego(
+        self,
+        service_con_roster: tuple[RoleService, RosterSyncService],
+        session_factory: async_sessionmaker[AsyncSession],
+        clean_settings: Settings,
+    ):
+        """El agente libre nunca abre ticket, así que su cuenta se registra al asignarle el rol."""
+        service, _ = service_con_roster
+        guild = create_mock_guild(clean_settings)
+        member = create_mock_member(700111, name="AgenteLibre", guild=guild)
+        member.global_name = None
+        member.avatar = None
+
+        ok, msg = await service.assign_free_role(
+            member=member, nombre_lol="LibreLoL", riot_tag="EUW"
+        )
+
+        assert ok is True, msg
+        async with session_factory() as session:
+            player = (
+                (await session.execute(select(Player).where(Player.discord_user_id == "700111")))
+                .scalars()
+                .first()
+            )
+            assert player is not None
+            assert player.game_name == "LibreLoL"
+
+    @pytest.mark.asyncio
+    async def test_confirm_registers_membership(
+        self,
+        service_con_roster: tuple[RoleService, RosterSyncService],
+        session_factory: async_sessionmaker[AsyncSession],
+        clean_settings: Settings,
+    ):
+        """Confirmar da de alta la membresía con la posición solicitada."""
         service, _ = service_con_roster
         guild, staff, _ = await self._preparar(
             session_factory, clean_settings, 700100, 778001, "Persistencia FC", 889001
@@ -1378,15 +1439,6 @@ class TestConfirmRoleRequestPersistence:
 
         assert ok is True, msg
         async with session_factory() as session:
-            player = (
-                (await session.execute(select(Player).where(Player.discord_user_id == "700100")))
-                .scalars()
-                .first()
-            )
-            assert player is not None
-            assert player.game_name == "JugadorLoL"
-            assert player.riot_tag == "EUW"
-
             memberships = await TeamMembershipRepository(session).list_by_user("700100")
             assert len(memberships) == 1
             assert memberships[0].role == RosterRole.MID
