@@ -36,7 +36,7 @@ ACTION_CONFIG: dict[str, dict[str, Any]] = {
     },
     "both": {
         "label": "Ambas mezcladas",
-        "emoji": "🎙️📺",
+        "emoji": "🎬",
         "style": discord.ButtonStyle.success,
     },
     "leave": {

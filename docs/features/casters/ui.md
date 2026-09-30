@@ -133,7 +133,7 @@ Cada acción define visualmente su etiqueta, emoji y estilo de botón de Discord
 |---|---|:---:|---|---|---|
 | `cast` | `Castear` | 🎙️ | `primary` | Azul (Blurple) | `CasterRole.CASTER` |
 | `stream` | `Retransmitir` | 📺 | `secondary` | Gris | `CasterRole.STREAMER` |
-| `both` | `Ambas mezcladas` | 🎙️📺 | `success` | Verde | `CasterRole.BOTH` |
+| `both` | `Ambas mezcladas` | 🎬 | `success` | Verde | `CasterRole.BOTH` |
 | `leave` | `Desapuntarse` | ❌ | `danger` | Rojo | *Ninguno (eliminación)* |
 
 ### 4.2 Deserialización en Caliente tras Reinicio (`from_custom_id`)

@@ -12,7 +12,7 @@ El subsistema de Cartelera y Casters gestiona la cobertura audiovisual de los en
 - **Roles de Cobertura y Exclusividad Estricta**: Soporta tres modalidades de asignación mediante botones interactivos:
   - 🎙️ **Castear** (`CASTER`): Narración o análisis por voz. Abierto a cualquier número de participantes simultáneos sin límite superior.
   - 📺 **Retransmitir (Solo PC)** (`STREAMER`): Emisión técnica de la señal de juego desde el cliente de League of Legends. Exclusivo para un único usuario por partido.
-  - 🎙️📺 **Ambas mezcladas** (`BOTH`): Narración simultánea y retransmisión técnica desde el mismo PC. Exclusivo para un único usuario por partido.
+  - 🎬 **Ambas mezcladas** (`BOTH`): Narración simultánea y retransmisión técnica desde el mismo PC. Exclusivo para un único usuario por partido.
   - ❌ **Desapuntarse**: Permite a cualquier usuario retirarse de forma autónoma, rehabilitando en caliente los botones de retransmisión si quien se retira ocupaba dicho puesto.
 - **Garantía Dual de Exclusividad**: La restricción de un único streamer por partido se valida en dos capas desacopladas: a nivel de servicio de dominio (`CasterService.assign_caster`) y a nivel de motor de base de datos relacional mediante el índice único parcial PostgreSQL `uq_match_casters_single_streamer`.
 - **Persistencia Dinámica ante Reinicios (`DynamicItem`)**: Los botones de acción operan como elementos dinámicos (`CasterActionButton`) deserializados en caliente mediante expresiones regulares de su `custom_id` (`^caster:(?P<action>cast|stream|both|leave):(?P<match_id>[0-9a-fA-F-]+)$`), permitiendo atender clics de usuarios incluso si el bot se reinicia tras publicar las tarjetas.
