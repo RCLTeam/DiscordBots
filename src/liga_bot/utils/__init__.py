@@ -12,12 +12,14 @@ from liga_bot.utils.formatting import (
     normalize_slug,
     normalize_tag,
     parse_scheduled_at,
+    strip_team_tag,
 )
 
 __all__ = [
     "MENSAJE_1",
     "MENSAJE_2",
     "apply_team_tag",
+    "strip_team_tag",
     "build_opgg_url",
     "format_match_channel_name",
     "format_mensaje_1",

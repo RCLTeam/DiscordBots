@@ -24,7 +24,7 @@ from liga_bot.config import Settings, get_settings
 from liga_bot.models.enums import RosterRole
 from liga_bot.services.roster_sync_service import RosterSyncError
 from liga_bot.ui.roster import GestionarPosicionView
-from liga_bot.utils.formatting import apply_team_tag
+from liga_bot.utils.formatting import apply_team_tag, strip_team_tag
 
 if TYPE_CHECKING:
     from liga_bot.bot import LigaBot
@@ -351,6 +351,143 @@ class RosterCog(commands.Cog, name="Roster"):
         mensaje = (
             f"✅ {target_member.mention} traspasado{procedencia} a {equipo.mention} "
             f"como **{posicion.value}** (`{nuevo_nick}`)."
+        )
+        if avisos:
+            mensaje += "\n⚠️ Plantilla actualizada, pero " + ", ".join(avisos) + "."
+        await interaction.followup.send(mensaje, ephemeral=True)
+
+    @app_commands.command(
+        name="liberar-jugador",
+        description="Saca a un jugador de la plantilla del equipo indicado (Solo Staff)",
+    )
+    @app_commands.describe(
+        equipo="Rol de Discord del equipo del que se libera al jugador",
+        usuario="Jugador al que se libera",
+    )
+    @app_commands.default_permissions(manage_guild=True)
+    async def liberar_jugador(
+        self,
+        interaction: discord.Interaction,
+        equipo: discord.Role,
+        usuario: discord.Member,
+    ) -> None:
+        """
+        Da de baja al jugador de la plantilla de ese equipo y le retira su rol en Discord.
+
+        La ficha del jugador no se borra. El rol de Libre solo se asigna si tras la baja
+        no le queda ninguna otra plantilla: quien siga, por ejemplo, de coach en otro club
+        conserva ese rol y no pasa a agente libre.
+        """
+        if interaction.guild is None:
+            await interaction.response.send_message(
+                "❌ Este comando solo puede ser ejecutado dentro de un servidor de Discord.",
+                ephemeral=True,
+            )
+            return
+
+        staff_check = is_staff(interaction.user, self.settings)
+        is_authorized = await staff_check if inspect.isawaitable(staff_check) else bool(staff_check)
+        if not is_authorized:
+            await interaction.response.send_message(
+                "❌ Solo el personal de staff puede liberar jugadores.",
+                ephemeral=True,
+            )
+            return
+
+        service = self.roster_sync_service
+        if service is None:
+            await interaction.response.send_message(
+                "❌ El servicio de sincronización de plantillas no está disponible.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        target_member = await resolve_member(usuario) or usuario
+
+        # 1. Base de datos primero: la baja deja registro de movimiento y auditoría.
+        try:
+            dado_de_baja = await service.handle_role_removed(
+                member=target_member,
+                role=equipo,
+                actor_id=interaction.user.id,
+            )
+        except RosterSyncError as exc:
+            await interaction.followup.send(f"❌ {exc}", ephemeral=True)
+            return
+        except Exception as exc:
+            logger.error(
+                "Error al liberar a %s del equipo %s: %s",
+                getattr(target_member, "display_name", str(target_member)),
+                equipo.name,
+                exc,
+                exc_info=True,
+            )
+            await interaction.followup.send(
+                "❌ Ocurrió un error inesperado al registrar la baja.",
+                ephemeral=True,
+            )
+            return
+
+        if not dado_de_baja:
+            await interaction.followup.send(
+                f"⚠️ {target_member.mention} no figura en la plantilla de {equipo.mention}, "
+                "o ese rol no corresponde a ningún equipo registrado.",
+                ephemeral=True,
+            )
+            return
+
+        avisos: list[str] = []
+
+        # 2. Retirar el rol del equipo en Discord
+        if equipo in target_member.roles:
+            try:
+                await target_member.remove_roles(equipo)
+            except (discord.Forbidden, discord.HTTPException) as exc:
+                logger.warning("No se pudo retirar el rol '%s': %s", equipo.name, exc)
+                avisos.append(f"no se pudo retirar el rol {equipo.mention}")
+
+        # 3. Solo queda libre quien no conserve ninguna otra plantilla
+        restantes = await service.get_user_teams(target_member.id)
+        if restantes:
+            equipos = ", ".join(f"**{team.name}** ({m.role.value})" for team, m in restantes)
+            mensaje = (
+                f"✅ {target_member.mention} queda fuera de la plantilla de {equipo.mention}. "
+                f"Sigue en {equipos}, así que no pasa a agente libre."
+            )
+            if avisos:
+                mensaje += "\n⚠️ Plantilla actualizada, pero " + ", ".join(avisos) + "."
+            await interaction.followup.send(mensaje, ephemeral=True)
+            return
+
+        free_role = discord.utils.get(interaction.guild.roles, name=self.settings.free_role_name)
+        if free_role is None:
+            avisos.append(f"el rol '{self.settings.free_role_name}' no existe en el servidor")
+        elif free_role not in target_member.roles:
+            try:
+                await target_member.add_roles(free_role)
+            except (discord.Forbidden, discord.HTTPException) as exc:
+                logger.warning("No se pudo asignar el rol de agente libre: %s", exc)
+                avisos.append(f"no se pudo asignar el rol {free_role.mention}")
+
+        # 4. Apodo sin el tag del equipo
+        try:
+            known_tags = await service.list_team_tags()
+        except Exception as exc:
+            logger.warning("No se pudieron cargar los tags de equipo: %s", exc)
+            known_tags = []
+        nuevo_nick = strip_team_tag(target_member.display_name, known_tags)[:32]
+        if nuevo_nick != target_member.display_name:
+            try:
+                await target_member.edit(nick=nuevo_nick)
+            except (discord.Forbidden, discord.HTTPException) as exc:
+                logger.warning("No se pudo renombrar a '%s': %s", nuevo_nick, exc)
+                avisos.append(f"no se pudo renombrar a `{nuevo_nick}`")
+
+        mensaje = (
+            f"✅ {target_member.mention} liberado de {equipo.mention}. "
+            f"No le queda ninguna otra plantilla, así que pasa a "
+            f"**{self.settings.free_role_name}** (`{nuevo_nick}`)."
         )
         if avisos:
             mensaje += "\n⚠️ Plantilla actualizada, pero " + ", ".join(avisos) + "."
