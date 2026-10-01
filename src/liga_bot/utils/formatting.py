@@ -175,6 +175,24 @@ def apply_team_tag(nick: str, team_tag: str, known_tags: Iterable[str]) -> str:
     return f"{tag} {cleaned_nick}"
 
 
+def strip_team_tag(nick: str, known_tags: Iterable[str]) -> str:
+    """
+    Quita el tag de equipo del principio del apodo, si lo lleva.
+
+    Se usa al dejar a un jugador libre: 'PSP Ninym' -> 'Ninym'. Un apodo que no
+    empieza por un tag conocido se devuelve intacto, igual que uno que solo
+    contiene el tag.
+    """
+    cleaned_nick = nick.strip()
+    known = {normalize_tag(t) for t in known_tags}
+    known.discard("")
+
+    first, _, rest = cleaned_nick.partition(" ")
+    if first.upper() in known and rest.strip():
+        return rest.strip()
+    return cleaned_nick
+
+
 def format_match_channel_name(
     jornada: int,
     team1_tag_or_slug: str,

@@ -21,6 +21,7 @@ from liga_bot.utils.formatting import (
     normalize_slug,
     normalize_tag,
     parse_scheduled_at,
+    strip_team_tag,
 )
 
 # ---------------------------------------------------------------------------
@@ -295,3 +296,24 @@ def test_parse_scheduled_at_entrada_invalida():
     assert parse_scheduled_at("2026-10-02", "17:00") is None
     assert parse_scheduled_at("02/10/2026", "25:00") is None
     assert parse_scheduled_at("", "") is None
+
+
+# ---------------------------------------------------------------------------
+# strip_team_tag
+# ---------------------------------------------------------------------------
+
+
+def test_strip_team_tag_quita_el_tag_inicial():
+    """El tag de equipo del principio desaparece y el resto del apodo se conserva."""
+    assert strip_team_tag("PSP Ninym", ["PSP", "PAN"]) == "Ninym"
+
+
+def test_strip_team_tag_respeta_apodos_sin_tag():
+    """Un apodo que no empieza por un tag conocido se devuelve intacto."""
+    assert strip_team_tag("Ninym Shiro", ["PSP"]) == "Ninym Shiro"
+    assert strip_team_tag("Ninym", ["PSP"]) == "Ninym"
+
+
+def test_strip_team_tag_no_vacia_el_apodo():
+    """Si el apodo es solo el tag, se deja como está en vez de quedarse sin nombre."""
+    assert strip_team_tag("PSP", ["PSP"]) == "PSP"

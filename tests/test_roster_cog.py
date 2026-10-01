@@ -164,6 +164,7 @@ def make_mock_roster_sync_service() -> MagicMock:
     service.handle_role_removed = AsyncMock(return_value=True)
     service.get_user_teams = AsyncMock(return_value=[])
     service.change_player_position = AsyncMock()
+    service.list_team_tags = AsyncMock(return_value=["PSP", "PAN"])
     return service
 
 
@@ -640,3 +641,95 @@ class TestRosterCogCommands:
         msg = args[0] if args else kwargs.get("content", "")
         assert kwargs.get("ephemeral") is True
         assert "error" in str(msg).lower()
+
+
+class TestLiberarJugador:
+    """El comando /liberar-jugador saca al jugador de una plantilla sin borrar su ficha."""
+
+    @staticmethod
+    def _preparar(user_teams_restantes):
+        """Monta cog, staff, jugador con tag en el apodo y el rol del equipo del que se libera."""
+        service = make_mock_roster_sync_service()
+        service.handle_role_removed = AsyncMock(return_value=True)
+        service.get_user_teams = AsyncMock(return_value=user_teams_restantes)
+
+        settings = Settings(staff_role_id=101, ceo_role_id=102, sin_verificar_role_id=202)
+        bot = make_mock_bot(settings=settings, roster_sync_service=service)
+        cog = RosterCog(bot)
+
+        team_role = make_mock_role(1001, "Planar Shock Pingus")
+        free_role = make_mock_role(1999, settings.free_role_name)
+
+        staff_user = make_mock_member(user_id=101, roles=[make_mock_role(101, "Staff")])
+        target = make_mock_member(user_id=555, name="PSP Ninym", roles=[team_role])
+
+        inter = make_mock_interaction(user=staff_user)
+        inter.guild.roles = [team_role, free_role]
+        return cog, service, inter, team_role, free_role, target
+
+    @pytest.mark.asyncio
+    async def test_sin_otras_plantillas_pasa_a_libre(self) -> None:
+        """Sin ninguna otra plantilla: se retira el rol del equipo, entra Libre y cae el tag."""
+        cog, service, inter, team_role, free_role, target = self._preparar([])
+
+        await cog.liberar_jugador.callback(cog, inter, team_role, target)
+
+        service.handle_role_removed.assert_awaited_once()
+        target.remove_roles.assert_awaited_once_with(team_role)
+        target.add_roles.assert_awaited_once_with(free_role)
+        target.edit.assert_awaited_once_with(nick="Ninym")
+
+    @pytest.mark.asyncio
+    async def test_con_otra_plantilla_no_pasa_a_libre(self) -> None:
+        """Quien conserva otra plantilla pierde el rol del equipo pero no se vuelve libre."""
+        otro = make_mock_team(name="Vyronx Pandas", tag="PAN", discord_role_id=1002)
+        membership = make_mock_membership(team=otro, role=RosterRole.COACH)
+        cog, service, inter, team_role, free_role, target = self._preparar([(otro, membership)])
+
+        await cog.liberar_jugador.callback(cog, inter, team_role, target)
+
+        target.remove_roles.assert_awaited_once_with(team_role)
+        target.add_roles.assert_not_awaited()
+        target.edit.assert_awaited_once_with(nick="PAN Ninym")
+        mensaje = inter.followup.send.await_args.args[0]
+        assert "Vyronx Pandas" in mensaje
+
+    @pytest.mark.asyncio
+    async def test_con_varias_plantillas_manda_el_primero_alfabetico(self) -> None:
+        """Con más de una plantilla restante prevalece el tag del equipo primero por nombre."""
+        pandas = make_mock_team(name="Vyronx Pandas", tag="PAN", discord_role_id=1002)
+        ascend = make_mock_team(name="Ascend Owls", tag="AOW", discord_role_id=1003)
+        restantes = [
+            (pandas, make_mock_membership(team=pandas, role=RosterRole.COACH)),
+            (ascend, make_mock_membership(team=ascend, role=RosterRole.STAFF)),
+        ]
+        cog, service, inter, team_role, _free, target = self._preparar(restantes)
+        service.list_team_tags = AsyncMock(return_value=["PSP", "PAN", "AOW"])
+
+        await cog.liberar_jugador.callback(cog, inter, team_role, target)
+
+        target.add_roles.assert_not_awaited()
+        target.edit.assert_awaited_once_with(nick="AOW Ninym")
+
+    @pytest.mark.asyncio
+    async def test_sin_membresia_no_toca_discord(self) -> None:
+        """Si no figuraba en esa plantilla, se avisa y no se modifica ningún rol."""
+        cog, service, inter, team_role, free_role, target = self._preparar([])
+        service.handle_role_removed = AsyncMock(return_value=False)
+
+        await cog.liberar_jugador.callback(cog, inter, team_role, target)
+
+        target.remove_roles.assert_not_awaited()
+        target.add_roles.assert_not_awaited()
+        service.get_user_teams.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_denegado_para_no_staff(self) -> None:
+        """Un usuario sin permisos de staff no puede liberar a nadie."""
+        cog, service, inter, team_role, _free, target = self._preparar([])
+        inter.user = make_mock_member(user_id=777, roles=[])
+
+        await cog.liberar_jugador.callback(cog, inter, team_role, target)
+
+        service.handle_role_removed.assert_not_awaited()
+        inter.response.send_message.assert_awaited_once()
