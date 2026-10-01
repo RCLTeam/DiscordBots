@@ -690,9 +690,26 @@ class TestLiberarJugador:
 
         target.remove_roles.assert_awaited_once_with(team_role)
         target.add_roles.assert_not_awaited()
-        target.edit.assert_not_awaited()
+        target.edit.assert_awaited_once_with(nick="PAN Ninym")
         mensaje = inter.followup.send.await_args.args[0]
         assert "Vyronx Pandas" in mensaje
+
+    @pytest.mark.asyncio
+    async def test_con_varias_plantillas_manda_el_primero_alfabetico(self) -> None:
+        """Con más de una plantilla restante prevalece el tag del equipo primero por nombre."""
+        pandas = make_mock_team(name="Vyronx Pandas", tag="PAN", discord_role_id=1002)
+        ascend = make_mock_team(name="Ascend Owls", tag="AOW", discord_role_id=1003)
+        restantes = [
+            (pandas, make_mock_membership(team=pandas, role=RosterRole.COACH)),
+            (ascend, make_mock_membership(team=ascend, role=RosterRole.STAFF)),
+        ]
+        cog, service, inter, team_role, _free, target = self._preparar(restantes)
+        service.list_team_tags = AsyncMock(return_value=["PSP", "PAN", "AOW"])
+
+        await cog.liberar_jugador.callback(cog, inter, team_role, target)
+
+        target.add_roles.assert_not_awaited()
+        target.edit.assert_awaited_once_with(nick="AOW Ninym")
 
     @pytest.mark.asyncio
     async def test_sin_membresia_no_toca_discord(self) -> None:

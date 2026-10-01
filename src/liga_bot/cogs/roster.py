@@ -449,11 +449,30 @@ class RosterCog(commands.Cog, name="Roster"):
 
         # 3. Solo queda libre quien no conserve ninguna otra plantilla
         restantes = await service.get_user_teams(target_member.id)
+        try:
+            known_tags = await service.list_team_tags()
+        except Exception as exc:
+            logger.warning("No se pudieron cargar los tags de equipo: %s", exc)
+            known_tags = []
+
         if restantes:
+            # Le queda plantilla: el apodo pasa a llevar el tag del club que prevalece,
+            # el primero por orden alfabético cuando hay más de uno.
+            equipo_restante = min(restantes, key=lambda par: par[0].name.lower())[0]
+            nuevo_nick = apply_team_tag(
+                target_member.display_name, equipo_restante.tag, known_tags
+            )[:32]
+            if nuevo_nick != target_member.display_name:
+                try:
+                    await target_member.edit(nick=nuevo_nick)
+                except (discord.Forbidden, discord.HTTPException) as exc:
+                    logger.warning("No se pudo renombrar a '%s': %s", nuevo_nick, exc)
+                    avisos.append(f"no se pudo renombrar a `{nuevo_nick}`")
+
             equipos = ", ".join(f"**{team.name}** ({m.role.value})" for team, m in restantes)
             mensaje = (
                 f"✅ {target_member.mention} queda fuera de la plantilla de {equipo.mention}. "
-                f"Sigue en {equipos}, así que no pasa a agente libre."
+                f"Sigue en {equipos}, así que no pasa a agente libre (`{nuevo_nick}`)."
             )
             if avisos:
                 mensaje += "\n⚠️ Plantilla actualizada, pero " + ", ".join(avisos) + "."
@@ -471,11 +490,6 @@ class RosterCog(commands.Cog, name="Roster"):
                 avisos.append(f"no se pudo asignar el rol {free_role.mention}")
 
         # 4. Apodo sin el tag del equipo
-        try:
-            known_tags = await service.list_team_tags()
-        except Exception as exc:
-            logger.warning("No se pudieron cargar los tags de equipo: %s", exc)
-            known_tags = []
         nuevo_nick = strip_team_tag(target_member.display_name, known_tags)[:32]
         if nuevo_nick != target_member.display_name:
             try:
