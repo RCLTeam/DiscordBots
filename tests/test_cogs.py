@@ -50,6 +50,7 @@ from liga_bot.services.ticket_service import (
     TicketAuditResult,
     TicketService,
 )
+from liga_bot.utils.formatting import parse_scheduled_at
 
 # ---------------------------------------------------------------------------
 # Fixtures y Factories de Mocks de Discord
@@ -774,6 +775,151 @@ async def test_importar_jornada_validations_and_aliases():
     inter_alias.followup.send.assert_awaited_once()
     embed = inter_alias.followup.send.await_args.kwargs["embed"]
     assert "Éxito" in embed.title
+
+
+def _crear_partido_cog_con_exito() -> tuple[ScheduleCog, MagicMock, MagicMock]:
+    """Prepara un ScheduleCog cuyo servicio crea el partido con éxito."""
+    settings = Settings(staff_role_id=101)
+    mock_service = MagicMock(spec=ScheduleService)
+    cog = ScheduleCog(MagicMock(), schedule_service=mock_service, settings=settings)
+
+    mock_channel = MagicMock(spec=discord.TextChannel)
+    mock_channel.mention = "<#88888>"
+    mock_channel.jump_url = "https://discord.com/channels/1/88888"
+    mock_service.create_match = AsyncMock(
+        return_value=MatchResult(
+            success=True,
+            jornada=1,
+            team1_name="Equipo 1",
+            team2_name="Equipo 2",
+            channel=mock_channel,
+            channel_mention=mock_channel.mention,
+        )
+    )
+
+    staff_member = create_mock_member(12345, roles=[create_mock_role(101)])
+    inter = create_mock_interaction(user=staff_member, guild=create_mock_guild())
+    return cog, mock_service, inter
+
+
+@pytest.mark.asyncio
+async def test_crear_partido_avisa_si_la_hora_no_se_reconoce():
+    """Con fecha y hora no interpretables, el partido se crea y la respuesta lo avisa."""
+    cog, mock_service, inter = _crear_partido_cog_con_exito()
+
+    await cog.crear_partido.callback(
+        cog,
+        inter,
+        jornada=1,
+        equipo1="Equipo 1",
+        equipo2="Equipo 2",
+        fecha="21/10/2026",
+        hora="21.00",
+    )
+
+    assert mock_service.create_match.await_args.kwargs["scheduled_at"] is None
+    embed = inter.followup.send.await_args.kwargs["embed"]
+    assert "✅" in embed.title
+    fields = {f.name: f.value for f in embed.fields}
+    assert fields["Horario Tentativo"] == "21/10/2026 21.00"
+    aviso = fields["⚠️ Horario no reconocido"]
+    assert "DD/MM/YYYY" in aviso
+    assert "HH:MM" in aviso
+    assert "panel de casters" in aviso
+    assert "Horario Programado" not in fields
+
+
+@pytest.mark.asyncio
+async def test_crear_partido_sin_fecha_ni_hora_no_avisa():
+    """Sin fecha ni hora no hay nada que interpretar, así que no se avisa."""
+    cog, _, inter = _crear_partido_cog_con_exito()
+
+    await cog.crear_partido.callback(cog, inter, jornada=1, equipo1="Equipo 1", equipo2="Equipo 2")
+
+    embed = inter.followup.send.await_args.kwargs["embed"]
+    assert all("no reconocido" not in f.name for f in embed.fields)
+
+
+@pytest.mark.asyncio
+async def test_crear_partido_muestra_horario_como_marca_de_tiempo_de_discord():
+    """Con fecha y hora válidas, el horario se muestra como <t:timestamp:F>."""
+    cog, _, inter = _crear_partido_cog_con_exito()
+
+    await cog.crear_partido.callback(
+        cog,
+        inter,
+        jornada=1,
+        equipo1="Equipo 1",
+        equipo2="Equipo 2",
+        fecha="21/10/2026",
+        hora="21:00",
+    )
+
+    expected = parse_scheduled_at("21/10/2026", "21:00")
+    assert expected is not None
+    embed = inter.followup.send.await_args.kwargs["embed"]
+    fields = {f.name: f.value for f in embed.fields}
+    assert fields["Horario Programado"] == f"<t:{int(expected.timestamp())}:F>"
+    assert all("no reconocido" not in name for name in fields)
+
+
+@pytest.mark.asyncio
+async def test_importar_jornada_muestra_avisos_de_horario():
+    """El resumen de la importación incluye los avisos de horario por fila."""
+    settings = Settings(staff_role_id=101)
+    mock_service = MagicMock(spec=ScheduleService)
+    cog = ScheduleCog(MagicMock(), schedule_service=mock_service, settings=settings)
+    mock_service.create_jornada_from_csv = AsyncMock(
+        return_value=JornadaResult(
+            jornada=1,
+            total_rows=1,
+            matches=[
+                MatchResult(
+                    success=True,
+                    jornada=1,
+                    team1_name="PSP",
+                    team2_name="FNX",
+                    channel_mention="<#112233>",
+                )
+            ],
+            warnings=["Fila 3 (PSP vs FNX): fecha u hora no reconocidas."],
+        )
+    )
+
+    staff_member = create_mock_member(12345, roles=[create_mock_role(101)])
+    inter = create_mock_interaction(user=staff_member, guild=create_mock_guild())
+    att = create_mock_attachment("jornada1.csv", b"dummy")
+    await cog.importar_jornada.callback(cog, inter, jornada=1, archivo=att)
+
+    embed = inter.followup.send.await_args.kwargs["embed"]
+    fields = {f.name: f.value for f in embed.fields}
+    assert "Fila 3 (PSP vs FNX)" in fields["Horarios no reconocidos"]
+    assert "Incidencias Reportadas" not in fields
+    assert "Éxito" in embed.title
+
+
+@pytest.mark.asyncio
+async def test_importar_jornada_trunca_avisos_de_horario():
+    """Muchos avisos de horario no rompen los límites de tamaño del embed."""
+    settings = Settings(staff_role_id=101)
+    mock_service = MagicMock(spec=ScheduleService)
+    cog = ScheduleCog(MagicMock(), schedule_service=mock_service, settings=settings)
+    warnings = [
+        f"Fila {i} ({'X' * 50} vs {'Y' * 50}): fecha u hora no reconocidas." for i in range(2, 102)
+    ]
+    mock_service.create_jornada_from_csv = AsyncMock(
+        return_value=JornadaResult(jornada=1, total_rows=100, warnings=warnings)
+    )
+
+    staff_member = create_mock_member(12345, roles=[create_mock_role(101)])
+    inter = create_mock_interaction(user=staff_member, guild=create_mock_guild())
+    att = create_mock_attachment("jornada1.csv", b"dummy")
+    await cog.importar_jornada.callback(cog, inter, jornada=1, archivo=att)
+
+    embed = inter.followup.send.await_args.kwargs["embed"]
+    field = next(f for f in embed.fields if f.name == "Horarios no reconocidos")
+    assert len(field.value) <= 1024
+    assert "avisos adicionales" in field.value or " ... (truncado)" in field.value
 
 
 @pytest.mark.asyncio
