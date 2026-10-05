@@ -376,7 +376,7 @@ class ScheduleService:
                     team2_id=team2_id,
                     scheduled_at=scheduled_at,
                     discord_channel_id=created_channel.id,
-                    status=MatchStatus.CANAL_CREADO,
+                    status=MatchStatus.SCHEDULED,
                 )
 
             return MatchResult(

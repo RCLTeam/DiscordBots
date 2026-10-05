@@ -117,7 +117,7 @@ sequenceDiagram
     Svc->>Disc: send(MENSAJE_2 Fearless Draft)
     
     Note over Svc,DB: Fase 6: Persistencia Final (Sesión corta)
-    Svc->>DB: match_repo.create(status=CANAL_CREADO, channel_id)
+    Svc->>DB: match_repo.create(status=SCHEDULED, channel_id)
     
     alt Error en Discord send o DB insert
         Note over Svc,Disc: Fase 7: Rollback Anti-Huérfanos
@@ -175,7 +175,7 @@ Abre una segunda transacción corta en base de datos para registrar la entidad `
 - `team1_id`, `team2_id`: UUIDs de los equipos.
 - `scheduled_at`: Marca temporal UTC programada (o `None`).
 - `discord_channel_id`: ID numérico del canal creado en Discord (`created_channel.id`).
-- `status`: `MatchStatus.CANAL_CREADO`.
+- `status`: `MatchStatus.SCHEDULED`.
 
 #### Fase 7: Garantía Anti-Canales Huérfanos (*Rollback Defensivo*) (`src/liga_bot/services/schedule_service.py:347-366`)
 Si se produce cualquier excepción durante el posteo de mensajes en Discord o durante la inserción en base de datos:

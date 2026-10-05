@@ -247,7 +247,7 @@ class TestMatchModel:
         await session.flush()
 
         assert isinstance(match.id, uuid.UUID)
-        assert match.status == MatchStatus.PENDIENTE
+        assert match.status == MatchStatus.SCHEDULED
         assert match.discord_channel_id is None
         assert match.scheduled_at is None
         assert isinstance(match.created_at, datetime)
@@ -427,6 +427,11 @@ class TestMatchModel:
         with pytest.raises(IntegrityError):
             async with session.begin_nested():
                 await session.flush()
+
+    def test_match_status_sin_alias(self):
+        """Cada estado de partido tiene un único nombre, el mismo que el enum match_status."""
+        assert list(MatchStatus.__members__) == [status.name for status in MatchStatus]
+        assert [status.value for status in MatchStatus] == Match.__table__.c.status.type.enums
 
     def test_match_model_has_stream_urls(self):
         """Verifica la definición de columnas stream_url y stream_url_live en Match."""

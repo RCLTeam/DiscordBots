@@ -235,7 +235,7 @@ async def test_create_match_happy_path_premier(
     assert res.success is True
     assert res.error is None
     assert res.match is not None
-    assert res.match.status == MatchStatus.CANAL_CREADO
+    assert res.match.status == MatchStatus.SCHEDULED
     assert res.match.jornada == 1
     assert res.channel is not None
     assert res.channel.name == "j1-psp-vs-fnx"
@@ -506,7 +506,7 @@ async def test_create_match_duplicate_idempotency(
         division=Division.PREMIER,
         team1_id=t1.id,
         team2_id=t2.id,
-        status=MatchStatus.CANAL_CREADO,
+        status=MatchStatus.SCHEDULED,
     )
     await db_session.commit()
 
