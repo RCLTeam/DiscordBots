@@ -72,9 +72,9 @@ Permite la vinculación directa de un usuario como agente libre sin abrir un can
    - Fallos de jerarquía en este paso no interrumpen la ejecución y se registran como advertencias.
 3. **Asignación del Rol y Actualización de Apodo**:
    - Añade el rol de agente libre: `await member.add_roles(free_role)`.
-   - Modifica el apodo del miembro aplicando truncado a 32 caracteres:
+   - Modifica el apodo del miembro con su nombre de invocador, truncado a 32 caracteres:
      ```python
-     nick = f"{nombre_lol} #{riot_tag}"[:32]
+     nick = nombre_lol[:32]
      await member.edit(nick=nick)
      ```
 4. **Persistencia Transaccional**:
@@ -182,7 +182,7 @@ except Exception as exc:
 ### 5.1 Aprobación y Confirmación: `confirm_role_request`
 
 - **Firma**: `async def confirm_role_request(self, guild: discord.Guild, channel_id: int, staff_member: discord.Member) -> tuple[bool, str]`
-- **Ubicación**: `src/liga_bot/services/role_service.py:299-390`.
+- **Ubicación**: `src/liga_bot/services/role_service.py:580-694` (resolución del equipo en `_resolve_team_role`, `:471-510`; cambios en Discord en `_apply_team_role_in_discord`, `:512-578`).
 
 #### Flujo Operativo:
 1. **Validación de Estado**: Consulta en la base de datos `req = await repo.get_by_channel_id(channel_id)`. Si no existe o su estado es distinto de `RoleRequestStatus.PENDING`, aborta indicando que no hay solicitud pendiente asociada.
@@ -204,10 +204,44 @@ except Exception as exc:
 
 ---
 
+### 5.3 Asignación Directa de Equipo: `assign_team_role`
+
+Usado por `/asignar-rol` cuando el destino es un equipo. Deja lo mismo que confirmar un ticket con ese equipo y posición.
+
+- **Firma**:
+  ```python
+  async def assign_team_role(
+      self,
+      guild: discord.Guild,
+      member: discord.Member,
+      staff_member: discord.Member,
+      equipo: str,
+      nombre_lol: str,
+      riot_tag: str,
+      posicion: str | None,
+  ) -> tuple[bool, str]
+  ```
+- **Ubicación**: `src/liga_bot/services/role_service.py:696-811`.
+
+#### Flujo Operativo:
+1. **No autoasignación**: si `staff_member.id == member.id`, retorna `(False, "No puedes asignarte un rol a ti mismo.")`.
+2. **Posición**: obligatoria y válida como `RosterRole`; si no, retorna un error sin tocar nada.
+3. **Servicio de plantillas**: si `bot.roster_sync_service` no está disponible, retorna un error sin tocar nada (a diferencia del ticket, aquí la cuenta y la membresía son obligatorias).
+4. **Fase 1 (una transacción)**:
+   - `_resolve_team_role`: equipo registrado y rol por `discord_role_id`, con los mismos errores que en la confirmación del ticket. Un rol del servidor que no es de un equipo registrado se rechaza.
+   - `_ensure_player`: cuenta de juego en `players`.
+   - `transfer_player`: membresía con la posición elegida, movimientos y auditoría.
+   - `create_request(equipo=team.name, canal_id=None, posicion=...)` + `update_status(APPROVED, staff_id=staff_member.id)`.
+   - `TeamRoleNotResolvedError` y `RosterSyncError` revierten la transacción y devuelven su mensaje; cualquier otra excepción devuelve «No se pudo registrar la asignación en base de datos. No se ha aplicado ningún cambio.». En ambos casos no se toca Discord.
+5. **Fase 2 (`_apply_team_role_in_discord`)**: rol del equipo, retirada de `Sin Verificar` y apodo `<TAG> <NombreLoL>`, igual que la confirmación del ticket.
+6. **Retorno**: `(True, f"Rol {team.name} asignado a {member.display_name} ({posicion}).")`, más los avisos de la fase 2 si los hay.
+
+---
+
 ### 5.2 Denegación de Solicitud: `deny_role_request`
 
 - **Firma**: `async def deny_role_request(self, guild: discord.Guild, channel_id: int, staff_member: discord.Member) -> tuple[bool, str]`
-- **Ubicación**: `src/liga_bot/services/role_service.py:391-425`.
+- **Ubicación**: `src/liga_bot/services/role_service.py:813-848`.
 
 #### Flujo Operativo:
 1. Registra en el sistema de auditoría la acción del staff: `logger.info("Denegando solicitud de rol en canal %s... por staff %s", channel_id, staff_member.id)`.

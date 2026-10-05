@@ -83,47 +83,30 @@ Publica el mensaje visual incrustado (*embed*) con el botón interactivo persist
 
 ### 3.3 `/asignar-rol`
 
-Comando administrativo de asignación manual e inmediata de roles oficiales o de agente libre, sin necesidad de apertura de ticket previo.
+Comando administrativo para asignar directamente un equipo registrado o el rol de agente libre, sin abrir un ticket. Para un equipo deja en Discord y en base de datos lo mismo que confirmar un ticket con ese equipo y posición.
 
-- **Ubicación**: `src/liga_bot/cogs/roles.py:79-210`.
+- **Ubicación**: `src/liga_bot/cogs/roles.py:89-178`.
 - **Permisos por Defecto**: `@app_commands.default_permissions(manage_guild=True)`.
 - **Control de Acceso en Runtime**:
   - Comprobación obligatoria vía `is_staff(interaction.user, self.settings)`.
   - Respuesta efímera de bloqueo para usuarios no autorizados: `"Solo el staff puede asignar roles."`.
+  - **No autoasignación**: si `usuario` es quien ejecuta el comando, responde `"No puedes asignarte un rol a ti mismo."` sin tocar nada (igual que la regla de los tickets, tanto para equipos como para Libre).
 - **Parámetros**:
 
 | Parámetro | Tipo | Obligatorio | Descripción |
 |---|---|:---:|---|
 | `usuario` | `discord.Member` | Sí | Miembro del servidor al que se asignará el rol y actualizará el apodo. |
-| `equipo` | `str` | Sí | Nombre del equipo oficial de la liga (ej. `"Vanguard Gaming"`) o el identificador de agente libre (`"Libre"`). |
+| `equipo` | `str` | Sí | Nombre de un equipo registrado en base de datos (sin distinguir mayúsculas) o el nombre de agente libre (`settings.free_role_name`, por defecto `"Libre"`). Con autocompletado de los equipos registrados y Libre (máximo 25 sugerencias; se omiten nombres de más de 100 caracteres). |
 | `nombre_lol` | `str` | Sí | Nombre del jugador en League of Legends. |
 | `riot_tag` | `str` | Sí | Riot Tag del jugador (sin incluir el carácter `#`). |
+| `posicion` | `str` (opciones) | Para equipos | Posición en la plantilla, con las mismas opciones que el desplegable del ticket (`top`, `jungle`, `mid`, `adc`, `support`, `substitute`, `coach`, `staff`, `partners`). Se ignora para Libre. |
 
-- **Lógica de Bifurcación**:
-
-#### Flujo 1: Asignación de Agente Libre (`equipo == settings.free_role_name`)
-1. Verifica la presencia de `role_service`.
-2. Delega en `role_service.assign_free_role(usuario, nombre_lol, riot_tag)`.
-3. Retorna directamente la respuesta con el estado emitido por el servicio en formato efímero.
-
-#### Flujo 2: Asignación de Equipo Oficial
-1. **Validación de Contexto Guild**: Verifica que `interaction.guild` no sea nulo (bloquea su invocación por mensajes directos).
-2. **Búsqueda del Rol**: Localiza el rol en el servidor mediante `discord.utils.get(interaction.guild.roles, name=equipo)`. Si no existe, aborta con mensaje efímero informativo.
-3. **Retirada de 'Sin Verificar'**: Si `settings.sin_verificar_role_id > 0`, busca dicho rol en la guild. Si el usuario lo tiene asignado, ejecuta `await usuario.remove_roles(sin_verificar)`. Cualquier fallo de jerarquía se captura registrando una advertencia en log sin detener la asignación principal.
-4. **Asignación del Rol de Equipo**:
-   - Ejecuta `await usuario.add_roles(team_role)`.
-   - Captura `discord.Forbidden` (falta de permisos o rol del bot inferior en la jerarquía) y `discord.HTTPException` (errores de API de Discord), informando con mensajes efímeros específicos.
-5. **Normalización y Truncado de Apodo**:
-   - Construye el apodo con el formato: `f"{nombre_lol} #{riot_tag}"[:32]`.
-   - El truncado a 32 caracteres garantiza el cumplimiento del límite de longitud de apodos impuesto por la API de Discord.
-   - Aplica el cambio con `await usuario.edit(nick=nick)`. Si se produce una excepción de jerarquía (por ejemplo, si el miembro es el propietario del servidor), se registra un aviso en log sin abortar la operación.
-6. **Auditoría y Persistencia Transaccional**:
-   - Abre una sesión mediante `async with transactional_session(role_service.session_factory) as session:`.
-   - Registra la solicitud mediante `repo.create_request(..., canal_id=None)`.
-   - Transiciona inmediatamente la solicitud a `RoleRequestStatus.APPROVED` vinculando el identificador del staff responsable (`staff_id = interaction.user.id`).
-   - El bloque está aislado en `try/except Exception` para asegurar que un fallo en la base de datos no anule la confirmación si Discord ya procesó los roles con éxito.
-7. **Confirmación Final**:
-   - Emite confirmación efímera: `f"Rol {equipo} asignado a {usuario.display_name} correctamente."`.
+- **Flujo de Operación**:
+  1. Verifica los privilegios del invocador, que se ejecute dentro de un servidor, la regla de no autoasignación y que `role_service` esté disponible. Estos rechazos se responden con `interaction.response.send_message(..., ephemeral=True)`.
+  2. Difiere la interacción con `await interaction.response.defer(ephemeral=True)` antes de cualquier cambio en Discord o en base de datos, de modo que el comando responde aunque las llamadas tarden más de 3 segundos.
+  3. Si `equipo` es el nombre de agente libre, delega en `role_service.assign_free_role(usuario, nombre_lol, riot_tag)` (comportamiento sin cambios: rol Libre, apodo con el nombre de invocador, cuenta de juego y solicitud `APPROVED`).
+  4. En otro caso, delega en `role_service.assign_team_role(...)` (ver [`services.md`](./services.md#53-asignación-directa-de-equipo-assign_team_role)): solo acepta equipos registrados, toma el rol por `discord_role_id` y nunca busca un rol del servidor por nombre.
+  5. Envía el mensaje del servicio con `interaction.followup.send(msg, ephemeral=True)`.
 
 ---
 
@@ -135,7 +118,10 @@ Comando administrativo de asignación manual e inmediata de roles oficiales o de
 | `/publicar-panel-rol` | Usuario sin rol de staff | Verificación `is_staff()` | Mensaje efímero de denegación |
 | `/publicar-panel-rol` | Canal no soporta `.send` | Comprobación de atributo y tipo | Mensaje efímero de error de canal |
 | `/asignar-rol` | Invocación fuera de servidor (DM) | Comprobación `interaction.guild is None` | Mensaje efímero `"❌ Este comando solo puede ser ejecutado dentro de un servidor de Discord."` |
-| `/asignar-rol` | Rol de equipo inexistente | Búsqueda por nombre en `guild.roles` | Mensaje efímero `"El rol '{equipo}' no existe en el servidor."` |
-| `/asignar-rol` | Jerarquía insuficiente del Bot | Captura de `discord.Forbidden` en `add_roles` | Mensaje efímero `"Permisos insuficientes para asignar el rol..."` |
+| `/asignar-rol` | El invocador es el destinatario | Comparación de IDs antes de diferir | Mensaje efímero `"No puedes asignarte un rol a ti mismo."` |
+| `/asignar-rol` | Equipo no registrado (aunque exista un rol con ese nombre) | `TeamRepository.get_by_name` en `assign_team_role` | Mensaje efímero con la causa; no se asigna ningún rol |
+| `/asignar-rol` | `discord_role_id` del equipo inexistente en el servidor | `guild.get_role` en `assign_team_role` | Mensaje efímero con el ID; no se asigna ningún rol |
+| `/asignar-rol` | Posición ausente o no válida para un equipo | Validación con `RosterRole` | Mensaje efímero; no se toca Discord ni la base de datos |
+| `/asignar-rol` | Fallo de base de datos o `RosterSyncError` | Transacción revertida antes de tocar Discord | Mensaje efímero con la causa; no se aplica ningún cambio |
+| `/asignar-rol` | Jerarquía insuficiente del bot al asignar el rol | Captura de `discord.Forbidden`/`HTTPException` tras el commit | Aviso «asígnalo a mano» añadido al mensaje |
 | `/asignar-rol` | Apodo superior a 32 caracteres | Truncado estricto `[:32]` | Apodo ajustado sin lanzar `HTTPException 400` |
-| `/asignar-rol` | Fallo de conexión a BD | Captura de `Exception` en bloque transaccional | Advertencia en log; roles asignados en Discord |
