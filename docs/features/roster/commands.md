@@ -164,4 +164,3 @@ Cuando un usuario recibe o pierde múltiples roles simultáneamente (por ejemplo
       if "Roster" not in bot.cogs:
           await bot.add_cog(RosterCog(bot))
   ```
-- **Alias de Compatibilidad:** `src/liga_bot/cogs/roster_cog.py` reexporta directamente `RosterCog` y `setup` para mantener compatibilidad con rutas de importación de extensiones heredadas.

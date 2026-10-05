@@ -11,7 +11,6 @@ El subsistema de comandos de calendario está implementado en `src/liga_bot/cogs
 La clase `ScheduleCog` extiende `discord.ext.commands.Cog` y administra los comandos de aplicación (`app_commands`) del bot para la gestión de calendario.
 
 - **Ubicación principal**: `src/liga_bot/cogs/schedule.py:27-65`.
-- **Compatibilidad legacy**: `src/liga_bot/cogs/schedule_cog.py:1-7` re-exporta `ScheduleCog` y la función `setup` para mantener compatibilidad con imports históricos.
 
 ### 1.1 Inyección de Dependencias Resiliente
 

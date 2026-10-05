@@ -211,19 +211,14 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │   └── liga_bot/                             # Paquete principal de LigaBot
 │       ├── cogs/                             # Controladores de presentación y comandos slash (discord.ext.commands.Cog)
 │       │   ├── __init__.py                   # Exportación de cogs principales del sistema
-│       │   ├── admin.py                      # Comandos administrativos de bajo nivel y utilidades
-│       │   ├── admin_cog.py                  # Cog de sincronización de comandos slash (/sync, /sincronizar)
+│       │   ├── admin.py                      # Cog de sincronización de comandos slash (/sync, /sincronizar)
 │       │   ├── casters.py                    # Cog de cartelera interactiva de casters y retransmisiones
 │       │   ├── permissions.py                # Política de autorización del staff por tipo de acción
 │       │   ├── roles.py                      # Cog y listeners para el flujo de verificación de roles
-│       │   ├── roster.py                     # Implementación interna de comandos de gestión de plantillas
-│       │   ├── roster_cog.py                 # Cog de registro de plantillas, capitanías y agentes libres
-│       │   ├── schedule.py                   # Implementación interna de gestión de partidos
-│       │   ├── schedule_cog.py               # Cog de calendario, creación de partidos y procesado CSV de jornadas
-│       │   ├── teams.py                      # Implementación interna de registro y consulta de equipos
-│       │   ├── teams_cog.py                  # Cog para listar y registrar clubes de la liga
-│       │   ├── tickets.py                    # Implementación interna de lógica de canales de soporte
-│       │   └── tickets_cog.py                # Cog de auditoría de inactividad de tickets y bucle en segundo plano
+│       │   ├── roster.py                     # Cog de registro de plantillas, capitanías y agentes libres
+│       │   ├── schedule.py                   # Cog de calendario, creación de partidos y procesado CSV de jornadas
+│       │   ├── teams.py                      # Cog para listar y registrar clubes de la liga
+│       │   └── tickets.py                    # Cog de auditoría de inactividad de tickets y bucle en segundo plano
 │       ├── models/                           # Modelos declarativos SQLAlchemy 2.0 (esquemas relacionales)
 │       │   ├── __init__.py                   # Exportación de modelos para registro en metadata
 │       │   ├── base.py                       # Clase base declarativa (AsyncAttrs, DeclarativeBase, UUIDPrimaryKey)

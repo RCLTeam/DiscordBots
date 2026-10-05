@@ -102,6 +102,22 @@ async def test_bot_setup_hook_loads_all_default_extensions():
         await bot.close()
 
 
+def test_cada_modulo_con_setup_del_paquete_cogs_es_una_extension_por_defecto():
+    """Cada cog tiene un único módulo y es el que carga el bot: no hay reexportaciones."""
+    import importlib
+    import pkgutil
+
+    import liga_bot.cogs
+
+    con_setup = {
+        f"liga_bot.cogs.{info.name}"
+        for info in pkgutil.iter_modules(liga_bot.cogs.__path__)
+        if hasattr(importlib.import_module(f"liga_bot.cogs.{info.name}"), "setup")
+    }
+
+    assert con_setup == set(DEFAULT_EXTENSIONS)
+
+
 @pytest.mark.asyncio
 async def test_bot_setup_hook_extension_failure_raises():
     """Verifica que un fallo al cargar una extensión propaga la excepción e interrumpe el setup."""

@@ -32,8 +32,6 @@ import pytest
 
 from liga_bot.bot import DEFAULT_EXTENSIONS, LigaBot
 from liga_bot.cogs.roster import RosterCog, setup
-from liga_bot.cogs.roster_cog import RosterCog as AliasRosterCog
-from liga_bot.cogs.roster_cog import setup as alias_setup
 from liga_bot.config import Settings
 from liga_bot.models.enums import Division, RosterRole
 from liga_bot.models.roster import Team, TeamMembership
@@ -238,11 +236,6 @@ class TestRosterCogLifecycle:
     def test_bot_default_extensions_contains_roster_cog(self) -> None:
         """Verifica que DEFAULT_EXTENSIONS en bot.py incluya 'liga_bot.cogs.roster'."""
         assert "liga_bot.cogs.roster" in DEFAULT_EXTENSIONS
-
-    def test_roster_cog_alias_export(self) -> None:
-        """Verifica que el alias roster_cog.py re-exporte RosterCog y setup correctamente."""
-        assert AliasRosterCog is RosterCog
-        assert alias_setup is setup
 
 
 # ===========================================================================
