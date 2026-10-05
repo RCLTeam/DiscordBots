@@ -226,3 +226,102 @@ async def test_sync_prefijo_usa_la_politica_de_sincronizacion(combinacion):
     else:
         with pytest.raises(discord.ext.commands.CheckFailure):
             await checks[0](ctx)
+
+
+# ---------------------------------------------------------------------------
+# Tipo de acción que comprueba cada comando slash con efectos
+# ---------------------------------------------------------------------------
+
+
+def _comando(nombre: str):
+    """Devuelve (cog, callback, argumentos) para invocar el comando sin efectos."""
+    from discord import app_commands
+
+    from liga_bot.cogs.admin import AdminCog
+    from liga_bot.cogs.casters import CastersCog
+    from liga_bot.cogs.roles import RolesCog
+    from liga_bot.cogs.roster import RosterCog
+    from liga_bot.cogs.schedule import ScheduleCog
+    from liga_bot.cogs.teams import TeamsCog
+    from liga_bot.cogs.tickets import TicketsCog
+
+    settings = _settings()
+    bot = MagicMock()
+    bot.settings = settings
+    rol = _role(JUGADOR)
+    otro = _member()
+    otro.id = 7
+    archivo = MagicMock(spec=discord.Attachment)
+    division = app_commands.Choice(name="Premier", value="PREMIER")
+
+    tabla = {
+        "registrar-equipo": (
+            TeamsCog(bot, settings=settings),
+            "registrar_equipo",
+            (rol, "Equipo", "EQ", division),
+        ),
+        "revisar-tickets": (
+            TicketsCog(bot, ticket_service=MagicMock(), auto_start=False),
+            "revisar_tickets",
+            (),
+        ),
+        "revisar-tickets-manual": (
+            TicketsCog(bot, ticket_service=MagicMock(), auto_start=False),
+            "revisar_tickets_manual",
+            (),
+        ),
+        "sync": (AdminCog(bot, settings), "sync", ()),
+        "sincronizar": (AdminCog(bot, settings), "sincronizar", ()),
+        "asignar-rol": (RolesCog(bot), "asignar_rol", (otro, "Equipo", "nombre", "tag")),
+        "publicar-panel-rol": (RolesCog(bot), "publicar_panel_rol", ()),
+        "gestionar-posicion": (RosterCog(bot, settings), "gestionar_posicion", (otro,)),
+        "liberar-jugador": (RosterCog(bot, settings), "liberar_jugador", (rol, otro)),
+        "crear-partido": (ScheduleCog(bot, settings=settings), "crear_partido", (1, "A", "B")),
+        "importar-jornada": (ScheduleCog(bot, settings=settings), "importar_jornada", (1, archivo)),
+        "stream_url": (ScheduleCog(bot, settings=settings), "stream_url", (rol, rol, "https://x")),
+        "panel-casters": (CastersCog(bot, settings=settings), "panel_casters", ()),
+    }
+    cog, attr, args = tabla[nombre]
+    return cog, getattr(cog, attr).callback, args
+
+
+ACCION_POR_COMANDO = {
+    "registrar-equipo": StaffAction.ROLES_Y_PLANTILLAS,
+    "asignar-rol": StaffAction.ROLES_Y_PLANTILLAS,
+    "publicar-panel-rol": StaffAction.ROLES_Y_PLANTILLAS,
+    "gestionar-posicion": StaffAction.ROLES_Y_PLANTILLAS,
+    "liberar-jugador": StaffAction.ROLES_Y_PLANTILLAS,
+    "revisar-tickets": StaffAction.TICKETS,
+    "revisar-tickets-manual": StaffAction.TICKETS,
+    "sync": StaffAction.SINCRONIZACION,
+    "sincronizar": StaffAction.SINCRONIZACION,
+    "crear-partido": StaffAction.CALENDARIO_Y_CASTERS,
+    "importar-jornada": StaffAction.CALENDARIO_Y_CASTERS,
+    "stream_url": StaffAction.CALENDARIO_Y_CASTERS,
+    "panel-casters": StaffAction.CALENDARIO_Y_CASTERS,
+}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("comando", "accion"), list(ACCION_POR_COMANDO.items()))
+async def test_cada_comando_comprueba_su_tipo_de_accion(monkeypatch, comando, accion):
+    import liga_bot.cogs.permissions as permissions
+    import liga_bot.cogs.tickets as tickets
+
+    espia = AsyncMock(return_value=False)
+    monkeypatch.setattr(permissions, "has_staff_access", espia)
+    monkeypatch.setattr(tickets, "has_staff_access", espia)
+
+    cog, callback, args = _comando(comando)
+    inter = _interaction(_member(), MagicMock(spec=discord.Guild))
+    inter.response = MagicMock()
+    inter.response.send_message = AsyncMock()
+    inter.response.defer = AsyncMock()
+
+    await callback(cog, inter, *args)
+
+    espia.assert_awaited_once()
+    assert espia.await_args.args[1] is accion
+    # Denegado: responde un mensaje efímero y no difiere la interacción.
+    inter.response.defer.assert_not_awaited()
+    assert inter.response.send_message.await_args.kwargs.get("ephemeral") is True
