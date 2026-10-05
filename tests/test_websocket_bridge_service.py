@@ -1,6 +1,7 @@
 """Pruebas unitarias e integración para WebsocketBridgeService."""
 
 import asyncio
+import logging
 from unittest.mock import AsyncMock, MagicMock
 
 import aiohttp
@@ -187,24 +188,65 @@ async def test_pre_auth_silence_on_non_login_command(running_service):
                 await asyncio.wait_for(ws.receive(), timeout=0.1)
 
 
+def _login_frame(token, req_id="e4b3c2a1-0000-4000-8000-0123456789ab"):
+    return {"type": "LOG IN", "data": {"id": req_id, "content": {"token": token}}}
+
+
+async def _assert_closed_without_json(ws, expected_code=4003):
+    msg = await asyncio.wait_for(ws.receive(), timeout=1.0)
+    assert msg.type in (
+        aiohttp.WSMsgType.CLOSE,
+        aiohttp.WSMsgType.CLOSING,
+        aiohttp.WSMsgType.CLOSED,
+    )
+    assert ws.close_code == expected_code
+
+
 @pytest.mark.asyncio
-async def test_pre_auth_silence_on_invalid_token(running_service):
+async def test_invalid_token_closes_connection_without_json(running_service):
     ws_url = f"http://127.0.0.1:{running_service.port}/ws/bridge"
     async with aiohttp.ClientSession() as session:
         async with session.ws_connect(ws_url) as ws:
-            await ws.send_json(
-                {
-                    "type": "LOG IN",
-                    "data": {
-                        "id": "e4b3c2a1-0000-4000-8000-0123456789ab",
-                        "content": {
-                            "token": "wrong-token",
-                        },
-                    },
-                }
-            )
-            with pytest.raises(asyncio.TimeoutError):
-                await asyncio.wait_for(ws.receive(), timeout=0.1)
+            await ws.send_json(_login_frame("wrong-token"))
+            # Cierre inmediato (antes del timeout de 0.2 s) con 4003 y sin trama JSON
+            await _assert_closed_without_json(ws)
+
+
+@pytest.mark.asyncio
+async def test_login_after_invalid_token_is_not_processed(running_service):
+    ws_url = f"http://127.0.0.1:{running_service.port}/ws/bridge"
+    async with aiohttp.ClientSession() as session:
+        async with session.ws_connect(ws_url) as ws:
+            # Token erróneo y token correcto seguidos, sin esperar respuesta
+            await ws.send_json(_login_frame("wrong-token"))
+            await ws.send_json(_login_frame("valid-secret-token"))
+            await _assert_closed_without_json(ws)
+
+
+@pytest.mark.asyncio
+async def test_invalid_login_is_logged_as_warning_without_token(
+    running_service, caplog, monkeypatch
+):
+    # fileConfig() de las migraciones de Alembic desactiva los loggers ya creados
+    # cuando otro test las ejecuta antes en la misma sesión de pytest.
+    bridge_logger = logging.getLogger("liga_bot.services.websocket_bridge")
+    monkeypatch.setattr(bridge_logger, "disabled", False)
+    secret_attempt = "wrong-token-should-not-be-logged"
+    ws_url = f"http://127.0.0.1:{running_service.port}/ws/bridge"
+    with caplog.at_level(logging.WARNING, logger="liga_bot.services.websocket_bridge"):
+        async with aiohttp.ClientSession() as session:
+            async with session.ws_connect(ws_url) as ws:
+                await ws.send_json(_login_frame(secret_attempt))
+                await _assert_closed_without_json(ws)
+
+    failed = [
+        r
+        for r in caplog.records
+        if r.name == "liga_bot.services.websocket_bridge" and r.levelno == logging.WARNING
+    ]
+    assert failed, "El intento fallido debe registrarse a nivel WARNING"
+    assert any("127.0.0.1" in r.getMessage() for r in failed)
+    assert all(secret_attempt not in r.getMessage() for r in caplog.records)
 
 
 @pytest.mark.asyncio
@@ -233,8 +275,7 @@ async def test_auth_empty_configured_supertoken_security(mock_bot, mock_suggesti
                         },
                     }
                 )
-                with pytest.raises(asyncio.TimeoutError):
-                    await asyncio.wait_for(ws.receive(), timeout=0.1)
+                await _assert_closed_without_json(ws)
     finally:
         await service.stop()
 
