@@ -48,6 +48,10 @@ class MatchError(Exception):
         return self.message
 
 
+# Formato que entiende parse_scheduled_at; se muestra en los avisos de horario no reconocido.
+SCHEDULE_FORMAT_HINT = "fecha `DD/MM/YYYY` y hora `HH:MM` (hora de Madrid)"
+
+
 @dataclass(slots=True)
 class MatchResult:
     """Resultado detallado de la creación de un partido."""
@@ -72,6 +76,8 @@ class JornadaResult:
     total_rows: int
     matches: list[MatchResult] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    # Filas creadas sin horario porque su fecha u hora no se pudieron interpretar.
+    warnings: list[str] = field(default_factory=list)
 
     @property
     def success_count(self) -> int:
@@ -467,6 +473,7 @@ class ScheduleService:
 
         results: list[MatchResult] = []
         errors: list[str] = []
+        warnings: list[str] = []
         total_rows = 0
         seen_pairs: set[frozenset[str]] = set()
 
@@ -506,12 +513,19 @@ class ScheduleService:
             results.append(res)
             if not res.success:
                 errors.append(f"Fila {idx} ({raw1} vs {raw2}): {res.error}")
+            elif fecha_str and hora_str and scheduled_dt is None:
+                warnings.append(
+                    f"Fila {idx} ({raw1} vs {raw2}): fecha u hora no reconocidas "
+                    f"('{fecha_str}' '{hora_str}'); se esperaba {SCHEDULE_FORMAT_HINT}. "
+                    "El partido se ha creado sin horario."
+                )
 
         return JornadaResult(
             jornada=jornada,
             total_rows=total_rows,
             matches=results,
             errors=errors,
+            warnings=warnings,
         )
 
     async def process_schedule_csv(

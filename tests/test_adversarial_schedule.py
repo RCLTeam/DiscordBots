@@ -18,7 +18,7 @@ from liga_bot.config import Settings
 from liga_bot.models.enums import Division
 from liga_bot.repositories.match_repo import MatchRepository
 from liga_bot.repositories.team_repo import TeamRepository
-from liga_bot.services.schedule_service import ScheduleService
+from liga_bot.services.schedule_service import MatchResult, ScheduleService
 from liga_bot.utils.formatting import (
     format_match_channel_name,
     normalize_name,
@@ -867,3 +867,71 @@ def test_normalize_name_diacritics_and_spaces():
     """Prueba normalización de nombres para comparaciones."""
     assert normalize_name("  Niño   Español!  ") == "nino espanol"
     assert normalize_name("Planar-Shock   Pingus") == "planarshock pingus"
+
+
+# ---------------------------------------------------------------------------
+# Avisos de horario no reconocido en la importación CSV
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_csv_avisa_de_filas_con_fecha_u_hora_no_reconocidas(test_settings: Settings):
+    """La fila con fecha no válida crea el partido sin horario y genera un aviso."""
+    service = ScheduleService(session_factory=MagicMock(), settings=test_settings)
+
+    async def fake_create_match(**kwargs):
+        return MatchResult(
+            success=True,
+            jornada=kwargs["jornada"],
+            team1_name=kwargs["team1_name"],
+            team2_name=kwargs["team2_name"],
+        )
+
+    service.create_match = AsyncMock(side_effect=fake_create_match)
+    csv_content = (
+        "equipo1,equipo2,fecha,hora\n"
+        "Alpha,Beta,21/10/2026,21:00\n"
+        "Gamma,Delta,32/10/2026,21:00\n"
+        "Epsilon,Zeta,,\n"
+    )
+
+    j_res = await service.create_jornada_from_csv(
+        guild=MagicMock(), jornada=1, csv_content=csv_content
+    )
+
+    assert j_res.success_count == 3
+    assert j_res.error_count == 0
+    calls = [c.kwargs for c in service.create_match.await_args_list]
+    assert calls[0]["scheduled_at"] is not None
+    assert calls[1]["scheduled_at"] is None
+    assert calls[1]["fecha"] == "32/10/2026"
+    assert len(j_res.warnings) == 1
+    aviso = j_res.warnings[0]
+    assert aviso.startswith("Fila 3 (Gamma vs Delta)")
+    assert "32/10/2026" in aviso
+    assert "DD/MM/YYYY" in aviso
+    assert "HH:MM" in aviso
+
+
+@pytest.mark.asyncio
+async def test_csv_no_avisa_de_horario_si_la_fila_falla(test_settings: Settings):
+    """Si el partido no se crea, la fila ya figura como error y no se duplica en avisos."""
+    service = ScheduleService(session_factory=MagicMock(), settings=test_settings)
+    service.create_match = AsyncMock(
+        return_value=MatchResult(
+            success=False,
+            jornada=1,
+            team1_name="Gamma",
+            team2_name="Delta",
+            error="Equipo no encontrado",
+        )
+    )
+
+    j_res = await service.create_jornada_from_csv(
+        guild=MagicMock(),
+        jornada=1,
+        csv_content="equipo1,equipo2,fecha,hora\nGamma,Delta,21/10/2026,21.00\n",
+    )
+
+    assert j_res.error_count == 1
+    assert j_res.warnings == []
