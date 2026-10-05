@@ -55,20 +55,15 @@ async def test_rate_limiter_constructor_aliases_and_validation():
 
 
 @pytest.mark.asyncio
-async def test_rate_limiter_reset_sync_and_async():
-    """Verifica reset síncrono y asíncrono tanto global como específico por clave."""
+async def test_rate_limiter_reset_es_sincrono():
+    """Verifica que reset() es síncrono, no devuelve nada y libera la cuota."""
     limiter = SlidingWindowRateLimiter(limit=1, window_seconds=60.0)
     await limiter.acquire()
     assert (await limiter.acquire())[0] is False
 
-    # Reset síncrono
-    limiter.reset()
+    assert limiter.reset() is None
     assert (await limiter.acquire())[0] is True
     assert (await limiter.acquire())[0] is False
-
-    # Reset con await
-    await limiter.reset()
-    assert (await limiter.acquire())[0] is True
 
 
 @pytest.mark.asyncio

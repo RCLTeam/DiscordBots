@@ -39,7 +39,7 @@ self._lock = asyncio.Lock()
 
 ## 2. Parámetros de Inicialización y Acotación
 
-El constructor admite parámetros flexibles con acotación de seguridad (`src/liga_bot/services/rate_limiter.py:26-41`):
+El constructor admite parámetros flexibles con acotación de seguridad (`src/liga_bot/services/rate_limiter.py:17-32`):
 
 ```python
 def __init__(
@@ -66,7 +66,7 @@ def __init__(
 
 ## 3. Algoritmo de Adquisición y Exclusión Mutua (`acquire`)
 
-El método `acquire` (`src/liga_bot/services/rate_limiter.py:42-65`) evalúa de forma atómica si una solicitud es admitida o rechazada:
+El método `acquire` (`src/liga_bot/services/rate_limiter.py:33-56`) evalúa de forma atómica si una solicitud es admitida o rechazada:
 
 ```python
 async def acquire(self, key: str = "global") -> tuple[bool, float]:
@@ -126,34 +126,21 @@ Cuando `acquire("global")` devuelve `(False, retry_after)` en `WebsocketBridgeSe
 
 ---
 
-## 5. Reinicio Híbrido Síncrono / Asíncrono (`_AwaitableNone`)
+## 5. Reinicio de Cuotas (`reset`)
 
-Para facilitar el reinicio de cuotas tanto en pruebas unitarias síncronas como en pipelines asíncronos sin generar advertencias de runtime (`RuntimeWarning: coroutine was never awaited`), `reset()` utiliza la clase auxiliar `_AwaitableNone` (`src/liga_bot/services/rate_limiter.py:10-16, 66-76`):
+`reset()` es un método síncrono que devuelve `None` (`src/liga_bot/services/rate_limiter.py:57-65`). No adquiere el cerrojo: solo vacía el historial en memoria.
 
 ```python
-class _AwaitableNone:
-    def __await__(self):
-        if False:
-            yield
-        return None
-
-
-def reset(self, key: str | None = None) -> _AwaitableNone:
+def reset(self, key: str | None = None) -> None:
     if key is None:
         self._history.clear()
     elif key in self._history:
         self._history[key].clear()
-    return _AwaitableNone()
 ```
 
-### Modos de Invocación Admitidos
-
 ```python
-# Modo síncrono (típico en setup/teardown de tests estándar)
+# Reinicio de todas las claves
 limiter.reset()
-
-# Modo asíncrono (típico en corrutinas de reinicio de ciclo de vida)
-await limiter.reset()
 
 # Reinicio selectivo por clave
 limiter.reset("global")
