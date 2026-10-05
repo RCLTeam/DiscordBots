@@ -85,15 +85,18 @@ def describe_database_url(database_url: str) -> str:
     """
     Describe la URL de conexión sin credenciales, apta para logs y mensajes de error.
 
-    Para PGlite indica el modo (memoria o ruta local). Para el resto solo muestra
-    dialecto, host, puerto y base de datos: nunca usuario, contraseña ni parámetros
-    de consulta, que también pueden llevar credenciales. Si la URL no se puede
-    interpretar, no se reproduce ningún fragmento de ella.
+    Para PGlite indica el modo (memoria o ruta local); si la ruta contiene `@`, se
+    oculta. Para el resto solo muestra dialecto, host, puerto y base de datos: nunca
+    usuario, contraseña ni parámetros de consulta, que también pueden llevar
+    credenciales. Si la URL no se puede interpretar o tiene más de una `@`, no se
+    reproduce ningún fragmento de ella salvo el dialecto.
     """
     if database_url.startswith("pglite"):
         path = _parse_pglite_path(database_url)
         if not path or path == ":memory:":
             return "PGlite (memoria)"
+        if "@" in path:
+            return "PGlite (ruta local: ***)"
         return f"PGlite (ruta local: {path})"
 
     try:
@@ -102,11 +105,15 @@ def describe_database_url(database_url: str) -> str:
         return "<URL no interpretable>"
 
     host = url.host or ""
-    # Una contraseña con '@' sin codificar acaba repartida en el host.
-    if "@" in host:
-        host = "***"
-    location = f"{host}:{url.port}" if url.port else host
-    described = f"{url.drivername}://{location}/{url.database or ''}"
+    database = url.database or ""
+    # Con una contraseña que lleva '@' sin codificar el parser no sabe dónde acaba:
+    # según los '/', '?' o '#' que la acompañen, trozos de ella acaban en el host,
+    # la base de datos o la consulta. Ninguna de esas partes es fiable.
+    if database_url.count("@") > 1 or "@" in host or "@" in database:
+        described = f"{url.drivername}://*** [credenciales sin codificar]"
+    else:
+        location = f"{host}:{url.port}" if url.port else host
+        described = f"{url.drivername}://{location}/{database}"
     if url.drivername.startswith("postgres"):
         return f"PostgreSQL ({described})"
     return described

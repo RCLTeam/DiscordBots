@@ -25,9 +25,46 @@ POSTGRES_URL = "postgresql+asyncpg://usuario:secreto@localhost:5432/liga_bot"
         ("postgres://usuario:secreto@db.interna/rcl", "PostgreSQL (postgres://db.interna/rcl)"),
         ("pglite:///:memory:", "PGlite (memoria)"),
         ("pglite:///./.data/pglite_dev_db", "PGlite (ruta local: ./.data/pglite_dev_db)"),
+        # Con una sola '@', '/', '?', '#' y ':' en la contraseña no confunden al parser.
+        (
+            "postgres://usuario:se/creto@db.interna:5432/rcl",
+            "PostgreSQL (postgres://db.interna:5432/rcl)",
+        ),
+        (
+            "postgresql://usuario:se?creto@db.interna/rcl",
+            "PostgreSQL (postgresql://db.interna/rcl)",
+        ),
+        (
+            "postgresql://usuario:se#cre:to@db.interna/rcl",
+            "PostgreSQL (postgresql://db.interna/rcl)",
+        ),
+        # PGlite con credenciales: la ruta no se muestra.
+        ("pglite://usuario:secreto@localhost/rcl", "PGlite (ruta local: ***)"),
     ],
 )
 def test_describe_database_url(url: str, expected: str):
+    assert describe_database_url(url) == expected
+
+
+AMBIGUOUS_POSTGRES = "PostgreSQL (postgresql+asyncpg://*** [credenciales sin codificar])"
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        # Contraseña con '@' sin codificar: el parser reparte la contraseña entre
+        # host, base de datos y consulta según los demás caracteres que contenga.
+        ("postgresql+asyncpg://rcl_user:pa@secreto@localhost:5432/rcl", AMBIGUOUS_POSTGRES),
+        ("postgresql+asyncpg://rcl_user:pa@se/creto@localhost:5432/rcl", AMBIGUOUS_POSTGRES),
+        ("postgresql+asyncpg://rcl_user:pa@se?creto@localhost:5432/rcl", AMBIGUOUS_POSTGRES),
+        ("postgresql+asyncpg://rcl_user:pa@se#creto@localhost:5432/rcl", AMBIGUOUS_POSTGRES),
+        ("postgresql+asyncpg://rcl_user:pa@se/cre?to@localhost/rcl", AMBIGUOUS_POSTGRES),
+        # Aquí SQLAlchemy ni siquiera puede interpretarla (puerto «creto@localhost»).
+        ("postgresql+asyncpg://rcl_user:pa@se:creto@localhost/rcl", "<URL no interpretable>"),
+        ("mysql://usuario:pa@se/creto@localhost/rcl", "mysql://*** [credenciales sin codificar]"),
+    ],
+)
+def test_describe_database_url_unencoded_at_is_ambiguous(url: str, expected: str):
     assert describe_database_url(url) == expected
 
 
@@ -44,6 +81,12 @@ def test_describe_database_url(url: str, expected: str):
         "postgres usuario:secreto",
         "postgresql://usuario:secreto@localhost:abc/liga_bot",
         "mysql://usuario:secreto@localhost/liga_bot",
+        "pglite://usuario:secreto@localhost/liga_bot",
+        "postgresql://localhost/liga_bot?password=pa@secreto",
+        "postgresql://usuario:pa@se/creto@localhost/liga_bot",
+        "postgresql://usuario:pa@se?creto@localhost/liga_bot",
+        "postgresql://usuario:pa@se#creto@localhost/liga_bot",
+        "postgresql://usuario:pa@se%creto@localhost/liga_bot",
     ],
 )
 def test_describe_database_url_never_contains_credentials(url: str):
@@ -106,3 +149,26 @@ async def test_get_engine_malformed_postgres_url_hides_password():
 
     assert "secreto" not in _full_traceback(exc_info.value)
     assert "no válida" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_get_engine_sqlalchemy_error_with_url_is_not_chained():
+    """Si SQLAlchemy incluyera la URL en su error, la traza registrada no la arrastra."""
+    from sqlalchemy.exc import ArgumentError
+
+    settings = Settings(database_url=POSTGRES_URL)
+
+    def raise_with_url(url: str, **_: object) -> None:
+        raise ArgumentError(f"Could not parse SQLAlchemy URL from string '{url}'")
+
+    with (
+        patch("liga_bot.database.create_async_engine", side_effect=raise_with_url),
+        pytest.raises(ValueError) as exc_info,
+    ):
+        await get_engine(settings)
+
+    assert "secreto" not in _full_traceback(exc_info.value)
+    assert str(exc_info.value) == (
+        "URL de base de datos no válida "
+        "(PostgreSQL (postgresql+asyncpg://localhost:5432/liga_bot)): ArgumentError."
+    )
