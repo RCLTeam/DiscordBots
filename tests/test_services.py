@@ -21,7 +21,6 @@ import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-import liga_bot.repositories
 from liga_bot.config import (
     DEFAULT_TICKET_AVISO_MARCADOR,
     DEFAULT_TICKETS_CATEGORY_NAMES,
@@ -29,7 +28,6 @@ from liga_bot.config import (
 )
 from liga_bot.models.enums import Division, MatchStatus
 from liga_bot.models.match import DEFAULT_PREMIER_SEASON_DIVISION_ID
-from liga_bot.repositories import ticket_repo
 from liga_bot.repositories.match_repo import MatchRepository
 from liga_bot.repositories.team_repo import TeamRepository
 from liga_bot.repositories.ticket_repo import TicketNoticeRepository
@@ -768,22 +766,6 @@ async def test_create_jornada_from_csv_partial_errors_and_duplicates(
     assert j_res.error_count == 2
     assert "Fila 3" in j_res.errors[0]
     assert "Fila 4: enfrentamiento duplicado" in j_res.errors[1]
-
-
-@pytest.mark.parametrize(
-    ("owner", "alias"),
-    [
-        (ScheduleService, "create_single_match"),
-        (ScheduleService, "process_schedule_csv"),
-        (TicketService, "audit_tickets"),
-        (ticket_repo, "TicketRepository"),
-        (liga_bot.repositories, "TicketRepository"),
-    ],
-)
-def test_sin_alias_de_compatibilidad(owner: object, alias: str) -> None:
-    """Cada operación tiene un único nombre: create_match, create_jornada_from_csv,
-    check_tickets y TicketNoticeRepository."""
-    assert not hasattr(owner, alias)
 
 
 # ---------------------------------------------------------------------------

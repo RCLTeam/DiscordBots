@@ -1204,3 +1204,26 @@ async def test_repository_atomic_multi_operation_commit(
     # Nueva sesión para confirmar persistencia real
     assert await team_repo.get_by_id(t1.id) is not None
     assert await match_repo.get_by_id(match.id) is not None
+
+
+def test_cada_clase_de_repositorios_tiene_un_unico_nombre():
+    """Ningún módulo de repositorios expone una clase con un nombre distinto del suyo."""
+    import importlib
+    import inspect
+    import pkgutil
+
+    import liga_bot.repositories as paquete
+
+    modulos = [paquete] + [
+        importlib.import_module(f"{paquete.__name__}.{info.name}")
+        for info in pkgutil.iter_modules(paquete.__path__)
+    ]
+    alias = [
+        f"{modulo.__name__}.{nombre}"
+        for modulo in modulos
+        for nombre, valor in vars(modulo).items()
+        if inspect.isclass(valor)
+        and valor.__module__.startswith(paquete.__name__)
+        and nombre != valor.__name__
+    ]
+    assert alias == []
