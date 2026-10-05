@@ -71,6 +71,7 @@ class TicketAuditResult:
     skipped_empty: int = 0
     skipped_forbidden: int = 0
     skipped_error: int = 0
+    revision_hours: int = DEFAULT_TICKET_REVISION_HOURS
     details: list[ChannelAuditDetail] = field(default_factory=list)
 
     def __iter__(self):
@@ -82,23 +83,24 @@ class TicketAuditResult:
             f"Revisión completada: {self.channels_scanned} canal(es) en "
             f"{self.categories_scanned} categoría(s). "
             f"Avisos enviados: {self.alerts_sent} | "
-            f"Activos (<24h): {self.skipped_recent} | "
+            f"Activos (<{self.revision_hours}h): {self.skipped_recent} | "
             f"Staff respondido: {self.skipped_staff} | "
-            f"Ya avisados (<24h): {self.skipped_already_alerted} | "
+            f"Ya avisados (<{self.revision_hours}h): {self.skipped_already_alerted} | "
             f"Vacíos/Sin permisos: {self.skipped_empty + self.skipped_forbidden}"
         )
 
 
 def normalize_category_name(texto: str) -> str:
-    """Normaliza tipografías Unicode estilizadas a ASCII y minúsculas."""
-    return unicodedata.normalize("NFKD", texto).lower()
+    """Normaliza tipografías Unicode estilizadas a ASCII, sin espacios extremos y en minúsculas."""
+    return unicodedata.normalize("NFKD", texto).strip().lower()
 
 
 class TicketService:
     """
     Servicio de auditoría de inactividad de tickets.
-    Controla deltas temporales >= 24h, exclusión estricta de staff y
-    prevención de spam diario mediante TicketNoticeRepository.
+    Controla deltas temporales >= ticket_revision_hours (24 h por defecto),
+    exclusión estricta de staff y prevención de avisos repetidos mediante
+    TicketNoticeRepository.
     """
 
     def __init__(
@@ -122,9 +124,8 @@ class TicketService:
             self.settings.ceo_premier_role_id,
             self.settings.ceo_ascend_role_id,
         }
-        organizador_id = getattr(self.settings, "organizador_role_id", None)
-        if organizador_id:
-            ids.add(organizador_id)
+        if self.settings.organizador_role_id:
+            ids.add(self.settings.organizador_role_id)
         return {r for r in ids if r is not None}
 
     async def resolve_member(
@@ -221,9 +222,7 @@ class TicketService:
 
         is_staff = await self.is_staff_author(guild, mensaje.author)
         delta = now - msg_time
-        revision_hours = getattr(
-            self.settings, "ticket_revision_hours", DEFAULT_TICKET_REVISION_HOURS
-        )
+        revision_hours = self.settings.ticket_revision_hours
         threshold = timedelta(hours=revision_hours)
 
         async with transactional_session(self.session_factory) as session:
@@ -254,7 +253,7 @@ class TicketService:
                     detail=f"Active ticket (delta: {delta} < {threshold})",
                 )
 
-            # Delta >= 24h y autor no es staff: comprobar si ya se envió aviso en últimas 24h
+            # Delta >= umbral y autor no es staff: comprobar si ya se avisó dentro del umbral
             notice = await repo.get_by_channel_id(channel.id)
             if notice is not None and notice.last_alert_sent_at is not None:
                 last_alert = notice.last_alert_sent_at
@@ -325,22 +324,19 @@ class TicketService:
         category_name: str | None = None,
     ) -> TicketAuditResult:
         """Audita todas las categorías o una específica en el guild."""
-        result = TicketAuditResult()
+        result = TicketAuditResult(revision_hours=self.settings.ticket_revision_hours)
 
         if category_name:
             target_names = {normalize_category_name(category_name)}
         else:
             target_names = {normalize_category_name(n) for n in DEFAULT_TICKETS_CATEGORY_NAMES}
-            custom_cat = getattr(self.settings, "tickets_category_name", None)
-            if custom_cat:
-                target_names.add(normalize_category_name(custom_cat))
-            target_names.add("tickets")
+            if self.settings.tickets_category_name.strip():
+                target_names.add(normalize_category_name(self.settings.tickets_category_name))
 
+        # Coincidencia exacta tras normalizar: una categoría que solo contenga
+        # «tickets» en el nombre (p. ej. un archivo) no se audita.
         matching_categories = [
-            cat
-            for cat in guild.categories
-            if normalize_category_name(cat.name) in target_names
-            or any(t in normalize_category_name(cat.name) for t in target_names)
+            cat for cat in guild.categories if normalize_category_name(cat.name) in target_names
         ]
         result.categories_scanned = len(matching_categories)
 

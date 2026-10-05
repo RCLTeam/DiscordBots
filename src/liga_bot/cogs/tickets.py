@@ -139,9 +139,10 @@ class TicketsCog(commands.Cog, name="Tickets"):
         embed.add_field(
             name="⏭️ Canales Descartados / En Regla",
             value=(
-                f"• **Activos (<24h)**: {result.skipped_recent}\n"
+                f"• **Activos (<{result.revision_hours}h)**: {result.skipped_recent}\n"
                 f"• **Respondidos por Staff**: {result.skipped_staff}\n"
-                f"• **Ya notificados (<24h)**: {result.skipped_already_alerted}\n"
+                f"• **Ya notificados (<{result.revision_hours}h)**: "
+                f"{result.skipped_already_alerted}\n"
                 f"• **Canales vacíos**: {result.skipped_empty}\n"
                 f"• **Sin permisos / Error**: {result.skipped_forbidden + result.skipped_error}"
             ),
