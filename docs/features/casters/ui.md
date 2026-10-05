@@ -114,6 +114,8 @@ El color del embed y la insignia del campo `Estado` se calculan dinámicamente s
    - `btn_both` (`Ambas mezcladas`): deshabilitado en caliente (`disabled=True`) si `has_streamer=True`; habilitado si `has_streamer=False`.
    - `btn_leave` (`Desapuntarse`): siempre habilitado (`disabled=False`).
 
+   La vista se reconstruye con este estado en dos momentos: al pulsar cualquier botón (sección 4) y al resincronizar la cartelera con `/panel-casters` o `/cartelera-casters`, que edita cada tarjeta existente con `msg.edit(embed=embed, view=view)` (ver [`commands.md`](commands.md)).
+
 ---
 
 ## 4. Botón Dinámico Deserializable: `CasterActionButton`
