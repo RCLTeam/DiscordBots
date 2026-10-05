@@ -304,3 +304,74 @@ async def test_post_suggestion_reaction_failure_is_non_fatal(mock_bot, mock_chan
     )
     assert msg_id == 987654321
     assert ch_id == 123456789
+
+
+# ---------------------------------------------------------------------------
+# Límites de longitud de Discord en el embed
+# ---------------------------------------------------------------------------
+
+
+async def _post_and_get_embed(mock_bot, mock_channel, **kwargs):
+    channel, _ = mock_channel
+    mock_bot.get_channel.return_value = channel
+    service = SuggestionService(bot=mock_bot, settings=Settings(suggestions_channel_id=123456789))
+    await service.post_suggestion(**kwargs)
+    _, call_kwargs = channel.send.call_args
+    return call_kwargs["embed"]
+
+
+@pytest.mark.asyncio
+async def test_post_suggestion_long_text_is_truncated_to_description_limit(mock_bot, mock_channel):
+    long_text = "a" * 5000
+    embed = await _post_and_get_embed(
+        mock_bot, mock_channel, author_id="1", author_username="User", suggestion=long_text
+    )
+
+    assert len(embed.description) <= 4096
+    assert embed.description.startswith("a" * 4000)
+    assert embed.description.endswith("[texto recortado]")
+    assert len(embed) <= 6000
+
+
+@pytest.mark.asyncio
+async def test_post_suggestion_long_author_name_is_truncated(mock_bot, mock_channel):
+    long_name = "n" * 300
+    long_id = "9" * 2000
+    embed = await _post_and_get_embed(
+        mock_bot,
+        mock_channel,
+        author_id=long_id,
+        author_username=long_name,
+        suggestion="Sugerencia normal",
+    )
+
+    assert len(embed.author.name) <= 256
+    assert len(embed.fields[0].value) <= 1024
+    assert len(embed) <= 6000
+
+
+@pytest.mark.asyncio
+async def test_post_suggestion_text_at_limit_is_not_truncated(mock_bot, mock_channel):
+    exact_text = "b" * 4096
+    embed = await _post_and_get_embed(
+        mock_bot, mock_channel, author_id="1", author_username="User", suggestion=exact_text
+    )
+
+    assert embed.description == exact_text
+
+
+@pytest.mark.asyncio
+async def test_post_suggestion_short_text_is_published_unchanged(mock_bot, mock_channel):
+    channel, sent_message = mock_channel
+    embed = await _post_and_get_embed(
+        mock_bot,
+        mock_channel,
+        author_id="111222333",
+        author_username="TestUser",
+        suggestion="Sugerencia corta",
+    )
+
+    assert embed.description == "Sugerencia corta"
+    assert embed.author.name == "TestUser"
+    assert embed.fields[0].value == "<@111222333> (TestUser)"
+    assert sent_message.add_reaction.await_count == 2

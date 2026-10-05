@@ -15,6 +15,19 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("liga_bot.services.suggestion")
 
+# Límites que impone Discord a los embeds (caracteres).
+EMBED_DESCRIPTION_LIMIT = 4096
+EMBED_AUTHOR_NAME_LIMIT = 256
+EMBED_FIELD_VALUE_LIMIT = 1024
+TRUNCATION_MARKER = "… [texto recortado]"
+
+
+def _truncate(text: str, limit: int, marker: str = "…") -> str:
+    """Recorta ``text`` a ``limit`` caracteres como máximo, terminando en ``marker``."""
+    if len(text) <= limit:
+        return text
+    return text[: limit - len(marker)].rstrip() + marker
+
 
 class SuggestionDeliveryError(Exception):
     """Excepción lanzada cuando ocurre un error al entregar una sugerencia a Discord."""
@@ -90,22 +103,33 @@ class SuggestionService:
                 except (ValueError, TypeError):
                     ts = datetime.now(timezone.utc)
 
-        # 3. Construcción del Embed
+        # 3. Construcción del Embed (recortado a los límites de Discord)
+        description = _truncate(text, EMBED_DESCRIPTION_LIMIT, TRUNCATION_MARKER)
+        author_name = _truncate(clean_username, EMBED_AUTHOR_NAME_LIMIT)
+        author_field = _truncate(f"<@{clean_author_id}> ({author_name})", EMBED_FIELD_VALUE_LIMIT)
+        if len(description) < len(text):
+            logger.info(
+                "Sugerencia de %s recortada de %d a %d caracteres.",
+                clean_author_id[:32],
+                len(text),
+                len(description),
+            )
+
         embed = discord.Embed(
             title="💡 Nueva Sugerencia",
-            description=text,
+            description=description,
             color=0x5865F2,
             timestamp=ts,
         )
 
         if avatar_url and (avatar_url.startswith("http://") or avatar_url.startswith("https://")):
-            embed.set_author(name=clean_username, icon_url=avatar_url)
+            embed.set_author(name=author_name, icon_url=avatar_url)
         else:
-            embed.set_author(name=clean_username)
+            embed.set_author(name=author_name)
 
         embed.add_field(
             name="Autor",
-            value=f"<@{clean_author_id}> ({clean_username})",
+            value=author_field,
             inline=True,
         )
         embed.set_footer(text="RCL • Sistema de Sugerencias")
