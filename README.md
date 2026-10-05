@@ -38,7 +38,7 @@ Diseñado bajo una arquitectura modular por capas desacopladas (*vertical slices
 | **Motor Embebido** | `py-pglite` | `0.5+` | PostgreSQL compilado a WebAssembly ejecutado en proceso para desarrollo local y pruebas automatizadas sin Docker. |
 | **Migraciones de Esquema** | `Alembic` | `1.14+` | Control de versiones de la base de datos relacional con soporte asíncrono para migraciones automáticas. |
 | **Red y WebSockets** | `aiohttp` | `3.11+` | Servidor WebSocket interno y endpoints HTTP REST para la pasarela de integración bidireccional (*WebSocket Bridge*). |
-| **Configuración** | `pydantic-settings` | `2.7+` | Validación estricta en tiempo de arranque, normalización de URLs y lectura de 18 variables de entorno. |
+| **Configuración** | `pydantic-settings` | `2.7+` | Validación estricta en tiempo de arranque, normalización de URLs y lectura de 25 variables de entorno. |
 | **Calidad y Testing** | `pytest` + `ruff` | `9.1+` / `0.9+` | Suite de 1.159 pruebas deterministas (`pytest-asyncio`) y formateo/linting estricto de código. |
 
 ---
@@ -156,7 +156,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │   ├── architecture/                         # Fundamentos arquitectónicos y runtime central
 │   │   ├── README.md                         # Índice y mapa de navegación del núcleo arquitectónico
 │   │   ├── cli.md                            # Consola CLI (liga-cli), comandos de sembrado y formatos
-│   │   ├── configuration.md                  # Matriz de 18 variables de entorno con Pydantic Settings v2
+│   │   ├── configuration.md                  # Matriz de 25 variables de entorno con Pydantic Settings v2
 │   │   ├── database-engine.md                # Persistencia dual (PostgreSQL asyncpg y PGlite embebido)
 │   │   └── runtime.md                        # Ciclo de vida asíncrono de LigaBot, inyección de dependencias y hooks
 │   ├── features/                             # Módulos funcionales del bot organizados por dominios
@@ -291,7 +291,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │   ├── test_bridge_protocol.py               # Serialización y deserialización de tramas JSON del protocolo
 │   ├── test_cli.py                           # Validación de comandos CLI (seed-teams, esquemas JSON y CSV)
 │   ├── test_cogs.py                          # Carga y descarga dinámica de cogs en LigaBot
-│   ├── test_config.py                        # Validación estricta de las 18 variables con Pydantic Settings
+│   ├── test_config.py                        # Validación estricta de las 25 variables con Pydantic Settings
 │   ├── test_database.py                      # Conexión, pooling y sesiones asíncronas con PGlite y PostgreSQL
 │   ├── test_formatting.py                    # Formateo de plantillas oficiales de coordinación y embeds
 │   ├── test_models.py                        # Instanciación y restricciones de modelos relacionales
@@ -318,7 +318,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │   ├── test_suggestion_service_resilience.py # Resiliencia ante fallos en envío de sugerencias o canal inválido
 │   ├── test_websocket_bridge_concurrency.py  # Concurrencia de múltiples clientes WebSocket simultáneos
 │   └── test_websocket_bridge_service.py      # Flujo de conexión, handshake y procesamiento de tramas
-├── .env.example                              # Plantilla sincronizada con las 18 variables de entorno del sistema
+├── .env.example                              # Plantilla sincronizada con las 25 variables de entorno del sistema
 ├── .gitignore                                # Reglas de exclusión de archivos temporales y entornos virtuales
 ├── README.md                                 # Portal principal y guía integral del proyecto LigaBot
 ├── alembic.ini                               # Archivo de configuración principal para Alembic
@@ -331,9 +331,9 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 
 ## ⚙️ Variables de Entorno
 
-LigaBot utiliza **Pydantic Settings v2** para validar las 18 variables de configuración respaldadas por el archivo `.env`. Todos los nombres de variables son insensibles a mayúsculas/minúsculas.
+LigaBot utiliza **Pydantic Settings v2** para validar las 25 variables de configuración respaldadas por el archivo `.env`. Todos los nombres de variables son insensibles a mayúsculas/minúsculas.
 
-A continuación se muestra la matriz completa de las 18 variables sincronizada con `src/liga_bot/config.py` y `.env.example`:
+A continuación se muestra la matriz completa de las 25 variables sincronizada con `src/liga_bot/config.py` y `.env.example` (`tests/test_config.py` comprueba que las tres fuentes coinciden):
 
 | Variable de Entorno | Tipo | Valor Predeterminado | Requerido | Descripción |
 |---|---|---|:---:|---|
@@ -349,6 +349,10 @@ A continuación se muestra la matriz completa de las 18 variables sincronizada c
 | `ORGANIZADOR_ROLE_ID` | `int` | `0` | No | Rol adicional cuyos mensajes cuentan como respuesta del staff en la auditoría de tickets (`0` lo desactiva). |
 | `TICKET_REVISION_HOURS` | `int` | `24` | No | Horas sin respuesta del staff tras las que se avisa en un ticket (mínimo 1). |
 | `TICKETS_CATEGORY_NAME` | `str` | `""` | No | Categoría adicional que auditar, con coincidencia exacta del nombre, además de las cinco categorías de tickets predefinidas. |
+| `MODERATORS_CHANNEL_ID` | `int` | `1548038711697080494` | No | Snowflake del canal de moderadores donde el bot publica alertas del sistema (`0` las desactiva). |
+| `CASTERS_CHANNEL_ID` | `int` | `1550210628361392278` | No | Snowflake del canal donde se publica el panel de casters. |
+| `CASTER_ROLE_ID` | `int` | `0` | No | Rol de caster requerido para usar los botones del panel (`0` desactiva la restricción). |
+| `REGLAMENTO_CHANNEL_ID` | `int` | `1548038711697080491` | No | Snowflake del canal del reglamento mencionado en el mensaje de coordinación de cada partido. |
 | `FREE_ROLE_NAME` | `str` | `"Libre"` | No | Nombre textual del rol asignado a agentes libres en el servidor. |
 | `DATABASE_URL` | `str` | `"pglite:///:memory:"` | No | URI de conexión SQLAlchemy (`pglite:///:memory:` o `postgresql+asyncpg://...`). |
 | `BRIDGE_ENABLED` | `bool` | `True` | No | Conmutador booleano maestro para activar/desactivar el servidor WebSocket. |
@@ -358,6 +362,8 @@ A continuación se muestra la matriz completa de las 18 variables sincronizada c
 | `SUGGESTIONS_CHANNEL_ID` | `int` | `0` | No | Snowflake del canal de Discord donde se publican sugerencias web. |
 | `BRIDGE_RATE_LIMIT_PER_MINUTE` | `int` | `10` | No | Límite máximo global de peticiones por minuto admitidas a través de la pasarela WebSocket. |
 | `LOG_LEVEL` | `str` | `"INFO"` | No | Nivel de logging (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`). |
+
+Si `GUILD_ID`, `STAFF_ROLE_ID`, `ADMIN_ROLE_ID`, `CEO_PREMIER_ROLE_ID`, `CEO_ASCEND_ROLE_ID`, `MODERATORS_CHANNEL_ID`, `CASTERS_CHANNEL_ID` o `REGLAMENTO_CHANNEL_ID` no están definidas en el entorno ni en `.env`, el bot usa el valor por defecto (los IDs del servidor oficial) y registra un aviso `WARNING` por cada una al cargar la configuración. En un servidor de pruebas, defínelas todas.
 
 Para un desglose pormenorizado de las propiedades computadas y validadores, consulta [docs/architecture/configuration.md](docs/architecture/configuration.md).
 
@@ -491,7 +497,7 @@ Toda la documentación técnica se encuentra modularizada bajo el directorio [`d
 - 📖 [**Portal Central de Documentación (`docs/README.md`)**](docs/README.md): Centro neurálgico, resumen de diseño modular y estándar de documentación atómica.
 - 🏛️ [**Arquitectura y Núcleo (`docs/architecture/README.md`)**](docs/architecture/README.md):
   - [Ciclo de Vida y Runtime (`runtime.md`)](docs/architecture/runtime.md): Clase `LigaBot`, contenedor de servicios, `setup_hook` y cierre ordenado.
-  - [Configuración (`configuration.md`)](docs/architecture/configuration.md): Matriz de 18 variables, validadores Pydantic y constantes.
+  - [Configuración (`configuration.md`)](docs/architecture/configuration.md): Matriz de 25 variables, validadores Pydantic y constantes.
   - [Consola CLI (`cli.md`)](docs/architecture/cli.md): Sintaxis de `seed-teams`, esquemas JSON/CSV y transacciones.
   - [Motor de Base de Datos (`database-engine.md`)](docs/architecture/database-engine.md): Persistencia dual PostgreSQL/PGlite y context managers.
 - 🧩 [**Hub de Módulos Funcionales (`docs/features/README.md`)**](docs/features/README.md):

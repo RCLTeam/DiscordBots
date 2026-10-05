@@ -271,7 +271,7 @@ Ubicadas en `src/liga_bot/utils/formatting.py`:
 
 ### 7.2 Plantillas Oficiales Verbatim
 - **`MENSAJE_1`**: Texto reglamentario de acuerdo de horario (plazo límite martes 23:59h) y convocatoria de alineaciones OP.GG con suplentes (6 horas previas; sin alineación a tiempo, el partido se disputa sin derecho a bans).
-- **`MENSAJE_2`**: Texto reglamentario de Fearless Draft (`https://lol.draftcore.net/`, fallback a `https://drafter.lol/`) y referencia al canal de normas (`DEFAULT_REGLAMENTO_CHANNEL` = `<#1548038711697080491>`).
+- **`MENSAJE_2`**: Texto reglamentario de Fearless Draft (`https://lol.draftcore.net/`, fallback a `https://drafter.lol/`) y referencia al canal de normas: `format_mensaje_2` menciona `<#REGLAMENTO_CHANNEL_ID>` (por defecto `<#1548038711697080491>`, `DEFAULT_REGLAMENTO_CHANNEL`); `ScheduleService` le pasa sus `settings`.
 - **`format_mensaje_1(...) -> str`**: Interpola `jornada`, `fecha`, `hora`, `equipo1` y `equipo2` admitiendo firmas flexibles por palabras clave o posicionales.
 - **`format_mensaje_2(reglamento=...) -> str`**: Interpola la mención al canal de reglamento.
 
