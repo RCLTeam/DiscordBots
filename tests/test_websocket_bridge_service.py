@@ -224,13 +224,7 @@ async def test_login_after_invalid_token_is_not_processed(running_service):
 
 
 @pytest.mark.asyncio
-async def test_invalid_login_is_logged_as_warning_without_token(
-    running_service, caplog, monkeypatch
-):
-    # fileConfig() de las migraciones de Alembic desactiva los loggers ya creados
-    # cuando otro test las ejecuta antes en la misma sesión de pytest.
-    bridge_logger = logging.getLogger("liga_bot.services.websocket_bridge")
-    monkeypatch.setattr(bridge_logger, "disabled", False)
+async def test_invalid_login_is_logged_as_warning_without_token(running_service, caplog):
     secret_attempt = "wrong-token-should-not-be-logged"
     ws_url = f"http://127.0.0.1:{running_service.port}/ws/bridge"
     with caplog.at_level(logging.WARNING, logger="liga_bot.services.websocket_bridge"):
