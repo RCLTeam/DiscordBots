@@ -18,13 +18,14 @@ They are STRICTLY EXCLUDED from Alembic migrations in production via include_obj
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     Enum,
     ForeignKey,
@@ -49,8 +50,8 @@ class Season(Base):
     __tablename__ = "seasons"
 
     name: Mapped[str] = mapped_column(String(120), primary_key=True)
-    starts_on: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    ends_on: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    starts_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    ends_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
