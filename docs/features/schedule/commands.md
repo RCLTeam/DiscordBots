@@ -114,7 +114,7 @@ Crea el registro de un enfrentamiento individual en la base de datos, valida la 
 1. **Rechazo de DMs**: Si `interaction.guild is None`, responde efímeramente `"❌ Este comando solo puede ser ejecutado dentro de un servidor de Discord."`.
 2. **Autorización**: Ejecuta `is_authorized_scheduler`.
 3. **Validación de Jornada**: Si `jornada < 1`, responde efímeramente `"❌ El número de jornada debe ser un entero positivo (>= 1)."`.
-4. **Parseo de Fechas**: Si `fecha` y `hora` son proporcionados, se combinan y parsean mediante `datetime.strptime(f"{fecha_clean} {hora_clean}", "%d/%m/%Y %H:%M").replace(tzinfo=timezone.utc)`. Si ocurre un `ValueError`, se degrada silenciosamente a `scheduled_dt = None`, permitiendo aprovisionar el canal con un horario tentativo en texto libre.
+4. **Parseo de Fechas**: Si `fecha` y `hora` son proporcionados, se interpretan con `parse_scheduled_at` (`src/liga_bot/utils/formatting.py`): se leen con el formato `%d/%m/%Y %H:%M` en la hora local de la liga (`LEAGUE_TIMEZONE` = `Europe/Madrid`, con su horario de verano) y se convierten a UTC para guardarlos en `scheduled_at`. Si no se pueden interpretar (por ejemplo, `21.00` en lugar de `21:00`), `scheduled_dt` queda a `None`: el canal se aprovisiona igualmente con un horario tentativo en texto libre, y la respuesta incluye el aviso `⚠️ Horario no reconocido` (ver más abajo).
 5. **Aplazamiento de Interacción**: Ejecuta `await interaction.response.defer(ephemeral=True)` para evitar el timeout de 3 segundos de Discord ante operaciones de base de datos y creación de canales.
 
 #### Respuestas Visuales (Embeds)
@@ -127,8 +127,9 @@ El comando responde mediante un mensaje de seguimiento efímero (`interaction.fo
   - **Descripción**: `Enfrentamiento: **{result.team1_name}** VS **{result.team2_name}**`.
   - **Campos**:
     - `Canal de Coordinación`: Mención del canal de Discord creado (`result.channel.mention`).
-    - `Horario Programado`: Cadena formateada en `%d/%m/%Y %H:%M UTC` (si el parseo fue exitoso).
+    - `Horario Programado`: Marca de tiempo de Discord `<t:{timestamp}:F>` (si el parseo fue exitoso). Cada usuario la ve en su propia zona horaria, igual que en el panel de casters.
     - `Horario Tentativo`: Cadena sin parsear con fecha y hora recibidas (si no se parseó a datetime formal).
+    - `⚠️ Horario no reconocido`: Solo si se indicaron `fecha` y `hora` y no se pudieron interpretar. Indica el formato esperado (`DD/MM/YYYY` y `HH:MM`, hora de Madrid) y que el partido queda sin horario, por lo que no aparecerá en el panel de casters. Si solo se indica uno de los dos, no hay aviso: se muestra como horario tentativo.
     - `Enlace al Canal`: Enlace directo de salto al canal (`[Ir al canal]({jump_url})`).
 - **Duplicado (`result.is_duplicate`)**:
   - **Color**: Oro (`discord.Color.gold()`).
@@ -185,6 +186,7 @@ El resultado agregado de la importación se presenta mediante un embed estructur
   - **`Resumen de Filas`**: Muestra total de filas procesadas, partidos creados y errores/omitidos.
   - **`Canales Aprovisionados`**: Lista de menciones a los canales de texto creados (`#j1-t1-vs-t2, ...`). Si la longitud de la cadena supera los 1020 caracteres, se aplica truncado defensivo a 1000 caracteres más la coletilla ` ... (truncado)` para respetar el límite de 1024 caracteres por campo en embeds de Discord.
   - **`Incidencias Reportadas`**: Lista de hasta 10 mensajes de error con formato `• Fila X: detalle`. Si existen más de 10 errores, se añade `*... y N errores adicionales.*`, aplicando igualmente el recorte defensivo a 1020 caracteres.
+  - **`Horarios no reconocidos`**: Lista de hasta 10 avisos (`JornadaResult.warnings`), uno por cada fila cuyo partido se creó pero cuya `fecha` y `hora` no se pudieron interpretar: `• Fila X (equipo1 vs equipo2): fecha u hora no reconocidas (...)`, con el formato esperado. Esas filas cuentan como partidos creados (no como errores), no cambian el color ni el título del embed y quedan sin horario en el panel de casters. Si hay más de 10, se añade `*... y N avisos adicionales.*`, con el mismo recorte defensivo a 1020 caracteres.
 
 ---
 

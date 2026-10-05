@@ -17,6 +17,7 @@ from liga_bot.cogs.permissions import is_authorized_scheduler
 from liga_bot.config import Settings, get_settings
 from liga_bot.database import get_session_factory
 from liga_bot.services.schedule_service import (
+    SCHEDULE_FORMAT_HINT,
     JornadaResult,
     MatchResult,
     ScheduleService,
@@ -142,7 +143,7 @@ class ScheduleCog(commands.Cog, name="Schedule"):
             if scheduled_dt:
                 embed.add_field(
                     name="Horario Programado",
-                    value=scheduled_dt.strftime("%d/%m/%Y %H:%M UTC"),
+                    value=f"<t:{int(scheduled_dt.timestamp())}:F>",
                     inline=True,
                 )
             elif fecha_clean or hora_clean:
@@ -151,6 +152,16 @@ class ScheduleCog(commands.Cog, name="Schedule"):
                     value=f"{fecha_clean or ''} {hora_clean or ''}".strip(),
                     inline=True,
                 )
+                if fecha_clean and hora_clean:
+                    embed.add_field(
+                        name="⚠️ Horario no reconocido",
+                        value=(
+                            f"No se ha podido interpretar `{fecha_clean} {hora_clean}`; "
+                            f"se esperaba {SCHEDULE_FORMAT_HINT}. El partido se ha creado "
+                            "sin horario y no aparecerá en el panel de casters."
+                        ),
+                        inline=False,
+                    )
             jump_url = getattr(result.channel, "jump_url", None) or result.channel.mention
             embed.add_field(
                 name="Enlace al Canal",
@@ -265,6 +276,14 @@ class ScheduleCog(commands.Cog, name="Schedule"):
             if len(errors_text) > 1020:
                 errors_text = errors_text[:1000] + " ... (truncado)"
             embed.add_field(name="Incidencias Reportadas", value=errors_text, inline=False)
+
+        if result.warnings:
+            warnings_text = "\n".join(f"• {w}" for w in result.warnings[:10])
+            if len(result.warnings) > 10:
+                warnings_text += f"\n*... y {len(result.warnings) - 10} avisos adicionales.*"
+            if len(warnings_text) > 1020:
+                warnings_text = warnings_text[:1000] + " ... (truncado)"
+            embed.add_field(name="Horarios no reconocidos", value=warnings_text, inline=False)
 
         sin_round = sum(1 for m in result.matches if m.success and m.id_round_missing)
         if sin_round:
