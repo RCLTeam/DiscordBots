@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from liga_bot.config import Settings, get_settings
 from liga_bot.database import get_session_factory, transactional_session
-from liga_bot.models.enums import RoleRequestStatus
+from liga_bot.models.enums import RoleRequestStatus, RosterRole
 from liga_bot.repositories.role_request_repo import RoleRequestRepository
 from liga_bot.repositories.team_repo import TeamRepository
 from liga_bot.services.roster_sync_service import RosterSyncError
@@ -490,7 +490,7 @@ class RoleService:
             )
             raise TeamRoleNotResolvedError(
                 f"El equipo '{equipo}' no está registrado en la base de datos. "
-                "Regístralo (por ejemplo, con `liga-cli seed-teams`) y vuelve a confirmar."
+                "Regístralo (por ejemplo, con `liga-cli seed-teams`) y vuelve a intentarlo."
             )
 
         role = guild.get_role(team.discord_role_id)
@@ -504,7 +504,7 @@ class RoleService:
             )
             raise TeamRoleNotResolvedError(
                 f"El rol del equipo '{team.name}' (discord_role_id {team.discord_role_id}) "
-                "no existe en el servidor. Corrige el ID registrado y vuelve a confirmar."
+                "no existe en el servidor. Corrige el ID registrado y vuelve a intentarlo."
             )
 
         return team, role
@@ -689,6 +689,123 @@ class RoleService:
         )
 
         message = f"Rol {equipo_nombre} confirmado para {member_display}."
+        if warnings:
+            message = " ".join([message, *warnings])
+        return True, message
+
+    async def assign_team_role(
+        self,
+        guild: discord.Guild,
+        member: discord.Member,
+        staff_member: discord.Member,
+        equipo: str,
+        nombre_lol: str,
+        riot_tag: str,
+        posicion: str | None,
+    ) -> tuple[bool, str]:
+        """
+        Asigna directamente a un jugador a un equipo registrado (comando /asignar-rol),
+        dejando lo mismo que confirmar un ticket con ese equipo y posición:
+        - Rechaza que el staff se asigne un rol a sí mismo.
+        - Exige una posición de plantilla válida (RosterRole).
+        - Resuelve el equipo registrado y su rol por discord_role_id; cualquier otro valor
+          se rechaza sin tocar Discord.
+        - Fase 1 (una transacción): registra la cuenta de juego, la membresía con la
+          posición y la solicitud APPROVED con el staff_id. Si falla, no se toca Discord.
+        - Fase 2: asigna el rol, remueve 'Sin Verificar' y pone el apodo '<TAG> <NombreLoL>'.
+        - Retorna (True, mensaje) o (False, causa).
+        """
+        if staff_member.id == member.id:
+            return False, "No puedes asignarte un rol a ti mismo."
+
+        if not posicion:
+            return False, "Indica la posición del jugador en el equipo."
+        try:
+            position = RosterRole(posicion)
+        except ValueError:
+            return False, f"La posición '{posicion}' no es válida."
+
+        roster_service = getattr(self.bot, "roster_sync_service", None)
+        if roster_service is None:
+            logger.warning(
+                "RosterSyncService no disponible: no se asigna el equipo '%s' a %s.",
+                equipo,
+                member.display_name,
+            )
+            return (
+                False,
+                "El servicio de plantillas no está disponible. No se ha aplicado ningún cambio.",
+            )
+
+        try:
+            async with transactional_session(self.session_factory) as session:
+                team, role = await self._resolve_team_role(session, guild, equipo)
+
+                await self._ensure_player(
+                    member=member,
+                    nombre_lol=nombre_lol,
+                    riot_tag=riot_tag,
+                    session=session,
+                )
+                await roster_service.transfer_player(
+                    member=member,
+                    team_role=role,
+                    new_position=position,
+                    actor_id=staff_member.id,
+                    session=session,
+                )
+
+                repo = RoleRequestRepository(session)
+                req = await repo.create_request(
+                    user_id=member.id,
+                    nombre_lol=nombre_lol,
+                    riot_tag=riot_tag,
+                    equipo=team.name,
+                    canal_id=None,
+                    posicion=position.value,
+                )
+                await repo.update_status(
+                    request_id=req.id,
+                    estado=RoleRequestStatus.APPROVED,
+                    staff_id=staff_member.id,
+                )
+
+                known_tags = [t.tag for t in await TeamRepository(session).list_all()]
+                team_name = team.name
+                team_tag = team.tag
+
+        except (TeamRoleNotResolvedError, RosterSyncError) as exc:
+            logger.warning(
+                "No se asigna el equipo '%s' a %s; transacción revertida: %s",
+                equipo,
+                member.display_name,
+                exc,
+            )
+            return False, str(exc)
+        except Exception as exc:
+            logger.error(
+                "Error al registrar la asignación directa de '%s' a %s; transacción revertida: %s",
+                equipo,
+                member.display_name,
+                exc,
+                exc_info=True,
+            )
+            return (
+                False,
+                "No se pudo registrar la asignación en base de datos. "
+                "No se ha aplicado ningún cambio.",
+            )
+
+        warnings = await self._apply_team_role_in_discord(
+            guild=guild,
+            member=member,
+            role=role,
+            nombre_lol=nombre_lol,
+            team_tag=team_tag,
+            known_tags=known_tags,
+        )
+
+        message = f"Rol {team_name} asignado a {member.display_name} ({position.value})."
         if warnings:
             message = " ".join([message, *warnings])
         return True, message

@@ -681,6 +681,7 @@ __all__ = [
     "ConfirmarRolButton",
     "EquipoSelect",
     "EquipoSelectView",
+    "POSICION_DESCRIPCIONES",
     "PanelPedirRolView",
     "SolicitudRolModal",
     "TicketView",
