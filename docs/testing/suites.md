@@ -52,6 +52,7 @@ Pruebas en memoria con mocks puros, tiempo submilisegundo por test, sin interacc
 | `tests/test_roles_cog.py` | 27 | 789 | Comandos slash de verificación (`/pedir-rol`, `/asignar-rol`) y flujo de solicitud de roles. |
 | `tests/test_roster_cog.py` | 23 | 642 | Comando slash `/gestionar-posicion` y escucha de eventos `on_member_update`. |
 | `tests/test_role_config_permissions.py` | 18 | 294 | Verificación de permisos de staff (`staff_role_id`, `ceo_role_id`) para aprobación de roles. |
+| `tests/test_staff_permissions_policy.py` | 78 | 228 | Matriz de la política de autorización del staff: cada tipo de acción y cada función pública contra todas las combinaciones de rol y permiso nativo, `resolve_member` y la comprobación de `!sync`. |
 | `tests/test_roles_ui.py` | 25 | 614 | Vistas interactivas de Discord (`RoleVerificationView`) y modales de entrada de datos. |
 | `tests/test_roster_ui.py` | 30 | 870 | Vistas interactivas de plantillas (`GestionarPosicionView`) y menús de selección de roles competitivos. |
 | **Subtotal Unit** | **524** | **11.986** | |
