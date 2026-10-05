@@ -32,7 +32,7 @@ from liga_bot.cogs.permissions import (
     is_staff_or_admin,
     resolve_member,
 )
-from liga_bot.cogs.schedule import ScheduleCog
+from liga_bot.cogs.schedule import MAX_HORARIO_LENGTH, ScheduleCog
 from liga_bot.cogs.schedule import setup as schedule_setup
 from liga_bot.cogs.teams import TeamsCog
 from liga_bot.cogs.teams import setup as teams_setup
@@ -838,6 +838,36 @@ async def test_crear_partido_sin_fecha_ni_hora_no_avisa():
 
     embed = inter.followup.send.await_args.kwargs["embed"]
     assert all("no reconocido" not in f.name for f in embed.fields)
+
+
+def test_crear_partido_limita_la_longitud_de_fecha_y_hora():
+    """Discord rechaza fecha y hora más largas que los formatos aceptados."""
+    params = {p.name: p for p in ScheduleCog.crear_partido.parameters}
+    for name in ("fecha", "hora"):
+        assert params[name].required is False
+        # En opciones de texto, max_value se publica a Discord como max_length.
+        assert params[name].max_value == MAX_HORARIO_LENGTH
+
+
+@pytest.mark.asyncio
+async def test_crear_partido_con_fecha_y_hora_largas_respeta_limites_del_embed():
+    """Aunque llegasen valores largos, los campos del embed no superan 1024 caracteres."""
+    cog, _, inter = _crear_partido_cog_con_exito()
+
+    await cog.crear_partido.callback(
+        cog,
+        inter,
+        jornada=1,
+        equipo1="Equipo 1",
+        equipo2="Equipo 2",
+        fecha="x" * 600,
+        hora="y" * 600,
+    )
+
+    embed = inter.followup.send.await_args.kwargs["embed"]
+    fields = {f.name: f.value for f in embed.fields}
+    assert "⚠️ Horario no reconocido" in fields
+    assert all(len(value) <= 1024 for value in fields.values())
 
 
 @pytest.mark.asyncio
