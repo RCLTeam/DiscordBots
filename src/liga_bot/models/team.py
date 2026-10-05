@@ -5,10 +5,10 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import BigInteger, ForeignKey, Index, String, Uuid
+from sqlalchemy import BigInteger, Boolean, ForeignKey, Index, String, Text, Uuid, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from liga_bot.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from liga_bot.models.base import Base, TimestampMixin, UpdatedAtMixin, UUIDPrimaryKeyMixin
 from liga_bot.models.enums import (
     Division,
     ensure_division_assignable,
@@ -23,12 +23,12 @@ DEFAULT_PREMIER_SEASON_DIVISION_ID = uuid.UUID("20000000-0000-4000-8000-00000000
 DEFAULT_ASCEND_SEASON_DIVISION_ID = uuid.UUID("20000000-0000-4000-8000-000000000002")
 
 
-class Team(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+class Team(Base, UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin):
     """Representa un equipo participante en la liga."""
 
     __tablename__ = "teams"
 
-    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
     tag: Mapped[str] = mapped_column("short_name", String(16), nullable=False)
     season_division_id: Mapped[uuid.UUID] = mapped_column(
         Uuid,
@@ -36,6 +36,15 @@ class Team(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         nullable=False,
     )
     discord_role_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False)
+    # Columnas que gestiona la web; el bot no las usa, pero el modelo describe la tabla entera.
+    logo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    color: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        server_default=true(),
+        nullable=False,
+    )
 
     # Relación con la división de temporada
     season_division: Mapped[SeasonDivision] = relationship("SeasonDivision", lazy="joined")

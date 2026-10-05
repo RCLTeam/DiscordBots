@@ -240,12 +240,12 @@ async def test_is_staff_with_administrator_permission(custom_settings: Settings)
 
 @pytest.mark.asyncio
 async def test_is_staff_with_manage_guild_permission(custom_settings: Settings):
-    """Valida que un miembro con permiso nativo manage_guild sea reconocido como staff."""
+    """Valida que el permiso nativo manage_guild por sí solo no autoriza como staff."""
     member = make_mock_member(5, roles=[], can_manage_guild=True)
     inter = make_mock_interaction(user=member)
 
-    assert await is_staff(inter, custom_settings) is True
-    assert await is_staff(member, custom_settings) is True
+    assert await is_staff(inter, custom_settings) is False
+    assert await is_staff(member, custom_settings) is False
 
 
 @pytest.mark.asyncio

@@ -261,7 +261,16 @@ Esta mitigación canaliza la comunicación a través del protocolo de red TCP es
 
 ---
 
-## 6. Tabla Comparativa de Límites y Mitigaciones
+## 6. Límite 5: Configuración de logging de Alembic dentro de la sesión de pytest
+
+La fixture `migrated_db` (`tests/conftest.py`) y algunos tests aplican las migraciones en el mismo proceso de pytest, y `alembic/env.py` configura el logging con `logging.config.fileConfig` a partir de `alembic.ini`.
+
+- **Loggers existentes:** por defecto `fileConfig` desactiva (`disabled = True`) todos los loggers ya creados que no aparecen en `alembic.ini`, entre ellos los de `liga_bot.*`, y `caplog` dejaba de recibir sus registros según el orden de ejecución. `alembic/env.py` llama a `fileConfig(..., disable_existing_loggers=False)`, así que los tests no necesitan reactivar loggers. Lo comprueba `tests/test_alembic_logging.py`.
+- **Salvedad:** `fileConfig` sigue sustituyendo los handlers del logger raíz, incluido el de `caplog`. Un test que ejecute `command.upgrade`/`command.downgrade` dentro de su cuerpo no debe esperar que `caplog` capture lo que se registre después en ese mismo test; para comprobar logs, se depende de `migrated_db` en lugar de aplicar migraciones dentro del test.
+
+---
+
+## 7. Tabla Comparativa de Límites y Mitigaciones
 
 | Límite Identificado | Subsistema Afectado | Síntoma Sin Mitigación | Estrategia de Mitigación | Verificación Automatizada |
 |---|---|---|---|---|
@@ -269,3 +278,4 @@ Esta mitigación canaliza la comunicación a través del protocolo de red TCP es
 | **Serialización Transaccional** | `StaticPool` / PGlite | `InterfaceError: another operation is in progress` en queries concurrentes | Registro `_engine_locks` + `asyncio.Lock` en `transactional_session` | `test_pglite_engine_lock_handling_across_test_iterations`, `test_engine_lock_recovery_after_transaction_failure` |
 | **Agotamiento de Sockets** | Kernel Linux / `aiohttp` / WebSocket Bridge | `EMFILE` / `EADDRINUSE` / excepciones concurrentes en parada | `port=0` efímero + extracción atómica `self.websocket_bridge_service = None` + cierre trifásico | `test_resilience_rapid_start_stop_real_ephemeral_sockets_20_cycles`, `test_resilience_concurrent_close_stress_50_tasks` |
 | **Sockets UNIX en Windows** | Windows / Node.js / `py-pglite` | `Error: listen EACCES: permission denied` en `.s.PGSQL.5432` | Desacoplamiento de PGlite en Windows y ejecución de PostgreSQL en Docker (`postgres:16`) vía TCP | Verificación de conexión estándar `postgresql+asyncpg` y suite de tests de base de datos |
+| **Logging de Alembic** | `alembic/env.py` / `fileConfig` | Loggers `liga_bot.*` desactivados y `caplog` vacío tras aplicar migraciones | `fileConfig(..., disable_existing_loggers=False)` | `test_migrations_keep_bot_logger_enabled` |

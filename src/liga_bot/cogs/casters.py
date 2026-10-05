@@ -179,7 +179,7 @@ class CastersCog(commands.Cog, name="CastersCog"):
                     msg = None
 
                 if msg is not None:
-                    await msg.edit(embed=embed)
+                    await msg.edit(embed=embed, view=view)
                     synced_count += 1
                 else:
                     await self.caster_service.delete_card(match.id, target_channel.id)

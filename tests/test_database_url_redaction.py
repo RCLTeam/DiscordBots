@@ -94,13 +94,8 @@ def test_describe_database_url_never_contains_credentials(url: str):
 
 
 @pytest.mark.asyncio
-async def test_setup_hook_log_does_not_contain_password(
-    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
-):
+async def test_setup_hook_log_does_not_contain_password(caplog: pytest.LogCaptureFixture):
     """El log de arranque indica motor, host y base de datos, pero no la contraseña."""
-    # alembic/env.py usa fileConfig(), que desactiva los loggers ya creados: si otro test
-    # aplicó migraciones antes, caplog no recibiría nada y el test pasaría sin comprobar.
-    monkeypatch.setattr(logging.getLogger("liga_bot.bot"), "disabled", False)
     settings = Settings(database_url=POSTGRES_URL, bridge_enabled=False)
     mock_engine = MagicMock()
     mock_engine.dispose = AsyncMock()

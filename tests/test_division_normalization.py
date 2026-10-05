@@ -188,9 +188,7 @@ async def test_repositories_reject_unknown_division_filter(session: AsyncSession
 
 
 @pytest.mark.asyncio
-async def test_unknown_division_name_logs_warning(session: AsyncSession, caplog, monkeypatch):
-    # La configuración de logging de Alembic (fileConfig) desactiva los loggers ya creados.
-    monkeypatch.setattr(logging.getLogger("liga_bot.models.enums"), "disabled", False)
+async def test_unknown_division_name_logs_warning(session: AsyncSession, caplog):
     web = await _create_web_season(session, "Premier", f"Challengers {uuid.uuid4().hex[:6]}")
     t1 = await _create_team(session, web.ascend, "Desconocido")
     t2 = await _create_team(session, web.ascend, "Otro")

@@ -20,6 +20,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+async def _puede_sincronizar_por_prefijo(ctx: commands.Context) -> bool:
+    """Aplica a !sync la misma política que a /sync y /sincronizar."""
+    settings = getattr(ctx.cog, "settings", None)
+    if not await is_staff_or_admin(ctx.author, settings):
+        raise commands.CheckFailure(
+            "Se requiere Staff, Admin, CEO o permiso de Administrador para sincronizar."
+        )
+    return True
+
+
 class AdminCog(commands.Cog, name="Admin"):
     """Comandos administrativos protegidos y sincronización del árbol de Discord."""
 
@@ -40,8 +50,7 @@ class AdminCog(commands.Cog, name="Admin"):
         """Lógica centralizada para sincronización del command tree."""
         if not await is_staff_or_admin(interaction, self.settings):
             await interaction.response.send_message(
-                "❌ No tienes permisos para sincronizar comandos "
-                "(se requiere Staff o Administrador).",
+                "❌ No tienes permisos para sincronizar comandos (se requiere Staff, Admin o CEO).",
                 ephemeral=True,
             )
             return
@@ -112,7 +121,7 @@ class AdminCog(commands.Cog, name="Admin"):
             await interaction.followup.send(embed=embed_err, ephemeral=True)
 
     @commands.command(name="sync")
-    @commands.has_permissions(manage_guild=True)
+    @commands.check(_puede_sincronizar_por_prefijo)
     async def sync_prefix(self, ctx: commands.Context, scope: str = "global") -> None:
         """
         Sincroniza el árbol de comandos por mensaje de texto (!sync).

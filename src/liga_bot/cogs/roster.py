@@ -11,7 +11,6 @@ Define RosterCog con:
 
 from __future__ import annotations
 
-import inspect
 import logging
 from typing import TYPE_CHECKING
 
@@ -164,8 +163,7 @@ class RosterCog(commands.Cog, name="Roster"):
             return
 
         # 2. Verificación de autorización de Staff / Administrador
-        staff_check = is_staff(interaction.user, self.settings)
-        is_authorized = await staff_check if inspect.isawaitable(staff_check) else bool(staff_check)
+        is_authorized = await is_staff(interaction.user, self.settings)
         if not is_authorized:
             await interaction.response.send_message(
                 "❌ Solo el personal de staff tiene autorización para gestionar posiciones.",
@@ -269,8 +267,7 @@ class RosterCog(commands.Cog, name="Roster"):
             )
             return
 
-        staff_check = is_staff(interaction.user, self.settings)
-        is_authorized = await staff_check if inspect.isawaitable(staff_check) else bool(staff_check)
+        is_authorized = await is_staff(interaction.user, self.settings)
         if not is_authorized:
             await interaction.response.send_message(
                 "❌ Solo el personal de staff puede traspasar jugadores.",
@@ -385,8 +382,7 @@ class RosterCog(commands.Cog, name="Roster"):
             )
             return
 
-        staff_check = is_staff(interaction.user, self.settings)
-        is_authorized = await staff_check if inspect.isawaitable(staff_check) else bool(staff_check)
+        is_authorized = await is_staff(interaction.user, self.settings)
         if not is_authorized:
             await interaction.response.send_message(
                 "❌ Solo el personal de staff puede liberar jugadores.",

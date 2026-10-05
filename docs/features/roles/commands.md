@@ -64,8 +64,8 @@ Publica el mensaje visual incrustado (*embed*) con el botón interactivo persist
 - **Ubicación**: `src/liga_bot/cogs/roles.py:181-216`.
 - **Permisos por Defecto**: `@app_commands.default_permissions(manage_guild=True)`.
 - **Control de Acceso en Runtime**:
-  - Valida la autorización ejecutando `is_staff(interaction.user, self.settings)`.
-  - Si el usuario no pertenece a los roles configurados como Staff (`staff_role_id`) o directiva (`ceo_role_id`), rechaza la ejecución con un mensaje efímero: `"Solo el staff puede publicar el panel."`.
+  - Valida la autorización ejecutando `is_staff(interaction.user, self.settings)` (acción `ROLES_Y_PLANTILLAS` de la [política de autorización](../../architecture/permissions.md)): administrador nativo o rol Staff, Admin o CEO general. «Gestionar servidor» por sí solo no basta.
+  - Si el usuario no está autorizado, rechaza la ejecución con un mensaje efímero: `"Solo el staff puede publicar el panel."`.
 - **Parámetros**:
 
 | Parámetro | Tipo | Obligatorio | Descripción |
@@ -88,7 +88,7 @@ Comando administrativo para asignar directamente un equipo registrado o el rol d
 - **Ubicación**: `src/liga_bot/cogs/roles.py:89-179`.
 - **Permisos por Defecto**: `@app_commands.default_permissions(manage_guild=True)`.
 - **Control de Acceso en Runtime**:
-  - Comprobación obligatoria vía `is_staff(interaction.user, self.settings)`.
+  - Comprobación obligatoria vía `is_staff(interaction.user, self.settings)` (acción `ROLES_Y_PLANTILLAS` de la [política de autorización](../../architecture/permissions.md)).
   - Respuesta efímera de bloqueo para usuarios no autorizados: `"Solo el staff puede asignar roles."`.
   - **No autoasignación**: si `usuario` es quien ejecuta el comando, responde `"No puedes asignarte un rol a ti mismo."` sin tocar nada (igual que la regla de los tickets, tanto para equipos como para Libre).
 - **Parámetros**:

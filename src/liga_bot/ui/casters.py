@@ -5,7 +5,6 @@ and persistent action buttons using DynamicItem.
 
 from __future__ import annotations
 
-import inspect
 import logging
 import re
 from typing import TYPE_CHECKING, Any
@@ -235,10 +234,7 @@ class CasterActionButton(
                     has_role = True
 
             if not has_role:
-                staff_check = is_staff(interaction, settings)
-                is_authorized_staff = (
-                    await staff_check if inspect.isawaitable(staff_check) else bool(staff_check)
-                )
+                is_authorized_staff = await is_staff(interaction, settings)
                 if not is_authorized_staff:
                     await interaction.response.send_message(
                         "❌ No tienes el rol necesario para apuntarte como caster.",
