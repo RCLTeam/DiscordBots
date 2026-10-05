@@ -13,7 +13,6 @@ Define modales, selectores desplegables, vistas persistentes y elementos dinámi
 from __future__ import annotations
 
 import asyncio
-import inspect
 import logging
 import re
 from collections.abc import Sequence
@@ -553,8 +552,7 @@ class ConfirmarRolButton(
 
         from liga_bot.cogs.permissions import is_staff
 
-        staff_check = is_staff(interaction.user)
-        is_authorized = await staff_check if inspect.isawaitable(staff_check) else bool(staff_check)
+        is_authorized = await is_staff(interaction.user)
         if not is_authorized:
             await interaction.response.send_message(
                 "Solo el staff puede confirmar solicitudes de rol.",
@@ -657,8 +655,7 @@ class TicketView(discord.ui.View):
 
         from liga_bot.cogs.permissions import is_staff
 
-        staff_check = is_staff(interaction.user)
-        is_authorized = await staff_check if inspect.isawaitable(staff_check) else bool(staff_check)
+        is_authorized = await is_staff(interaction.user)
         if not is_authorized:
             await interaction.response.send_message(
                 "Solo el staff puede denegar solicitudes de rol.",

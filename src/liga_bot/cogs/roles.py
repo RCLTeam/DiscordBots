@@ -12,7 +12,6 @@ Define RolesCog con:
 
 from __future__ import annotations
 
-import inspect
 import logging
 from typing import TYPE_CHECKING
 
@@ -109,8 +108,7 @@ class RolesCog(commands.Cog, name="Roles"):
         posicion: str | None = None,
     ) -> None:
         """Asigna un equipo registrado o Libre a un usuario directamente (Solo Staff)."""
-        staff_check = is_staff(interaction.user, self.settings)
-        is_authorized = await staff_check if inspect.isawaitable(staff_check) else bool(staff_check)
+        is_authorized = await is_staff(interaction.user, self.settings)
         if not is_authorized:
             await interaction.response.send_message(
                 "Solo el staff puede asignar roles.",
@@ -192,8 +190,7 @@ class RolesCog(commands.Cog, name="Roles"):
         canal: discord.TextChannel | None = None,
     ) -> None:
         """Publica el panel interactivo persistente para pedir rol (Solo Staff)."""
-        staff_check = is_staff(interaction.user, self.settings)
-        is_authorized = await staff_check if inspect.isawaitable(staff_check) else bool(staff_check)
+        is_authorized = await is_staff(interaction.user, self.settings)
         if not is_authorized:
             await interaction.response.send_message(
                 "Solo el staff puede publicar el panel.",
