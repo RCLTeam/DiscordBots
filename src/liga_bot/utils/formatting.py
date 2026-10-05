@@ -19,7 +19,7 @@ from typing import Any, Final
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
-from liga_bot.config import DEFAULT_REGLAMENTO_CHANNEL, LEAGUE_TIMEZONE
+from liga_bot.config import LEAGUE_TIMEZONE, Settings, get_settings
 
 # ---------------------------------------------------------------------------
 # Plantillas verbatim de mensajes de coordinación (liga_bot.py:57-86)
@@ -300,10 +300,18 @@ def format_mensaje_1(
 
 
 def format_mensaje_2(
-    reglamento: str = DEFAULT_REGLAMENTO_CHANNEL,
+    reglamento: str | None = None,
+    *,
+    settings: Settings | None = None,
 ) -> str:
     """
     Formatea el segundo mensaje de preparación, draft y enlace al reglamento.
     Coincide exactamente con la plantilla verbatim de liga_bot.py:76-86.
+
+    Si no se pasa ``reglamento``, menciona el canal REGLAMENTO_CHANNEL_ID de
+    ``settings`` (o de get_settings() si no se pasa).
     """
+    if reglamento is None:
+        channel_id = (settings or get_settings()).reglamento_channel_id
+        reglamento = f"<#{channel_id}>"
     return MENSAJE_2.format(reglamento=reglamento)

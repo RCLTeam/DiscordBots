@@ -2,60 +2,76 @@
 
 [⬅️ Volver a Arquitectura](./README.md)
 
-Este documento detalla la arquitectura de configuración del bot, implementada en `src/liga_bot/config.py` mediante **Pydantic Settings v2**. Cubre la matriz completa de las 18 variables de entorno, las constantes canónicas de la liga, los validadores de campo, las propiedades computadas para el motor de base de datos y la factoría singleton en caché.
+Este documento detalla la arquitectura de configuración del bot, implementada en `src/liga_bot/config.py` mediante **Pydantic Settings v2**. Cubre la matriz completa de las 25 variables de entorno, las constantes canónicas de la liga, los validadores de campo, las propiedades computadas para el motor de base de datos y la factoría singleton en caché.
 
 ---
 
 ## 1. Arquitectura de Configuración (`Settings`)
 
-La configuración global de `LigaBot` está encapsulada en la clase `Settings(BaseSettings)` (`src/liga_bot/config.py:55-183`). Utiliza Pydantic Settings v2 para garantizar tipado estricto, lectura automática de archivos `.env` y variables de entorno del sistema operativo, con capacidad de sobreescritura controlada.
+La configuración global de `LigaBot` está encapsulada en la clase `Settings(BaseSettings)` (`src/liga_bot/config.py`). Utiliza Pydantic Settings v2 para garantizar tipado estricto, lectura automática de archivos `.env` y variables de entorno del sistema operativo, con capacidad de sobreescritura controlada.
 
 ### Configuración del Modelo (`model_config`)
 
-En `src/liga_bot/config.py:60-65`:
+En `src/liga_bot/config.py`:
 
 ```python
 model_config = SettingsConfigDict(
-    env_file=".env",
+    env_file=os.environ.get("LIGA_BOT_ENV_FILE", ".env"),
     env_file_encoding="utf-8",
     case_sensitive=False,
     extra="ignore",
 )
 ```
 
-- **`env_file=".env"`**: Lee de manera predeterminada el archivo `.env` en la raíz de ejecución del proyecto.
+- **`env_file`**: Lee de manera predeterminada el archivo `.env` en la raíz de ejecución del proyecto; `LIGA_BOT_ENV_FILE` permite apuntar a otro fichero (o a uno inexistente para ignorarlo).
 - **`env_file_encoding="utf-8"`**: Asegura la interpretación de caracteres UTF-8 en rutas y secretos.
 - **`case_sensitive=False`**: Permite definir variables de entorno tanto en mayúsculas (`DISCORD_TOKEN`) como en minúsculas (`discord_token`).
 - **`extra="ignore"`**: Ignora variables adicionales presentes en el entorno sin disparar errores de validación.
 
 ---
 
-## 2. Matriz Exhaustiva de las 18 Variables de Entorno
+## 2. Matriz Exhaustiva de las 25 Variables de Entorno
 
-A continuación se detalla la totalidad de los 18 campos configurables en `Settings`, organizados por dominio funcional:
+`Settings` tiene 25 campos: los 22 de esta tabla, organizados por dominio funcional, y los 3 de la auditoría de tickets de la sección 2.2. `tests/test_config.py` comprueba que esta página, la tabla del `README.md` y `.env.example` recogen todos los campos de `Settings`.
 
-| # | Atributo Python | Línea | Tipo | Valor Predeterminado | Variable de Entorno | Descripción Funcional |
-|---|---|---|---|---|---|---|
-| 1 | `discord_token` | 68-71 | `str` | `""` | `DISCORD_TOKEN` | Token secreto de autenticación del bot en la API de Discord. |
-| 2 | `guild_id` | 72-75 | `int` | `1547725310508667010` | `GUILD_ID` | Snowflake ID del servidor principal de Discord de la liga. |
-| 3 | `staff_role_id` | 78-81 | `int` | `1547729760384319518` | `STAFF_ROLE_ID` | Snowflake ID del rol asignado a árbitros y personal de Staff. |
-| 4 | `admin_role_id` | 82-85 | `int` | `1548795786110967919` | `ADMIN_ROLE_ID` | Snowflake ID del rol de Administradores de la liga. |
-| 5 | `ceo_premier_role_id` | 86-89 | `int` | `1548795782360993842` | `CEO_PREMIER_ROLE_ID` | Snowflake ID del rol otorgado a capitanes/CEOs de la división Premier. |
-| 6 | `ceo_ascend_role_id` | 90-93 | `int` | `1548795784655405087` | `CEO_ASCEND_ROLE_ID` | Snowflake ID del rol otorgado a capitanes/CEOs de la división Ascend. |
-| 7 | `ceo_role_id` | 94-97 | `int` | `0` | `CEO_ROLE_ID` | Snowflake ID del rol de CEO unificado o general. |
-| 8 | `sin_verificar_role_id` | 98-101 | `int` | `0` | `SIN_VERIFICAR_ROLE_ID` | Snowflake ID del rol asignado a usuarios recién ingresados sin verificar. |
-| 9 | `ticket_rol_category_id` | 102-105 | `int` | `0` | `TICKET_ROL_CATEGORY_ID` | Snowflake ID de la categoría donde se generan canales de solicitud de roles. |
-| 10 | `free_role_name` | 106-109 | `str` | `"Libre"` | `FREE_ROLE_NAME` | Nombre textual del rol asignado a jugadores en condición de agente libre. |
-| 11 | `database_url` | 112-115 | `str` | `"pglite:///:memory:"` | `DATABASE_URL` | URI de conexión para SQLAlchemy (compatible con esquemas PGlite y PostgreSQL). |
-| 12 | `bridge_enabled` | 118-121 | `bool` | `True` | `BRIDGE_ENABLED` | Conmutador booleano maestro para iniciar o deshabilitar el servidor WebSocket local. |
-| 13 | `bridge_host` | 122-125 | `str` | `"127.0.0.1"` | `BRIDGE_HOST` | Dirección IP de enlace para el servidor WebSocket local. |
-| 14 | `bridge_port` | 126-129 | `int` | `8765` | `BRIDGE_PORT` | Puerto TCP de enlace para el servidor WebSocket local. |
-| 15 | `discord_bot_supertoken` | 130-133 | `str` | `""` | `DISCORD_BOT_SUPERTOKEN` | Clave secreta compartida requerida en el handshake de autenticación WebSocket. |
-| 16 | `suggestions_channel_id` | 134-137 | `int` | `0` | `SUGGESTIONS_CHANNEL_ID` | Snowflake ID del canal de Discord donde se publican las sugerencias web. |
-| 17 | `bridge_rate_limit_per_minute` | 138-144 | `int` | `10` | `BRIDGE_RATE_LIMIT_PER_MINUTE` | Límite máximo global de peticiones por minuto admitidas a través de la pasarela WebSocket. |
-| 18 | `log_level` | 147-150 | `str` | `"INFO"` | `LOG_LEVEL` | Nivel de verbosidad del logger (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`). |
+| # | Atributo Python | Tipo | Valor Predeterminado | Variable de Entorno | Descripción Funcional |
+|---|---|---|---|---|---|
+| 1 | `discord_token` | `str` | `""` | `DISCORD_TOKEN` | Token secreto de autenticación del bot en la API de Discord. |
+| 2 | `guild_id` | `int` | `1547725310508667010` | `GUILD_ID` | Snowflake ID del servidor principal de Discord de la liga. |
+| 3 | `staff_role_id` | `int` | `1547729760384319518` | `STAFF_ROLE_ID` | Snowflake ID del rol asignado a árbitros y personal de Staff. |
+| 4 | `admin_role_id` | `int` | `1548795786110967919` | `ADMIN_ROLE_ID` | Snowflake ID del rol de Administradores de la liga. |
+| 5 | `ceo_premier_role_id` | `int` | `1548795782360993842` | `CEO_PREMIER_ROLE_ID` | Snowflake ID del rol otorgado a capitanes/CEOs de la división Premier. |
+| 6 | `ceo_ascend_role_id` | `int` | `1548795784655405087` | `CEO_ASCEND_ROLE_ID` | Snowflake ID del rol otorgado a capitanes/CEOs de la división Ascend. |
+| 7 | `ceo_role_id` | `int` | `0` | `CEO_ROLE_ID` | Snowflake ID del rol de CEO unificado o general. |
+| 8 | `sin_verificar_role_id` | `int` | `0` | `SIN_VERIFICAR_ROLE_ID` | Snowflake ID del rol asignado a usuarios recién ingresados sin verificar. |
+| 9 | `ticket_rol_category_id` | `int` | `0` | `TICKET_ROL_CATEGORY_ID` | Snowflake ID de la categoría donde se generan canales de solicitud de roles. |
+| 10 | `free_role_name` | `str` | `"Libre"` | `FREE_ROLE_NAME` | Nombre textual del rol asignado a jugadores en condición de agente libre. |
+| 11 | `moderators_channel_id` | `int` | `1548038711697080494` | `MODERATORS_CHANNEL_ID` | Snowflake ID del canal de moderadores donde `RoleService` publica alertas del sistema. `0` las desactiva. |
+| 12 | `casters_channel_id` | `int` | `1550210628361392278` | `CASTERS_CHANNEL_ID` | Snowflake ID del canal donde se publica el panel de casters. |
+| 13 | `caster_role_id` | `int` | `0` | `CASTER_ROLE_ID` | Snowflake ID del rol de caster requerido para usar los botones del panel. `0` desactiva la restricción. |
+| 14 | `reglamento_channel_id` | `int` | `1548038711697080491` (`DEFAULT_REGLAMENTO_CHANNEL_ID`) | `REGLAMENTO_CHANNEL_ID` | Snowflake ID del canal del reglamento que `format_mensaje_2` menciona en el mensaje de coordinación de cada canal de partido. |
+| 15 | `database_url` | `str` | `"pglite:///:memory:"` | `DATABASE_URL` | URI de conexión para SQLAlchemy (compatible con esquemas PGlite y PostgreSQL). |
+| 16 | `bridge_enabled` | `bool` | `True` | `BRIDGE_ENABLED` | Conmutador booleano maestro para iniciar o deshabilitar el servidor WebSocket local. |
+| 17 | `bridge_host` | `str` | `"127.0.0.1"` | `BRIDGE_HOST` | Dirección IP de enlace para el servidor WebSocket local. |
+| 18 | `bridge_port` | `int` | `8765` | `BRIDGE_PORT` | Puerto TCP de enlace para el servidor WebSocket local. |
+| 19 | `discord_bot_supertoken` | `str` | `""` | `DISCORD_BOT_SUPERTOKEN` | Clave secreta compartida requerida en el handshake de autenticación WebSocket. |
+| 20 | `suggestions_channel_id` | `int` | `0` | `SUGGESTIONS_CHANNEL_ID` | Snowflake ID del canal de Discord donde se publican las sugerencias web. |
+| 21 | `bridge_rate_limit_per_minute` | `int` | `10` | `BRIDGE_RATE_LIMIT_PER_MINUTE` | Límite máximo global de peticiones por minuto admitidas a través de la pasarela WebSocket. |
+| 22 | `log_level` | `str` | `"INFO"` | `LOG_LEVEL` | Nivel de verbosidad del logger (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`). |
 
-### 2.1 Ajustes de la auditoría de tickets
+### 2.1 Avisos por IDs de Discord con valor por defecto
+
+Los valores por defecto de `guild_id`, `staff_role_id`, `admin_role_id`, `ceo_premier_role_id`, `ceo_ascend_role_id`, `moderators_channel_id`, `casters_channel_id` y `reglamento_channel_id` son los IDs del servidor oficial de la liga (`DEFAULTED_DISCORD_ID_FIELDS` en `src/liga_bot/config.py`). Se conservan para no romper despliegues cuyo `.env` no los define, pero `get_settings()` llama a `warn_defaulted_discord_ids()` al crear la instancia y registra en el logger `liga_bot.config` un aviso `WARNING` por cada uno que no venga del entorno ni del fichero `.env`, con el nombre de la variable y el valor usado:
+
+```text
+STAFF_ROLE_ID no está definida en el entorno; se usa el valor por defecto 1547729760384319518 (servidor de la liga). Defínela en el .env si el bot opera en otro servidor.
+```
+
+La comprobación usa `model_fields_set`: un ID definido en el entorno no genera aviso aunque coincida con el valor por defecto. `Settings()` construido directamente (por ejemplo, en tests) no avisa; solo `get_settings()`, una vez por instancia en caché.
+
+`python -m liga_bot` llama a `get_settings()` antes de configurar el logging (`setup_logging` en `src/liga_bot/__main__.py`), así que estos avisos salen por stderr con el manejador por defecto de `logging`, sin marca de tiempo; con el servicio de systemd de `deploy/` aparecen en `journalctl -u liga-bot`.
+
+### 2.2 Ajustes de la auditoría de tickets
 
 `TicketService` lee estos tres campos de `Settings` (grupo «Auditoría de tickets» en `src/liga_bot/config.py`). Sus valores por defecto reproducen el comportamiento anterior a que fueran configurables:
 
@@ -71,7 +87,7 @@ La frecuencia del bucle periódico (`@tasks.loop(hours=24)` en `TicketsCog`) no 
 
 ## 3. Validadores y Propiedades Computadas
 
-### 3.1 Validador Estricto de `log_level` (`src/liga_bot/config.py:152-162`)
+### 3.1 Validador Estricto de `log_level`
 
 El nivel de logging se procesa mediante un validador en modo previo (`mode="before"`):
 
@@ -94,20 +110,20 @@ def normalize_log_level(cls, value: str) -> str:
 
 ### 3.2 Discriminador de Motor de Base de Datos
 
-- **`is_pglite` (`src/liga_bot/config.py:164-167`):**
+- **`is_pglite`:**
   ```python
   @property
   def is_pglite(self) -> bool:
       return self.database_url.startswith("pglite")
   ```
-- **`is_postgres` (`src/liga_bot/config.py:169-173`):**
+- **`is_postgres`:**
   ```python
   @property
   def is_postgres(self) -> bool:
       return self.database_url.startswith("postgres")
   ```
 
-### 3.3 Normalizador de URL Asíncrona (`async_database_url`, líneas 175-186)
+### 3.3 Normalizador de URL Asíncrona (`async_database_url`)
 
 SQLAlchemy 2.0 requiere drivers asíncronos explícitos en su esquema de conexión. En entornos de producción (Heroku, Supabase, Neon, AWS RDS), las cadenas de conexión suelen proveerse con el prefijo `postgres://` o `postgresql://`. La propiedad `async_database_url` normaliza estas URLs de forma transparente para el driver `asyncpg`:
 
@@ -129,10 +145,11 @@ def async_database_url(self) -> str:
 
 ## 4. Constantes Canónicas Preservadas de la Liga
 
-En `src/liga_bot/config.py:16-52`, se definen las constantes de dominio inmutables de la competición:
+En `src/liga_bot/config.py` se definen las constantes de dominio inmutables de la competición:
 
 ### Constantes de Soporte y Tickets
-- `DEFAULT_REGLAMENTO_CHANNEL: Final[str] = "📜𝗥𝗘𝗚𝗟𝗔𝗠𝗘𝗡𝗧𝗢📜"`
+- `DEFAULT_REGLAMENTO_CHANNEL_ID: Final[int] = 1548038711697080491`: valor por defecto de `REGLAMENTO_CHANNEL_ID`.
+- `DEFAULT_REGLAMENTO_CHANNEL: Final[str] = "<#1548038711697080491>"`: mención construida a partir del ID anterior. `format_mensaje_2` ya no la usa como valor por defecto: sin argumento `reglamento`, menciona `settings.reglamento_channel_id`.
 - `DEFAULT_TICKETS_CATEGORY_NAMES: Final[tuple[str, ...]] = (`
   - `"TICKETS-GENERAL-PREMIER"`
   - `"TICKETS-GENERAL-ASCEND"`
@@ -177,7 +194,7 @@ La liga organiza exactamente 20 equipos oficiales distribuidos en 2 divisiones:
 
 ## 5. Factoría Singleton y Aislamiento en Pruebas
 
-En `src/liga_bot/config.py:188-194`, se expone la factoría canónica:
+En `src/liga_bot/config.py` se expone la factoría canónica:
 
 ```python
 @lru_cache
@@ -185,8 +202,11 @@ def get_settings() -> Settings:
     """
     Provee una instancia singleton en caché de Settings.
     Permite limpiar la caché en pruebas unitarias mediante get_settings.cache_clear().
+    ...
     """
-    return Settings()
+    settings = Settings()
+    warn_defaulted_discord_ids(settings)
+    return settings
 ```
 
 ### Mecanismo de Aislamiento para Testing

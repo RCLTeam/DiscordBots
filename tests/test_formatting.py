@@ -8,7 +8,7 @@ nombres de canal para Discord y plantillas verbatim de mensajes de coordinación
 import string
 from datetime import datetime, timezone
 
-from liga_bot.config import DEFAULT_REGLAMENTO_CHANNEL
+from liga_bot.config import DEFAULT_REGLAMENTO_CHANNEL, Settings, get_settings
 from liga_bot.utils.formatting import (
     MENSAJE_1,
     MENSAJE_2,
@@ -317,3 +317,18 @@ def test_strip_team_tag_respeta_apodos_sin_tag():
 def test_strip_team_tag_no_vacia_el_apodo():
     """Si el apodo es solo el tag, se deja como está en vez de quedarse sin nombre."""
     assert strip_team_tag("PSP", ["PSP"]) == "PSP"
+
+
+def test_format_mensaje_2_uses_configured_reglamento_channel():
+    """Sin mención explícita, el mensaje usa REGLAMENTO_CHANNEL_ID de la configuración."""
+    settings = Settings(reglamento_channel_id=123456789)
+    msg = format_mensaje_2(settings=settings)
+    assert "Tenéis la normativa completa en <#123456789>." in msg
+
+
+def test_format_mensaje_2_reads_reglamento_channel_from_environment(monkeypatch):
+    """Sin argumentos, el canal sale de get_settings() (entorno)."""
+    monkeypatch.setenv("REGLAMENTO_CHANNEL_ID", "987654321")
+    get_settings.cache_clear()
+    msg = format_mensaje_2()
+    assert "Tenéis la normativa completa en <#987654321>." in msg
