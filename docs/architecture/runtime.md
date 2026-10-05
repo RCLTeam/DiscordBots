@@ -29,13 +29,15 @@ El runtime de `LigaBot` está estructurado sobre la subclase `LigaBot(commands.B
          +---------------------------+---------------------------+
          |                           |                           |
          v                           v                           v
-+------------------+       +------------------+       +-------------------+
-|  setup_hook()    |       |   DI Container   |       |      close()      |
-| 1. DB Engine     |       | - 6 Servicios    |       | 1. Bridge Stop    |
-| 2. DI Services   |       | - AsyncEngine    |       | 2. Cogs Loops     |
-| 3. Cogs Load     |       | - SessionFactory |       | 3. Close Engine   |
-| 4. WS Bridge     |       +------------------+       | 4. super().close()|
-+------------------+                                  +-------------------+
++------------------+       +------------------+       +---------------------+
+|  setup_hook()    |       |   DI Container   |       |       close()       |
+| 1. DB Engine     |       | - 6 Servicios    |       | 1. Bridge Stop      |
+| 2. DI Services   |       | - AsyncEngine    |       | 2. Cogs Loops       |
+| 3. Cogs Load     |       | - SessionFactory |       | 3. Drain Tasks      |
+| 4. WS Bridge     |       +------------------+       | 4. super().close()  |
++------------------+                                  | 5. Cancel Rezagadas |
+                                                      | 6. Close Engine     |
+                                                      +---------------------+
 ```
 
 ---
@@ -118,24 +120,30 @@ Si `self.settings.bridge_enabled` es `True` y el servicio está presente, ejecut
 
 ## 4. Secuencia de Cierre Ordenado e Idempotente (`close`)
 
-El método `close()` (`src/liga_bot/bot.py:176-227`) implementa un protocolo de parada atómico de 4 fases para evitar pérdidas de transacciones, procesos colgados o fugas de descriptores:
+El método `close()` (`src/liga_bot/bot.py:225-295`) implementa un protocolo de parada de 6 fases. El objetivo es que ningún manejador encuentre la base de datos cerrada: primero se deja de recibir trabajo (puente y Discord) y solo al final se cierra el motor de base de datos.
 
 ```
-[1. WebSocket Bridge] -> Detiene servidor y anula referencia
+[1. WebSocket Bridge]  -> Detiene servidor y anula referencia
         |
         v
-[2. Cog Loops]        -> Invoca stop_loops() y cancela tasks.Loop activos
+[2. Cog Loops]         -> Invoca stop_loops() y cancela tasks.Loop activos
         |
         v
-[3. DB Engine]        -> close_engine(self.engine) y anula factorías
+[3. Tareas de fondo]   -> Espera hasta 6 s las tareas registradas y cancela las restantes
         |
         v
-[4. Discord Gateway]  -> await super().close()
+[4. Discord Gateway]   -> await super().close(): deja de recibir eventos
+        |
+        v
+[5. Tareas tardías]    -> Cancela las tareas registradas durante el paso 4
+        |
+        v
+[6. DB Engine]         -> close_engine(engine) tras anular engine y session_factory
 ```
 
 ### Detalle de las Fases de Cierre:
 
-1. **Parada Atómica del WebSocket Bridge (`src/liga_bot/bot.py:188-196`):**
+1. **Parada Atómica del WebSocket Bridge (`src/liga_bot/bot.py:241-249`):**
    Si `self.websocket_bridge_service is not None`, captura la referencia local:
    ```python
    bridge = self.websocket_bridge_service
@@ -145,19 +153,39 @@ El método `close()` (`src/liga_bot/bot.py:176-227`) implementa un protocolo de 
    except Exception as exc:
        logger.warning("Error deteniendo WebSocket Bridge: %s", exc)
    ```
-   Anular el puntero antes de invocar `stop()` previene condiciones de carrera si concurren llamadas simultáneas a `close()`.
+   Anular el puntero antes de invocar `stop()` previene condiciones de carrera si concurren llamadas simultáneas a `close()`. `stop()` drena sus propias entregas pendientes (`_background_tasks`), que publican en Discord, por eso va antes del cierre de Discord.
 
-2. **Cancelación Defensiva de Bucles en Cogs (`src/liga_bot/bot.py:198-215`):**
+2. **Cancelación Defensiva de Bucles en Cogs (`src/liga_bot/bot.py:251-269`):**
    Itera sobre `list(self.cogs.items())`:
    - Si el Cog define un método `stop_loops()` invocable, lo ejecuta dentro de un bloque `try...except`.
    - Inspecciona dinámicamente los atributos del Cog mediante `dir(cog)` y `getattr(cog, attr_name, None)`. Si el atributo es una instancia de `tasks.Loop` y `attr.is_running()`, invoca `attr.cancel()`.
    - **Neutralización de Propiedades Hostiles:** La lectura con `getattr` está envuelta en un bloque `try...except Exception` para neutralizar propiedades calculadas dinámicas o mocks maliciosos que disparen `AttributeError`.
+   - Debe ejecutarse antes de `super().close()`, porque `commands.Bot.close()` descarga las extensiones y elimina los Cogs.
 
-3. **Liberación del Motor de Base de Datos (`src/liga_bot/bot.py:217-222`):**
-   Si `self.engine is not None`, invoca `await close_engine(self.engine)` y restablece `self.engine = None` y `self.session_factory = None`. Esto garantiza el apagado del subproceso Node.js (en PGlite) o la liquidación del pool de conexiones en PostgreSQL.
+3. **Espera de Tareas en Segundo Plano (`src/liga_bot/bot.py:271-275`):**
+   Invoca `background_tasks.drain(BACKGROUND_TASKS_DRAIN_TIMEOUT)` (6 s, `src/liga_bot/bot.py:52`): espera las tareas registradas (ver §4.1) y cancela las que no terminen en el plazo. El plazo cubre el borrado diferido de canales de ticket (5 s). Esta fase va **antes** de cerrar Discord porque esas tareas usan la sesión HTTP de Discord (`channel.delete()`), que `super().close()` cierra.
 
-4. **Cierre de Conexiones de Discord (`src/liga_bot/bot.py:224-226`):**
-   Invoca `await super().close()`, cerrando las sesiones WebSocket y HTTP de `aiohttp` subyacentes de Discord.
+4. **Cierre de Conexiones de Discord (`src/liga_bot/bot.py:277-280`):**
+   Invoca `await super().close()`, que descarga extensiones y Cogs y cierra las sesiones WebSocket y HTTP de Discord. A partir de aquí no llegan nuevos eventos ni interacciones. `bot.start()` retorna en este punto, aunque `close()` todavía no haya terminado (ver §6.4).
+
+5. **Cancelación de Tareas Tardías (`src/liga_bot/bot.py:282-286`):**
+   Dentro de un `finally`, invoca `background_tasks.cancel_all()` para cancelar las tareas registradas mientras se cerraba Discord (interacciones que llegaron durante la fase 3 o 4).
+
+6. **Liberación del Motor de Base de Datos (`src/liga_bot/bot.py:288-294`):**
+   Si `self.engine is not None`, anula `self.engine` y `self.session_factory` y después invoca `await close_engine(engine)`. Esto garantiza el apagado del subproceso Node.js (en PGlite) o la liquidación del pool de conexiones en PostgreSQL. Las fases 5 y 6 se ejecutan aunque `super().close()` lance una excepción.
+
+### 4.1 Registro de Tareas en Segundo Plano (`src/liga_bot/background_tasks.py`)
+
+El bucle de eventos solo guarda referencias débiles a las tareas de `asyncio.create_task`; una tarea sin otra referencia puede ser eliminada por el recolector de basura antes de terminar. El módulo `background_tasks` mantiene un conjunto con referencia fuerte:
+
+| Función | Uso |
+|---|---|
+| `spawn(coro, name=None)` | Crea la tarea, la añade al conjunto y registra `add_done_callback(discard)` para retirarla al terminar. |
+| `pending_tasks()` | Tareas registradas que aún no han terminado. |
+| `drain(timeout)` | Espera hasta `timeout` segundos a las tareas del bucle actual y cancela las restantes (fase 3). |
+| `cancel_all()` | Cancela las tareas pendientes del bucle actual y espera a que terminen (fase 5). |
+
+Lo usan `ConfirmarRolButton._schedule_deletion` y `TicketView._schedule_deletion` (`src/liga_bot/ui/roles.py`) para el borrado del canal del ticket 5 segundos después de confirmar o denegar la solicitud. El puente WebSocket mantiene su propio conjunto `_background_tasks`, que drena en `stop()`.
 
 ### Garantía de Idempotencia
 El método `close()` puede invocarse múltiples veces de forma consecutiva o concurrente (`test_adversarial_double_close_sequential`, `test_adversarial_double_close_concurrent`). Las llamadas subsecuentes detectan los punteros nulos (`None`) y finalizan de manera segura sin volver a ejecutar desasignaciones ni disparar excepciones.
@@ -166,7 +194,7 @@ El método `close()` puede invocarse múltiples veces de forma consecutiva o con
 
 ## 5. Desacoplamiento del Evento `on_ready`
 
-Implementado en `src/liga_bot/bot.py:228-243`:
+Implementado en `src/liga_bot/bot.py:297-312`:
 
 ```python
 async def on_ready(self) -> None:
@@ -203,29 +231,35 @@ Evalúa `if not token or not token.strip():`. Si el token no está configurado o
 - Emite un mensaje con nivel `CRITICAL` alertando sobre la ausencia de `DISCORD_TOKEN`.
 - Retorna el código de salida `1` inmediatamente, sin instanciar la conexión ni consumir ciclos del bucle de eventos.
 
-### 6.3 Trampa de Doble Señal OS (`handle_signal`, líneas 60-79)
+### 6.3 Manejo de Señales y Salida Forzada (`handle_signal`, líneas 61-83)
 Intercepta `signal.SIGINT` (Ctrl+C) y `signal.SIGTERM` (detención por systemd, Docker o Kubernetes):
 
 ```python
-shutdown_initiated = False
+main_task = asyncio.current_task()
+close_task: asyncio.Task[None] | None = None
+forced_exit = False
 
 
 def handle_signal(sig: signal.Signals) -> None:
-    nonlocal shutdown_initiated
-    if shutdown_initiated:
+    nonlocal close_task, forced_exit
+    if close_task is not None:
         logger.warning("Señal %s recibida de nuevo. Forzando salida...", sig.name)
+        forced_exit = True
+        if main_task is not None:
+            main_task.cancel()
         return
-    shutdown_initiated = True
     logger.info("Señal %s recibida. Iniciando parada ordenada...", sig.name)
-    asyncio.create_task(bot.close())
+    close_task = asyncio.create_task(bot.close())
 ```
 
-- **Prevención de re-entrada:** Si el usuario pulsa repetidamente `Ctrl+C` durante el cierre, la bandera `shutdown_initiated` evita programar múltiples tareas de cierre concurrentes.
+- **Primera señal:** programa una única tarea `bot.close()` y guarda su referencia en `close_task` (el bucle solo guarda referencias débiles a las tareas).
+- **Segunda señal:** si llega otra señal SIGINT o SIGTERM durante el apagado, cancela la tarea principal de `run_bot()`, que devuelve el código de salida `1` sin esperar a que termine el cierre. Sirve para salir cuando el apagado ordenado se queda bloqueado.
 - **Compatibilidad de bucles:** El registro se realiza mediante `loop.add_signal_handler(sig, functools.partial(handle_signal, sig))` envuelto en un bloque que captura `(NotImplementedError, RuntimeError)`. Esto permite que el bot se ejecute sin excepciones en bucles de eventos no POSIX (como `ProactorEventLoop` en Windows) o en hilos que no son el principal.
 
-### 6.4 Bloque Finally y Códigos de Salida (`main`, líneas 80-103)
-- `run_bot()` ejecuta `await bot.start(token)` y retorna `0` ante una finalización normal.
-- Captura `KeyboardInterrupt` o `asyncio.CancelledError` retornando `0`.
-- Captura cualquier `Exception` genérica imprevista, emitiendo log `CRITICAL` con traza completa (`exc_info=True`) y retornando `1`.
-- El bloque `finally:` asegura que `if not bot.is_closed(): await bot.close()`.
+### 6.4 Espera del Cierre y Códigos de Salida (`run_bot`, líneas 85-115; `main`, líneas 118-125)
+- `run_bot()` ejecuta `await bot.start(token)`; ante una finalización normal el código de salida es `0`.
+- Captura `KeyboardInterrupt` o `asyncio.CancelledError` con código `0`, salvo que la cancelación venga de una segunda señal.
+- Captura cualquier `Exception` genérica imprevista, emitiendo log `CRITICAL` con traza completa (`exc_info=True`), con código `1`.
+- **Espera del cierre:** como `close()` cierra Discord antes que la base de datos, `bot.start()` retorna mientras `close()` sigue en las fases 5 y 6. Si la parada la inició una señal, `run_bot()` espera siempre a `close_task` antes de retornar; si no, invoca `bot.close()` cuando `not bot.is_closed()`. Sin esa espera, `asyncio.run` cancelaría la tarea de cierre a medio cerrar el motor de base de datos. Un error en `close_task` se registra con nivel `CRITICAL` y devuelve `1`.
+- **Salida forzada:** si una segunda señal cancela `run_bot()` (también mientras espera a `close_task`), registra un `ERROR` y devuelve `1`.
 - La función síncrona `main()` envuelve `asyncio.run(run_bot())` y finaliza el proceso con `sys.exit(exit_code)`.

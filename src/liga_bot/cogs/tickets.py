@@ -12,7 +12,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from liga_bot.cogs.permissions import is_authorized_scheduler
+from liga_bot.cogs.permissions import StaffAction, has_staff_access
 from liga_bot.config import Settings, get_settings
 from liga_bot.services.ticket_service import (
     ChannelAuditStatus,
@@ -185,7 +185,7 @@ class TicketsCog(commands.Cog, name="Tickets"):
             )
             return
 
-        if not await is_authorized_scheduler(interaction, self.settings):
+        if not await has_staff_access(interaction, StaffAction.TICKETS, self.settings):
             await interaction.response.send_message(
                 "No tienes permiso para usar este comando.",
                 ephemeral=True,

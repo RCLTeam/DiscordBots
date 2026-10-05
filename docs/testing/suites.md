@@ -32,6 +32,7 @@ Pruebas en memoria con mocks puros, tiempo submilisegundo por test, sin interacc
 | Archivo | Tests | LoC | Dominio y Cobertura Funcional |
 |---|---:|---:|---|
 | `tests/test_bot.py` | 13 | 241 | Inicialización del bot `LigaBot`, carga de extensiones, manejo de argumentos CLI en `__main__.py`. |
+| `tests/test_shutdown_lifecycle.py` | 11 | 245 | Registro de tareas en segundo plano (`background_tasks`), borrado diferido de canales de ticket, orden de cierre de `LigaBot.close()` (Discord antes que la base de datos) y salida forzada con una segunda señal. |
 | `tests/test_config.py` | 11 | 218 | Validación de esquema Pydantic `Settings`, URLs de base de datos (`postgresql+asyncpg://`, `pglite:///`), valores por defecto y cachés. |
 | `tests/test_cli.py` | 24 | 351 | Interfaz de línea de comandos (`run`, `seed`, `check`), códigos de retorno de proceso y argumentos. |
 | `tests/test_formatting.py` | 19 | 205 | Formateo de cadenas, cálculo de marcas de tiempo relativas, tablas monoespaciadas y escape de caracteres Markdown. |
@@ -52,9 +53,10 @@ Pruebas en memoria con mocks puros, tiempo submilisegundo por test, sin interacc
 | `tests/test_roles_cog.py` | 27 | 789 | Comandos slash de verificación (`/pedir-rol`, `/asignar-rol`) y flujo de solicitud de roles. |
 | `tests/test_roster_cog.py` | 23 | 642 | Comando slash `/gestionar-posicion` y escucha de eventos `on_member_update`. |
 | `tests/test_role_config_permissions.py` | 18 | 294 | Verificación de permisos de staff (`staff_role_id`, `ceo_role_id`) para aprobación de roles. |
+| `tests/test_staff_permissions_policy.py` | 91 | 327 | Matriz de la política de autorización del staff: cada tipo de acción y cada función pública contra todas las combinaciones de rol y permiso nativo, `resolve_member` , la comprobación de `!sync` y el tipo de acción que comprueba cada comando slash con efectos. |
 | `tests/test_roles_ui.py` | 25 | 614 | Vistas interactivas de Discord (`RoleVerificationView`) y modales de entrada de datos. |
 | `tests/test_roster_ui.py` | 30 | 870 | Vistas interactivas de plantillas (`GestionarPosicionView`) y menús de selección de roles competitivos. |
-| **Subtotal Unit** | **524** | **11.986** | |
+| **Subtotal Unit** | **647** | **12.487** | |
 
 ---
 

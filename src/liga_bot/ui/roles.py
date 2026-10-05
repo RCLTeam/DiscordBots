@@ -13,7 +13,6 @@ Define modales, selectores desplegables, vistas persistentes y elementos dinámi
 from __future__ import annotations
 
 import asyncio
-import inspect
 import logging
 import re
 from collections.abc import Sequence
@@ -21,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 import discord
 
+from liga_bot import background_tasks
 from liga_bot.config import TEAMS_ALL, get_settings
 from liga_bot.models.enums import RosterRole
 from liga_bot.utils.formatting import build_opgg_url
@@ -553,8 +553,7 @@ class ConfirmarRolButton(
 
         from liga_bot.cogs.permissions import is_staff
 
-        staff_check = is_staff(interaction.user)
-        is_authorized = await staff_check if inspect.isawaitable(staff_check) else bool(staff_check)
+        is_authorized = await is_staff(interaction.user)
         if not is_authorized:
             await interaction.response.send_message(
                 "Solo el staff puede confirmar solicitudes de rol.",
@@ -590,10 +589,14 @@ class ConfirmarRolButton(
     def _schedule_deletion(
         self, channel: discord.abc.GuildChannel | None, delay: float = 5.0
     ) -> asyncio.Task[None] | None:
-        """Programa la eliminación asíncrona del canal del ticket."""
+        """Programa la eliminación asíncrona del canal del ticket.
+
+        La tarea queda retenida en el registro de tareas en segundo plano hasta que
+        termina, y ``LigaBot.close()`` la espera durante el apagado.
+        """
         if channel is None:
             return None
-        return asyncio.create_task(self._delete_channel_later(channel, delay))
+        return background_tasks.spawn(self._delete_channel_later(channel, delay))
 
     async def _delete_channel_later(
         self, channel: discord.abc.GuildChannel | None, delay: float = 5.0
@@ -657,8 +660,7 @@ class TicketView(discord.ui.View):
 
         from liga_bot.cogs.permissions import is_staff
 
-        staff_check = is_staff(interaction.user)
-        is_authorized = await staff_check if inspect.isawaitable(staff_check) else bool(staff_check)
+        is_authorized = await is_staff(interaction.user)
         if not is_authorized:
             await interaction.response.send_message(
                 "Solo el staff puede denegar solicitudes de rol.",
@@ -700,10 +702,14 @@ class TicketView(discord.ui.View):
     def _schedule_deletion(
         self, channel: discord.abc.GuildChannel | None, delay: float = 5.0
     ) -> asyncio.Task[None] | None:
-        """Programa la eliminación asíncrona del canal del ticket."""
+        """Programa la eliminación asíncrona del canal del ticket.
+
+        La tarea queda retenida en el registro de tareas en segundo plano hasta que
+        termina, y ``LigaBot.close()`` la espera durante el apagado.
+        """
         if channel is None:
             return None
-        return asyncio.create_task(self._delete_channel_later(channel, delay))
+        return background_tasks.spawn(self._delete_channel_later(channel, delay))
 
     async def _delete_channel_later(
         self, channel: discord.abc.GuildChannel | None, delay: float = 5.0

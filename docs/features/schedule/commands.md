@@ -61,11 +61,12 @@ Esta comprobación previene excepciones de tipo `CommandRegistrationError` al re
 
 Todos los comandos de calendario aplican un doble nivel de seguridad: restricción nativa en la API de Discord y verificación programática en runtime.
 
-1. **Permiso nativo de Discord**: Todos los comandos cuentan con el decorador `@app_commands.default_permissions(manage_guild=True)`, ocultándolos por defecto a usuarios sin permisos de gestión en la interfaz del cliente.
-2. **Validación programática de roles**: Antes de procesar cualquier comando, se invoca `is_authorized_scheduler(interaction, self.settings)` (`src/liga_bot/cogs/permissions.py:167-190`). Para superar esta validación, el invocador debe cumplir al menos una de las siguientes condiciones:
+1. **Permiso nativo de Discord**: Todos los comandos cuentan con el decorador `@app_commands.default_permissions(manage_guild=True)`, ocultándolos por defecto a usuarios sin permisos de gestión en la interfaz del cliente. Es solo visibilidad: «Gestionar servidor» por sí solo no autoriza a ejecutarlos.
+2. **Validación programática de roles**: Antes de procesar cualquier comando, se invoca `is_authorized_scheduler(interaction, self.settings)` (`src/liga_bot/cogs/permissions.py:181-189`, acción `CALENDARIO_Y_CASTERS` de la [política de autorización](../../architecture/permissions.md)). Para superar esta validación, el invocador debe cumplir al menos una de las siguientes condiciones:
    - Poseer permiso de Administrador de Discord (`guild_permissions.administrator`).
    - Poseer el rol Staff (`settings.staff_role_id`).
    - Poseer el rol Admin (`settings.admin_role_id`).
+   - Poseer el rol CEO general (`settings.ceo_role_id`, si está configurado).
    - Poseer el rol CEO Premier (`settings.ceo_premier_role_id`).
    - Poseer el rol CEO Ascend (`settings.ceo_ascend_role_id`).
 
@@ -260,7 +261,7 @@ Asigna o actualiza la URL de la retransmisión grabada o VOD (Twitch VOD, YouTub
 #### Control de Acceso y Validaciones Pre-Ejecución
 
 1. **Rechazo de DMs**: Si `interaction.guild is None`, responde efímeramente `"❌ Este comando solo puede ser ejecutado dentro de un servidor de Discord."`.
-2. **Autorización Programática**: Valida `await is_authorized_scheduler(interaction, self.settings)`. Requiere permiso de Administrador o posesión de rol Staff, Admin, CEO Premier o CEO Ascend. En caso contrario, responde: `"❌ No tienes permisos para gestionar URLs de partidos (se requiere Staff, Admin o CEO)."`.
+2. **Autorización Programática**: Valida `await is_authorized_scheduler(interaction, self.settings)`. Requiere permiso de Administrador o posesión de rol Staff, Admin, CEO general, CEO Premier o CEO Ascend. En caso contrario, responde: `"❌ No tienes permisos para gestionar URLs de partidos (se requiere Staff, Admin o CEO)."`.
 3. **Aplazamiento Proactivo**: Ejecuta `await interaction.response.defer(ephemeral=True)` para asegurar holgura ante la resolución asíncrona de roles y persistencia transaccional.
 4. **Delegación**: Invoca `ScheduleService.set_stream_url(role1_id=equipo1.id, role2_id=equipo2.id, url=url, is_live=False, jornada=jornada)`.
 
