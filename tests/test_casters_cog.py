@@ -18,12 +18,12 @@ from liga_bot.bot import DEFAULT_EXTENSIONS, LigaBot
 from liga_bot.cogs.casters import CastersCog
 from liga_bot.cogs.casters import setup as casters_setup
 from liga_bot.config import Settings
-from liga_bot.models.caster import MatchCasterCard
+from liga_bot.models.caster import CasterRole, MatchCaster, MatchCasterCard
 from liga_bot.models.enums import Division
 from liga_bot.models.match import Match
 from liga_bot.models.team import Team
 from liga_bot.services.caster_service import CasterService, MatchCastersData
-from liga_bot.ui.casters import CasterActionButton
+from liga_bot.ui.casters import CasterActionButton, MatchCasterView
 
 # ---------------------------------------------------------------------------
 # Test Helpers & Fixtures
@@ -689,6 +689,56 @@ class TestCastersCogPublishing:
         expected_ts = int(new_time.timestamp())
         horario_field = next(f for f in edited_embed.fields if f.name == "Horario")
         assert f"<t:{expected_ts}:F>" in horario_field.value
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("has_streamer", [True, False])
+    async def test_resync_existing_card_updates_buttons(self, has_streamer: bool) -> None:
+        """Al resincronizar una tarjeta existente se reenvía la vista con el estado actual."""
+        service = MagicMock(spec=CasterService)
+        service.get_active_jornada = AsyncMock(return_value=1)
+
+        m = make_test_match(jornada=1)
+        service.get_matches_for_jornada = AsyncMock(return_value=[m])
+        streamer = (
+            MatchCaster(
+                id=uuid.uuid4(),
+                match_id=m.id,
+                discord_user_id=111222333,
+                caster_role=CasterRole.STREAMER,
+            )
+            if has_streamer
+            else None
+        )
+        service.get_match_casters_data = AsyncMock(
+            return_value=MatchCastersData(has_streamer=has_streamer, streamer=streamer, casters=[])
+        )
+
+        card = MatchCasterCard(match_id=m.id, channel_id=987654321, message_id=4001)
+        service.get_card = AsyncMock(return_value=card)
+
+        chan = make_mock_channel(channel_id=987654321)
+        msg = make_mock_message(4001)
+        chan.fetch_message = AsyncMock(return_value=msg)
+
+        bot = make_mock_bot(caster_service=service)
+        cog = CastersCog(bot, caster_service=service)
+
+        user = make_mock_member(is_admin=True)
+        inter = make_mock_interaction(user=user, channel=chan)
+
+        await cog.panel_casters.callback(cog, inter, jornada=1)
+
+        chan.send.assert_not_awaited()
+        msg.edit.assert_awaited_once()
+        edit_kwargs = msg.edit.await_args[1]
+        assert "embed" in edit_kwargs
+        view = edit_kwargs.get("view")
+        assert isinstance(view, MatchCasterView)
+        assert view.match_id == m.id
+        assert view.btn_cast.disabled is False
+        assert view.btn_stream.disabled is has_streamer
+        assert view.btn_both.disabled is has_streamer
+        assert view.btn_leave.disabled is False
 
     @pytest.mark.asyncio
     async def test_recovery_when_message_deleted_in_discord(self) -> None:
