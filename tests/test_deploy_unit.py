@@ -61,6 +61,13 @@ def test_readme_installs_dependencies_with_frozen_sync_before_restart() -> None:
         "Actualizar a una versión nueva", 1
     )[1]
 
+    assert "uv sync --frozen" in update_section, (
+        "La sección de actualización de deploy/README.md debe instalar las dependencias "
+        "con 'uv sync --frozen'"
+    )
+    assert "systemctl restart liga-bot" in update_section, (
+        "La sección de actualización de deploy/README.md debe reiniciar el servicio"
+    )
     sync_position = update_section.index("uv sync --frozen")
     restart_position = update_section.index("systemctl restart liga-bot")
     assert sync_position < restart_position
