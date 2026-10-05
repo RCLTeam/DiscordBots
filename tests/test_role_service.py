@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 import pytest
 import pytest_asyncio
-from sqlalchemy import select, text
+from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from liga_bot.bot import LigaBot
@@ -20,7 +20,7 @@ from liga_bot.models.team import Team
 from liga_bot.repositories.role_request_repo import RoleRequestRepository
 from liga_bot.repositories.roster_repo import TeamMembershipRepository
 from liga_bot.services.role_service import RoleService
-from liga_bot.services.roster_sync_service import RosterSyncService
+from liga_bot.services.roster_sync_service import RosterSyncError, RosterSyncService
 
 
 # ---------------------------------------------------------------------------
@@ -164,6 +164,24 @@ def create_mock_guild(
 
     guild.create_text_channel = AsyncMock(side_effect=mock_create_text_channel)
     return guild
+
+
+async def registrar_equipo(
+    session: AsyncSession, name: str, tag: str, discord_role_id: int
+) -> None:
+    """Registra un equipo de prueba, sustituyendo cualquier otro con su nombre o rol."""
+    await session.execute(
+        delete(Team).where((Team.name == name) | (Team.discord_role_id == discord_role_id))
+    )
+    session.add(
+        Team(
+            name=name,
+            tag=tag,
+            division=Division.PREMIER,
+            discord_role_id=discord_role_id,
+        )
+    )
+    await session.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -889,6 +907,7 @@ class TestConfirmRoleRequest:
         self, role_service: RoleService, clean_settings: Settings, db_session: AsyncSession
     ):
         """Flujo exitoso: miembro en caché, asigna rol, quita sin verificar, apodo y BD."""
+        await registrar_equipo(db_session, "Vanguard Gaming", "VG", 888101)
         team_role = create_mock_role(888101, "Vanguard Gaming")
         guild = create_mock_guild(clean_settings, roles=[team_role])
         staff = create_mock_member(900001, name="StaffBoss", guild=guild)
@@ -922,7 +941,7 @@ class TestConfirmRoleRequest:
         # Discord
         member.add_roles.assert_awaited_once_with(team_role)
         member.remove_roles.assert_awaited_once_with(sin_verificar_role)
-        member.edit.assert_awaited_once_with(nick="ViperLoL")
+        member.edit.assert_awaited_once_with(nick="VG ViperLoL")
 
         # Base de Datos
         updated_req = await repo.get_by_channel_id(777003)
@@ -1012,6 +1031,7 @@ class TestConfirmRoleRequest:
         self, role_service: RoleService, clean_settings: Settings, db_session: AsyncSession
     ):
         """Flujo exitoso cuando el miembro no está en la caché local pero se recupera vía API."""
+        await registrar_equipo(db_session, "Nexus Esports", "NXS", 888102)
         team_role = create_mock_role(888102, "Nexus Esports")
         guild = create_mock_guild(clean_settings, roles=[team_role])
         staff = create_mock_member(900001, name="StaffBoss", guild=guild)
@@ -1046,38 +1066,128 @@ class TestConfirmRoleRequest:
         member.add_roles.assert_awaited_once_with(team_role)
 
     @pytest.mark.asyncio
-    async def test_confirm_request_team_role_missing_in_guild(
+    async def test_confirm_request_unregistered_team_with_same_named_role_stays_pending(
         self, role_service: RoleService, clean_settings: Settings, db_session: AsyncSession
     ):
-        """Si el rol de equipo no existe en el servidor, advierte pero completa apodo y BD."""
-        guild = create_mock_guild(clean_settings)
+        """Un rol que se llama como el equipo no basta: sin equipo registrado no se aprueba."""
+        await db_session.execute(delete(Team).where(Team.name == "Equipo Fantasma"))
+        await db_session.commit()
+        same_named_role = create_mock_role(888150, "Equipo Fantasma")
+        guild = create_mock_guild(clean_settings, roles=[same_named_role])
         staff = create_mock_member(900001, name="StaffBoss", guild=guild)
-        member = create_mock_member(user_id=400005, name="Doran", guild=guild)
-        guild._members_map[400005] = member
+        member = create_mock_member(user_id=400050, name="Fantasma", guild=guild)
+        guild._members_map[400050] = member
 
         repo = RoleRequestRepository(db_session)
         await repo.create_request(
-            user_id=400005,
-            nombre_lol="Doran",
-            riot_tag="TOP",
-            equipo="NonExistentTeam",
-            canal_id=777005,
+            user_id=400050,
+            nombre_lol="Fantasma",
+            riot_tag="EUW",
+            equipo="Equipo Fantasma",
+            canal_id=777050,
+            posicion="mid",
         )
+        await db_session.commit()
 
         ok, msg = await role_service.confirm_role_request(
-            guild=guild, channel_id=777005, staff_member=staff
+            guild=guild, channel_id=777050, staff_member=staff
+        )
+
+        assert ok is False
+        assert "Equipo Fantasma" in msg
+        assert "no está registrado" in msg
+        member.add_roles.assert_not_called()
+        member.edit.assert_not_called()
+        db_session.expire_all()
+        req = await repo.get_by_channel_id(777050)
+        assert req.estado == RoleRequestStatus.PENDING
+
+        # Una vez registrado el equipo, el mismo ticket se confirma sin abrir otro.
+        await registrar_equipo(db_session, "Equipo Fantasma", "FAN", 888150)
+        ok, msg = await role_service.confirm_role_request(
+            guild=guild, channel_id=777050, staff_member=staff
+        )
+
+        assert ok is True, msg
+        member.add_roles.assert_awaited_once_with(same_named_role)
+        db_session.expire_all()
+        req = await repo.get_by_channel_id(777050)
+        assert req.estado == RoleRequestStatus.APPROVED
+
+    @pytest.mark.asyncio
+    async def test_confirm_request_team_role_missing_in_guild_stays_pending(
+        self, role_service: RoleService, clean_settings: Settings, db_session: AsyncSession
+    ):
+        """Si el discord_role_id del equipo no existe en el servidor, no se aprueba."""
+        await registrar_equipo(db_session, "Equipo Sin Rol", "ESR", 888151)
+        # El servidor tiene un rol con el nombre del equipo, pero no el de su discord_role_id
+        same_named_role = create_mock_role(888999, "Equipo Sin Rol")
+        guild = create_mock_guild(clean_settings, roles=[same_named_role])
+        staff = create_mock_member(900001, name="StaffBoss", guild=guild)
+        member = create_mock_member(user_id=400051, name="Doran", guild=guild)
+        guild._members_map[400051] = member
+
+        repo = RoleRequestRepository(db_session)
+        await repo.create_request(
+            user_id=400051,
+            nombre_lol="Doran",
+            riot_tag="TOP",
+            equipo="Equipo Sin Rol",
+            canal_id=777051,
+        )
+        await db_session.commit()
+
+        ok, msg = await role_service.confirm_role_request(
+            guild=guild, channel_id=777051, staff_member=staff
+        )
+
+        assert ok is False
+        assert "888151" in msg
+        member.add_roles.assert_not_called()
+        member.edit.assert_not_called()
+        db_session.expire_all()
+        req = await repo.get_by_channel_id(777051)
+        assert req.estado == RoleRequestStatus.PENDING
+
+    @pytest.mark.asyncio
+    async def test_confirm_request_add_roles_failure_is_reported_to_staff(
+        self, role_service: RoleService, clean_settings: Settings, db_session: AsyncSession
+    ):
+        """Si Discord rechaza el rol tras el commit, el mensaje avisa de que falta asignarlo."""
+        await registrar_equipo(db_session, "Equipo Sin Permisos", "ESP", 888152)
+        team_role = create_mock_role(888152, "Equipo Sin Permisos")
+        guild = create_mock_guild(clean_settings, roles=[team_role])
+        staff = create_mock_member(900001, name="StaffBoss", guild=guild)
+        member = create_mock_member(user_id=400052, name="Bloqueado", guild=guild)
+        member.add_roles.side_effect = discord.Forbidden(
+            MagicMock(status=403, reason="Forbidden"), "Missing Permissions"
+        )
+        guild._members_map[400052] = member
+
+        repo = RoleRequestRepository(db_session)
+        await repo.create_request(
+            user_id=400052,
+            nombre_lol="Bloqueado",
+            riot_tag="EUW",
+            equipo="Equipo Sin Permisos",
+            canal_id=777052,
+        )
+        await db_session.commit()
+
+        ok, msg = await role_service.confirm_role_request(
+            guild=guild, channel_id=777052, staff_member=staff
         )
 
         assert ok is True
-        assert "Rol NonExistentTeam confirmado para Doran." in msg
-        member.add_roles.assert_not_called()
-        member.edit.assert_awaited_once_with(nick="Doran")
+        assert "No se pudo asignar el rol 'Equipo Sin Permisos'" in msg
+        assert "asígnalo a mano" in msg
 
     @pytest.mark.asyncio
     async def test_confirm_request_member_edit_forbidden_does_not_abort(
         self, role_service: RoleService, clean_settings: Settings, db_session: AsyncSession
     ):
         """Si editar el apodo falla por permisos, no interrumpe la aprobación."""
+        await registrar_equipo(db_session, "Aegis Club", "AEG", 888103)
         team_role = create_mock_role(888103, "Aegis Club")
         guild = create_mock_guild(clean_settings, roles=[team_role])
         staff = create_mock_member(900001, name="StaffBoss", guild=guild)
@@ -1198,6 +1308,7 @@ class TestRoleServiceLifecycleIntegration:
         2. confirm_role_request -> Aprueba rol, actualiza a APPROVED y registra staff_id.
         3. Repo verifica persistencia y marcas de tiempo actualizadas.
         """
+        await registrar_equipo(db_session, "Storm Legion", "STL", 999111)
         team_role = create_mock_role(999111, "Storm Legion")
         guild = create_mock_guild(clean_settings, roles=[team_role])
         member = create_mock_member(600001, name="ChovyT", display_name="Chovy_MID", guild=guild)
@@ -1478,4 +1589,33 @@ class TestConfirmRoleRequestPersistence:
             assert player is None
 
             req = await RoleRequestRepository(session).get_by_channel_id(778002)
+            assert req.estado == RoleRequestStatus.PENDING
+
+    @pytest.mark.asyncio
+    async def test_roster_sync_error_message_reaches_staff(
+        self,
+        service_con_roster: tuple[RoleService, RosterSyncService],
+        session_factory: async_sessionmaker[AsyncSession],
+        clean_settings: Settings,
+    ):
+        """Un RosterSyncError se muestra tal cual al staff y la solicitud sigue pendiente."""
+        service, roster = service_con_roster
+        guild, staff, member = await self._preparar(
+            session_factory, clean_settings, 700102, 778003, "Conflicto FC", 889003
+        )
+
+        with patch.object(
+            roster,
+            "transfer_player",
+            AsyncMock(side_effect=RosterSyncError("El jugador ya ocupa la posición mid.")),
+        ):
+            ok, msg = await service.confirm_role_request(
+                guild=guild, channel_id=778003, staff_member=staff
+            )
+
+        assert ok is False
+        assert "El jugador ya ocupa la posición mid." in msg
+        member.add_roles.assert_not_called()
+        async with session_factory() as session:
+            req = await RoleRequestRepository(session).get_by_channel_id(778003)
             assert req.estado == RoleRequestStatus.PENDING

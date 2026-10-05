@@ -4,7 +4,7 @@ Suite de pruebas End-to-End (E2E) y de aceptación para el subsistema de roles:
 2. Ciclo de vida completo 1: On-boarding -> auto-asignación 'Sin Verificar' -> modal de equipo
    -> creación de canal de ticket privado con PermissionOverwrites -> registro PENDING
    -> confirmación por staff -> asignación de rol, remoción de 'Sin Verificar', apodo
-   '{lol} #{tag}' y actualización a APPROVED en PostgreSQL (PGlite).
+   '<TAG> {lol}' y actualización a APPROVED en PostgreSQL (PGlite).
 3. Ciclo de vida completo 2: Solicitud de rol 'Libre' -> asignación directa de 'Libre', remoción de
    'Sin Verificar', actualización de apodo y registro APPROVED en BD sin ticket.
 4. Ciclo de vida completo 3: Ticket creado -> denegación por staff -> actualización
@@ -27,7 +27,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 import pytest
 import pytest_asyncio
-from sqlalchemy import select, text
+from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from liga_bot.bot import DEFAULT_EXTENSIONS, LigaBot
@@ -35,8 +35,9 @@ from liga_bot.cogs.roles import RolesCog
 from liga_bot.cogs.schedule import ScheduleCog
 from liga_bot.cogs.tickets import TicketsCog
 from liga_bot.config import TEAMS_ALL, Settings
-from liga_bot.models.enums import RoleRequestStatus
+from liga_bot.models.enums import Division, RoleRequestStatus
 from liga_bot.models.role_request import RoleRequest
+from liga_bot.models.team import Team
 from liga_bot.services.role_service import RoleService
 from liga_bot.ui.roles import (
     ConfirmarRolButton,
@@ -157,7 +158,9 @@ def make_mock_guild(
     free_role = make_mock_role(888001, settings.free_role_name)
 
     # 20 roles de equipos oficiales
-    official_roles = [make_mock_role(7000 + i, team) for i, team in enumerate(TEAMS_ALL)]
+    official_roles = [
+        make_mock_role(OFFICIAL_ROLE_ID_BASE + i, team) for i, team in enumerate(TEAMS_ALL)
+    ]
 
     all_roles: list[MagicMock] = [default_role]
     if staff_role:
@@ -283,6 +286,26 @@ def e2e_settings() -> Settings:
     )
 
 
+OFFICIAL_ROLE_ID_BASE = 7000
+
+
+async def registrar_equipos_oficiales(session: AsyncSession) -> None:
+    """Registra TEAMS_ALL con los discord_role_id de los roles del servidor simulado."""
+    role_ids = [OFFICIAL_ROLE_ID_BASE + i for i in range(len(TEAMS_ALL))]
+    await session.execute(
+        delete(Team).where(Team.name.in_(TEAMS_ALL) | Team.discord_role_id.in_(role_ids))
+    )
+    for i, team in enumerate(TEAMS_ALL):
+        session.add(
+            Team(
+                name=team,
+                tag=f"T{i}",
+                division=Division.PREMIER,
+                discord_role_id=OFFICIAL_ROLE_ID_BASE + i,
+            )
+        )
+
+
 @pytest_asyncio.fixture
 async def session_factory(
     migrated_db: AsyncEngine,
@@ -291,6 +314,7 @@ async def session_factory(
     factory = async_sessionmaker(bind=migrated_db, expire_on_commit=False)
     async with factory() as session:
         await session.execute(text("TRUNCATE TABLE role_requests CASCADE;"))
+        await registrar_equipos_oficiales(session)
         await session.commit()
     yield factory
     async with factory() as session:
@@ -537,8 +561,8 @@ class TestFullLifecycleOfficialTeamApproval:
         assert team_role in new_member.roles
         # - Rol "Sin Verificar" removido
         assert sin_verificar_role not in new_member.roles
-        # - Apodo actualizado con formato "PinguFaker #EUW"
-        assert new_member.nick == "PinguFaker"
+        # - Apodo actualizado con formato "<TAG> <NombreLoL>"
+        assert new_member.nick == "T0 PinguFaker"
 
         # Verificación en la base de datos PostgreSQL: estado APPROVED y staff_id registrado
         async with session_factory() as session:
@@ -961,7 +985,7 @@ class TestDynamicItemSerializationAndLifecycle:
 
         # Validación en Discord
         assert team_role in member.roles
-        assert member.nick == "StormChaser"
+        assert member.nick == "T5 StormChaser"
 
 
 # ===========================================================================
@@ -1086,17 +1110,17 @@ class TestBoundaryAndEdgeCasesE2E:
 
         # El apodo resultante debe tener longitud <= 32
         assert len(long_member.nick) <= 32
-        expected_nick = "SuperLongSummonerNameExceedingLimits #TAG99999"[:32]
+        expected_nick = "T0 SuperLongSummonerNameExceedingLimits"[:32]
         assert long_member.nick == expected_nick
 
     @pytest.mark.asyncio
-    async def test_missing_team_role_on_server_degrades_gracefully(
+    async def test_unregistered_team_on_confirm_reports_error_and_stays_pending(
         self,
         e2e_role_service: RoleService,
         e2e_settings: Settings,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
-        """Valida que si el rol del equipo fue eliminado del servidor, el flujo complete en BD."""
+        """Si el equipo no está registrado, la confirmación explica el fallo y no aprueba."""
         guild = make_mock_guild(e2e_settings)
         staff_role = guild.get_role(e2e_settings.staff_role_id)
 
@@ -1117,14 +1141,16 @@ class TestBoundaryAndEdgeCasesE2E:
         ok_confirm, msg = await e2e_role_service.confirm_role_request(
             guild=guild, channel_id=channel.id, staff_member=staff_user
         )
-        assert ok_confirm is True
-        assert "NonExistentTeam confirmado para PlayerX" in msg
+        assert ok_confirm is False
+        assert "NonExistentTeam" in msg
+        assert "no está registrado" in msg
+        member.add_roles.assert_not_called()
 
-        # Verificación en BD: estado APPROVED registrado
+        # Verificación en BD: la solicitud sigue pendiente
         async with session_factory() as session:
             stmt = select(RoleRequest).where(RoleRequest.canal_id == channel.id)
             res = await session.execute(stmt)
-            assert res.scalar_one().estado == RoleRequestStatus.APPROVED
+            assert res.scalar_one().estado == RoleRequestStatus.PENDING
 
     @pytest.mark.asyncio
     async def test_member_not_found_on_confirm_reports_error(
