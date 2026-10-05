@@ -186,20 +186,21 @@ except Exception as exc:
 
 #### Flujo Operativo:
 1. **Validación de Estado**: Consulta en la base de datos `req = await repo.get_by_channel_id(channel_id)`. Si no existe o su estado es distinto de `RoleRequestStatus.PENDING`, aborta indicando que no hay solicitud pendiente asociada.
-2. **Resolución del Miembro**:
+2. **Regla de no autoaprobación**: Si `staff_member.id == req.user_id`, rechaza con «No puedes confirmar ni denegar tu propia solicitud de rol.».
+3. **Resolución del Miembro**:
    - Intenta resolver el usuario en la caché local (`guild.get_member(req.user_id)`).
    - Si no está en memoria, invoca `await guild.fetch_member(req.user_id)`.
    - Si el miembro abandonó el servidor, cancela la operación informando que el solicitante ya no se encuentra en la guild.
-3. **Asignación del Rol Oficial**:
-   - Busca el rol por el nombre del equipo (`req.equipo`).
-   - Aplica `await member.add_roles(role)`. Si el rol no se encuentra, emite una advertencia en log pero no interrumpe el flujo principal.
-4. **Remoción de Rol No Verificado**: Remueve el rol no verificado si está configurado y presente en el miembro.
-5. **Actualización de Apodo**:
-   - Trunca el apodo a 32 caracteres: `nick = f"{req.nombre_lol} #{req.riot_tag}"[:32]`.
-   - Ejecuta `await member.edit(nick=nick)`.
-6. **Transición de Estado en Persistencia**:
-   - Actualiza la entidad en PostgreSQL a `RoleRequestStatus.APPROVED`, registrando el identificador del staff responsable (`staff_id=staff_member.id`).
-7. **Retorno**: `(True, f"Rol {req.equipo} confirmado para {member.display_name}.")`.
+4. **Resolución del Equipo y su Rol** (`_resolve_team_role`):
+   - Busca el equipo por nombre en base de datos (`TeamRepository.get_by_name(req.equipo)`) y toma el rol de su `discord_role_id` (`guild.get_role`). No se busca ningún rol por nombre entre los roles del servidor.
+   - Equipo no registrado → `(False, "El equipo '…' no está registrado en la base de datos. … La solicitud sigue pendiente.")`.
+   - `discord_role_id` sin rol en el servidor → `(False, "El rol del equipo '…' (discord_role_id …) no existe en el servidor. … La solicitud sigue pendiente.")`.
+   - En ambos casos se registra un aviso en el log con el nombre del equipo (y el `discord_role_id` si existe), no se toca Discord y la solicitud sigue `PENDING`. Tras corregir el registro (por ejemplo, con `liga-cli seed-teams`), el mismo botón «Confirmar Rol» funciona sin abrir un ticket nuevo.
+5. **Persistencia Atómica (Fase 1)**: en la misma transacción, `transfer_player` crea la membresía con `req.posicion` (si la solicitud la tiene y `RosterSyncService` está disponible) y la solicitud pasa a `APPROVED` con `staff_id=staff_member.id`.
+   - Un `RosterSyncError` (por ejemplo, un conflicto de posición competitiva) revierte la transacción y su mensaje llega al staff seguido de «La solicitud sigue pendiente.».
+   - Cualquier otra excepción revierte la transacción y devuelve «No se pudo registrar la confirmación en base de datos. No se ha aplicado ningún cambio.».
+6. **Cambios en Discord (Fase 2, `_apply_team_role_in_discord`)**: tras el commit, asigna el rol del equipo, remueve el rol no verificado si está presente y pone el apodo `<TAG> <NombreLoL>` con `apply_team_tag`, truncado a 32 caracteres. Ningún fallo interrumpe los pasos siguientes; si Discord rechaza el rol del equipo, el aviso «No se pudo asignar el rol '…' en Discord (…); asígnalo a mano.» se añade al mensaje de retorno.
+7. **Retorno**: `(True, f"Rol {req.equipo} confirmado para {member.display_name}.")`, más los avisos de la fase 2 si los hay.
 
 ---
 
