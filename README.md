@@ -263,6 +263,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │       │   └── formatting.py                 # Normalización de textos, formato de fechas y constructores de embeds
 │       ├── __init__.py                       # Metadatos del paquete liga_bot y versión oficial
 │       ├── __main__.py                       # Punto de entrada de ejecución directa (python -m liga_bot)
+│       ├── background_tasks.py               # Registro de tareas en segundo plano (referencia fuerte y espera en el apagado)
 │       ├── bot.py                            # Definición de la clase LigaBot, ciclo de vida e inyección de servicios
 │       ├── cli.py                            # Interfaz CLI para tareas administrativas y sembrado (liga-cli)
 │       ├── config.py                         # Configuración Pydantic Settings v2 y constantes canónicas de la liga
