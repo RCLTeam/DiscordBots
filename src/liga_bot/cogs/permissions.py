@@ -19,7 +19,7 @@ Reglas comunes a todas las acciones:
 from __future__ import annotations
 
 import logging
-from enum import StrEnum
+from enum import Enum
 
 import discord
 
@@ -28,7 +28,7 @@ from liga_bot.config import Settings, get_settings
 logger = logging.getLogger(__name__)
 
 
-class StaffAction(StrEnum):
+class StaffAction(str, Enum):
     """Tipos de acción de staff con una política de autorización propia."""
 
     ROLES_Y_PLANTILLAS = "roles_y_plantillas"
