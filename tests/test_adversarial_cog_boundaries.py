@@ -711,7 +711,7 @@ async def test_teams_division_fallbacks_and_variations(clean_teams_db, session_f
         ("ASC", Division.ASCEND),
         ("ASCENSO", Division.ASCEND),
         ("ascend", Division.ASCEND),
-        ("UNKNOWN_FALLBACK", Division.PREMIER),
+        (" Ascend ", Division.ASCEND),
     ]
 
     for i, (div_input, expected_div) in enumerate(cases):
@@ -731,6 +731,30 @@ async def test_teams_division_fallbacks_and_variations(clean_teams_db, session_f
             t = await repo.get_by_role_id(9000 + i)
             assert t is not None
             assert t.division == expected_div
+
+
+@pytest.mark.asyncio
+async def test_teams_unknown_division_is_rejected(clean_teams_db, session_factory):
+    """Una división no reconocida se rechaza en lugar de registrarse como Premier."""
+    settings = Settings(staff_role_id=101)
+    cog = TeamsCog(MagicMock(), session_factory=session_factory, settings=settings)
+    staff = create_mock_member(12345, roles=[create_mock_role(101)])
+    inter = create_mock_interaction(user=staff, guild=create_mock_guild())
+
+    await cog.registrar_equipo.callback(
+        cog,
+        inter,
+        rol=create_mock_role(9100),
+        nombre="Team Division Desconocida",
+        tag="DDES",
+        division="UNKNOWN_FALLBACK",
+    )
+
+    inter.response.send_message.assert_awaited_once()
+    assert "División no reconocida" in inter.response.send_message.await_args.args[0]
+    inter.response.defer.assert_not_called()
+    async with session_factory() as session:
+        assert await TeamRepository(session).get_by_role_id(9100) is None
 
 
 @pytest.mark.asyncio
