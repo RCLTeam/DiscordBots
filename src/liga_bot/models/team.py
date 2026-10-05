@@ -98,7 +98,8 @@ class Team(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         sd = self.season_division
         if sd is not None and getattr(sd, "division_name", None):
             try:
-                return Division(sd.division_name)
+                # La web guarda 'Premier'/'Ascend'; el enum usa mayúsculas.
+                return Division(str(sd.division_name).strip().upper())
             except ValueError:
                 pass
         if hasattr(self, "_division_override") and self._division_override is not None:

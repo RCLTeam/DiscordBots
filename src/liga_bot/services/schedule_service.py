@@ -259,15 +259,19 @@ class ScheduleService:
             )
 
         # 3. Resolución de Categoría
-        category_name = (
-            f"PREMIER - JORNADA {jornada}"
-            if division == Division.PREMIER
-            else f"ASCENSO - JORNADA {jornada}"
-        )
-        alt_category_name = f"ASCEND - JORNADA {jornada}"
+        # Cada división tiene su propia categoría por jornada. Los alias solo sirven
+        # para reutilizar una categoría ya creada con otro nombre, nunca para mezclar
+        # partidos de divisiones distintas.
+        if division == Division.PREMIER:
+            category_name = f"PREMIER - JORNADA {jornada}"
+            nombres_validos = (category_name,)
+        else:
+            category_name = f"ASCEND - JORNADA {jornada}"
+            nombres_validos = (category_name, f"ASCENSO - JORNADA {jornada}")
 
+        candidatos = {nombre.upper() for nombre in nombres_validos}
         category = discord.utils.find(
-            lambda c: c.name.strip().upper() in (category_name.upper(), alt_category_name.upper()),
+            lambda c: c.name.strip().upper() in candidatos,
             guild.categories,
         )
         if category is None:
