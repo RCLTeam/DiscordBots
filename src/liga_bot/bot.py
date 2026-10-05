@@ -19,6 +19,7 @@ import discord
 from discord.ext import commands, tasks
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from liga_bot import background_tasks
 from liga_bot.config import Settings, get_settings
 from liga_bot.database import (
     close_engine,
@@ -45,6 +46,10 @@ DEFAULT_EXTENSIONS: Final[tuple[str, ...]] = (
     "liga_bot.cogs.teams",
     "liga_bot.cogs.tickets",
 )
+
+# Plazo máximo (s) que close() espera a las tareas en segundo plano antes de cancelarlas.
+# Cubre el borrado diferido de canales de ticket (5 s) iniciado justo antes del apagado.
+BACKGROUND_TASKS_DRAIN_TIMEOUT: Final[float] = 6.0
 
 
 class LigaBot(commands.Bot):
@@ -223,8 +228,13 @@ class LigaBot(commands.Bot):
 
         1. Detiene y desconecta de forma atómica el servidor WebSocket Bridge si está activo.
         2. Cancela cualquier tarea en segundo plano (tasks.Loop) en los Cogs.
-        3. Cierra y libera el motor de base de datos y conexiones activas.
-        4. Invoca super().close() para cerrar la sesión HTTP y websocket de Discord.
+        3. Espera las tareas en segundo plano registradas (p. ej. el borrado diferido de
+           canales de ticket) durante un plazo acotado y cancela las que no terminen.
+           Se hace antes de cerrar Discord porque esas tareas usan su sesión HTTP.
+        4. Invoca super().close() para cerrar la conexión con Discord y dejar de
+           recibir eventos.
+        5. Cancela las tareas en segundo plano creadas mientras se cerraba Discord.
+        6. Cierra y libera el motor de base de datos y conexiones activas.
         """
         logger.info("Iniciando secuencia de cierre ordenado de LigaBot...")
 
@@ -238,7 +248,8 @@ class LigaBot(commands.Bot):
             except Exception as exc:
                 logger.warning("Error deteniendo WebSocket Bridge: %s", exc)
 
-        # 2. Cancelar bucles en segundo plano en los Cogs
+        # 2. Cancelar bucles en segundo plano en los Cogs (antes de super().close(),
+        #    que descarga las extensiones y elimina los Cogs)
         for cog_name, cog in list(self.cogs.items()):
             if hasattr(cog, "stop_loops") and callable(cog.stop_loops):
                 try:
@@ -257,16 +268,30 @@ class LigaBot(commands.Bot):
                         "Error inspeccionando bucles en %s.%s: %s", cog_name, attr_name, exc
                     )
 
-        # 3. Cerrar motor de base de datos
-        if self.engine is not None:
-            logger.info("Cerrando motor de base de datos...")
-            await close_engine(self.engine)
-            self.engine = None
-            self.session_factory = None
+        # 3. Esperar las tareas en segundo plano pendientes (necesitan Discord abierto)
+        try:
+            await background_tasks.drain(BACKGROUND_TASKS_DRAIN_TIMEOUT)
+        except Exception as exc:
+            logger.warning("Error esperando tareas en segundo plano: %s", exc)
 
-        # 4. Cerrar cliente de Discord
+        # 4. Cerrar cliente de Discord: deja de recibir eventos e interacciones
         logger.info("Cerrando conexión de Discord...")
-        await super().close()
+        try:
+            await super().close()
+        finally:
+            # 5. Cancelar tareas creadas durante el cierre de Discord
+            try:
+                await background_tasks.cancel_all()
+            except Exception as exc:
+                logger.warning("Error cancelando tareas en segundo plano: %s", exc)
+
+            # 6. Cerrar motor de base de datos
+            if self.engine is not None:
+                logger.info("Cerrando motor de base de datos...")
+                engine = self.engine
+                self.engine = None
+                self.session_factory = None
+                await close_engine(engine)
         logger.info("LigaBot cerrado completamente.")
 
     async def on_ready(self) -> None:
