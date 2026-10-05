@@ -58,16 +58,21 @@ async def run_bot(settings: Settings | None = None) -> int:
 
     bot = LigaBot(settings=resolved_settings)
     loop = asyncio.get_running_loop()
-    shutdown_initiated = False
+    main_task = asyncio.current_task()
+    # Referencia fuerte a la tarea de cierre: el bucle solo guarda referencias débiles.
+    close_task: asyncio.Task[None] | None = None
+    forced_exit = False
 
     def handle_signal(sig: signal.Signals) -> None:
-        nonlocal shutdown_initiated
-        if shutdown_initiated:
+        nonlocal close_task, forced_exit
+        if close_task is not None:
             logger.warning("Señal %s recibida de nuevo. Forzando salida...", sig.name)
+            forced_exit = True
+            if main_task is not None:
+                main_task.cancel()
             return
-        shutdown_initiated = True
         logger.info("Señal %s recibida. Iniciando parada ordenada...", sig.name)
-        asyncio.create_task(bot.close())
+        close_task = asyncio.create_task(bot.close())
 
     # Registrar señales SIGINT y SIGTERM en sistemas Unix
     for sig in (signal.SIGINT, signal.SIGTERM):
@@ -78,19 +83,36 @@ async def run_bot(settings: Settings | None = None) -> int:
             pass
 
     try:
-        logger.info("Iniciando conexión con Discord Gateway...")
-        await bot.start(token)
-        return 0
-    except (KeyboardInterrupt, asyncio.CancelledError):
-        logger.info("Ejecución interrumpida por el usuario o tarea cancelada.")
-        return 0
-    except Exception as exc:
-        logger.critical("Error fatal durante la ejecución de LigaBot: %s", exc, exc_info=True)
-        return 1
-    finally:
-        if not bot.is_closed():
+        try:
+            logger.info("Iniciando conexión con Discord Gateway...")
+            await bot.start(token)
+            exit_code = 0
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            if forced_exit:
+                raise
+            logger.info("Ejecución interrumpida por el usuario o tarea cancelada.")
+            exit_code = 0
+        except Exception as exc:
+            logger.critical("Error fatal durante la ejecución de LigaBot: %s", exc, exc_info=True)
+            exit_code = 1
+
+        # bot.start() retorna en cuanto se cierra Discord, pero close() continúa con
+        # la base de datos: se espera siempre a que termine antes de salir.
+        if close_task is not None:
+            try:
+                await close_task
+            except Exception as exc:
+                logger.critical("Error durante el cierre de LigaBot: %s", exc, exc_info=True)
+                exit_code = 1
+        elif not bot.is_closed():
             logger.info("Cerrando recursos pendientes del bot...")
             await bot.close()
+        return exit_code
+    except asyncio.CancelledError:
+        if not forced_exit:
+            raise
+        logger.error("Salida forzada por una segunda señal antes de completar el cierre.")
+        return 1
 
 
 def main() -> None:

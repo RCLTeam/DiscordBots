@@ -7,7 +7,8 @@ Tests empirical failure modes and attack vectors:
 3. Background tasks cancellation on shutdown with hostile/failing cogs and multiple loops.
 4. on_ready storm (sequential and concurrent events, verifying tree.sync is NEVER called).
 5. Missing, empty, and whitespace-only DISCORD_TOKEN in run_bot and main().
-6. Simulated SIGINT / SIGTERM signal trap (verifying graceful shutdown task is scheduled once).
+6. Simulated SIGINT / SIGTERM signal trap (verifying graceful shutdown task is scheduled once
+   and awaited).
 7. Dependency injection container preservation and edge-case resolution.
 """
 
@@ -359,10 +360,10 @@ def test_adversarial_main_sync_exit_on_whitespace_token():
 @pytest.mark.asyncio
 async def test_adversarial_simulated_signal_trap_schedules_shutdown():
     """
-    Simulate OS signals (SIGINT, SIGTERM) delivered to run_bot.
-    Verify that:
-    1. A graceful shutdown task (bot.close()) is scheduled.
-    2. Subsequent duplicate signals do NOT schedule duplicate close tasks.
+    Simulate a SIGINT delivered to run_bot while the gateway is running.
+    Verify that exactly one graceful shutdown task (bot.close()) is scheduled,
+    that run_bot awaits it, and that it does not call close() a second time.
+    The forced exit on a second signal is covered in test_shutdown_lifecycle.py.
     """
     registered_handlers: dict[signal.Signals, callable] = {}
     mock_loop = MagicMock()
@@ -378,18 +379,12 @@ async def test_adversarial_simulated_signal_trap_schedules_shutdown():
         patch("asyncio.get_running_loop", return_value=mock_loop),
         patch.object(LigaBot, "start", new_callable=AsyncMock) as mock_start,
         patch.object(LigaBot, "close", new_callable=AsyncMock) as mock_close,
-        patch("asyncio.create_task") as mock_create_task,
+        patch("asyncio.create_task", wraps=asyncio.create_task) as mock_create_task,
     ):
-        mock_create_task.side_effect = lambda coro: (coro.close(), MagicMock())[1]
 
-        # We simulate that start() pauses waiting for gateway
         async def mock_start_impl(token):
-            # When bot.start is waiting, simulate SIGINT delivery
             handler = registered_handlers.get(signal.SIGINT)
             assert handler is not None, "SIGINT handler was not registered"
-            # First signal delivery: must schedule bot.close()
-            handler()
-            # Second signal delivery: must be ignored
             handler()
 
         mock_start.side_effect = mock_start_impl
@@ -397,9 +392,8 @@ async def test_adversarial_simulated_signal_trap_schedules_shutdown():
         exit_code = await run_bot(settings=test_settings)
 
         assert exit_code == 0
-        # asyncio.create_task must be called exactly once despite 2 signal triggers
         assert mock_create_task.call_count == 1
-        mock_close.assert_awaited()
+        mock_close.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -417,10 +411,9 @@ async def test_adversarial_simulated_sigterm_signal_trap():
     with (
         patch("asyncio.get_running_loop", return_value=mock_loop),
         patch.object(LigaBot, "start", new_callable=AsyncMock) as mock_start,
-        patch.object(LigaBot, "close", new_callable=AsyncMock),
-        patch("asyncio.create_task") as mock_create_task,
+        patch.object(LigaBot, "close", new_callable=AsyncMock) as mock_close,
+        patch("asyncio.create_task", wraps=asyncio.create_task) as mock_create_task,
     ):
-        mock_create_task.side_effect = lambda coro: (coro.close(), MagicMock())[1]
 
         async def mock_start_impl(token):
             handler = registered_handlers.get(signal.SIGTERM)
@@ -433,6 +426,7 @@ async def test_adversarial_simulated_sigterm_signal_trap():
 
         assert exit_code == 0
         assert mock_create_task.call_count == 1
+        mock_close.assert_awaited_once()
 
 
 @pytest.mark.asyncio
