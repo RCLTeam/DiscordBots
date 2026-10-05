@@ -18,7 +18,7 @@ El stack de pruebas se ejecuta de forma hermética utilizando **PGlite** (`py-pg
 |---|---|
 | [**Estrategia de Pruebas (`strategy.md`)**](strategy.md) | Filosofía de pruebas, arquitectura en pirámide de 4 niveles (Unit 46%, Integration 15%, Resilience 9.7%, Adversarial 29.3%), ciclo de vida de fixtures con PGlite, aislamiento transaccional por savepoints y factoría de mocks de Discord. |
 | [**Catálogo de Suites (`suites.md`)**](suites.md) | Inventario completo de los 49 archivos de prueba clasificados por nivel de pirámide, métricas de casos y LoC por archivo, convenciones de nomenclatura y comandos de ejecución con `uv run pytest`. |
-| [**Límites de Entorno (`environment-limits.md`)**](environment-limits.md) | Análisis técnico de los 3 límites críticos de infraestructura mitigados: desbordamiento de buffer UNIX en Node 24+ (>16KB), serialización de transacciones con `asyncio.Lock` en PGlite, y liberación de descriptores de sockets en ciclos rápidos. |
+| [**Límites de Entorno (`environment-limits.md`)**](environment-limits.md) | Análisis técnico de los 3 límites críticos de infraestructura mitigados: desbordamiento de buffer UNIX en Node 24+ (>16KB), serialización de transacciones con `asyncio.Lock` en PGlite, liberación de descriptores de sockets en ciclos rápidos, y configuración de logging de Alembic dentro de la sesión de pytest. |
 
 ---
 

@@ -14,12 +14,13 @@ El modelo `Match` representa un enfrentamiento programado entre dos clubes depor
 - **Tabla**: `matches`.
 - **Mixins**:
   - `UUIDPrimaryKeyMixin`: Genera una clave primaria `id` de tipo UUID v4 (`Uuid`).
-  - `TimestampMixin`: Gestiona automáticamente las marcas temporales `created_at` y `updated_at` en UTC (`DateTime(timezone=True)`).
+  - `TimestampMixin`: Gestiona la marca temporal `created_at` en UTC (`DateTime(timezone=True)`).
+  - `UpdatedAtMixin`: Añade `updated_at` (`DateTime(timezone=True)`, `onupdate=func.now()`). En producción la mantiene el trigger `set_updated_at` de RCL-Next, así que el bot no necesita asignarla al modificar un partido (por ejemplo, al guardar la URL del directo).
 
 ### 1.1 Esquema de Columnas y Tipos Exactos
 
 ```python
-class Match(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+class Match(Base, UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin):
     __tablename__ = "matches"
 
     jornada: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -80,7 +81,7 @@ class Match(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 | `stream_url` | `Text` | `str \| None` | Sí | `None` | URL de la retransmisión grabada o VOD del partido. |
 | `stream_url_live` | `String(255)` | `str \| None` | Sí | `None` | URL del directo o emisión en vivo del partido. |
 | `created_at` | `DateTime(timezone=True)` | `datetime` | No | `now(UTC)` | Fecha de creación del registro. |
-| `updated_at` | `DateTime(timezone=True)` | `datetime` | No | `now(UTC)` | Fecha de última modificación. |
+| `updated_at` | `DateTime(timezone=True)` | `datetime` | No | `now()` (`UpdatedAtMixin`) | Fecha de última modificación. |
 
 ### 1.2 Enumerados de Dominio Asociados
 

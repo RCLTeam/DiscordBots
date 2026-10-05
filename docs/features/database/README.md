@@ -34,12 +34,12 @@ La base de datos PostgreSQL de la plataforma opera bajo un modelo de gobernanza 
 ```
 
 ### 2.1 Tablas Compartidas (Gobernadas por RCL-Next)
-- **Autoridad:** El esquema DDL, las migraciones e índices de las 6 tablas compartidas (`teams`, `team_memberships`, `discord_users`, `players`, `roster_movements`, `audit_logs`) son propiedad exclusiva de la aplicación web **RCL-Next**, gestionadas mediante **Drizzle ORM** (`drizzle-kit`).
-- **Uso en DiscordBots:** Los modelos declarativos en `src/liga_bot/models/roster.py` replican exactamente estas tablas para posibilitar consultas ORM tipadas en tiempo de ejecución y la creación de esquemas efímeros en tests unitarios (`Base.metadata.create_all`).
+- **Autoridad:** El esquema DDL, las migraciones e índices de las tablas compartidas (`seasons`, `divisions`, `seasons_divisions`, `teams`, `matches`, `team_memberships`, `discord_users`, `players`, `roster_movements`, `audit_logs`; conjunto `SHARED_TABLES` de `alembic/env.py`) son propiedad exclusiva de la aplicación web **RCL-Next**, gestionadas mediante **Drizzle ORM** (`drizzle-kit`).
+- **Uso en DiscordBots:** Los modelos declarativos (`src/liga_bot/models/roster.py`, `team.py` y `match.py`) describen estas tablas con las mismas columnas, tipos y nulabilidad que la migración `0000_initial_shared_tables.py`, que las crea en las bases de datos locales y de tests. `tests/test_shared_schema_alignment.py` compara cada modelo con la tabla migrada; ver [alineación con las tablas compartidas](./models.md#14-alineación-con-las-tablas-compartidas).
 - **Filtro de Migraciones en Alembic (`include_object`):** Para evitar que Alembic intente alterar o borrar estas tablas en producción, la función `include_object` en `alembic/env.py` intercepta el autogenerate e ignora de forma estricta cualquier tabla, índice o restricción perteneciente a este conjunto.
 
 ### 2.2 Tablas Propietarias (Gobernadas por DiscordBots)
-- **Autoridad:** Las 3 tablas operativas propias del bot (`matches`, `ticket_notices`, `role_requests`) son gestionadas directamente por el pipeline de migraciones de **Alembic** en `alembic/versions/` (`001_initial_schema.py`, `002_role_requests.py`, `003_add_stream_urls.py`).
+- **Autoridad:** Las tablas operativas propias del bot (`ticket_notices`, `role_requests`, `match_casters`, `match_caster_cards`) son gestionadas directamente por el pipeline de migraciones de **Alembic** en `alembic/versions/` (`0001_bot_tables.py`, `0003_match_casters.py`).
 - Cualquier modificación estructural en estas entidades requiere la generación y aplicación de una migración versionada de Alembic.
 
 ---
