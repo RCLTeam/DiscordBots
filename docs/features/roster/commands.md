@@ -38,25 +38,25 @@ El comando `/gestionar-posicion` permite al personal de administración y staff 
 
 El comando implementa un filtrado multinivel antes de acceder a la capa de datos:
 
-1. **Restricción de Contexto Guild (`L156–L161`):**
+1. **Restricción de Contexto Guild (`L158–L163`):**
    Verifica que `interaction.guild is not None`. No se permite la ejecución por mensajes directos (DM). En caso de detectarse fuera de un servidor, responde de forma efímera y aborta:
    ```text
    ❌ Este comando solo puede ser ejecutado dentro de un servidor de Discord.
    ```
-2. **Permisos Nativos de Discord (`L148`):**
+2. **Permisos Nativos de Discord (`L150`):**
    A través del decorador `@app_commands.default_permissions(manage_guild=True)`, restringe la visibilidad del comando en clientes de Discord exclusivamente a usuarios con permiso de gestión de servidor.
-3. **Doble Cerrojo de Autorización de Staff (`L164–L171`):**
-   Ejecuta `is_staff(interaction.user, self.settings)`, validando contra `Settings`:
-   - Rol de Staff (`staff_role_id`).
-   - Rol de CEO / Dirección (`ceo_role_id`).
+3. **Doble Cerrojo de Autorización de Staff (`L166–L172`):**
+   Ejecuta `is_staff(interaction.user, self.settings)` (acción `ROLES_Y_PLANTILLAS` de la [política de autorización](../../architecture/permissions.md)), que autoriza a:
    - Permiso de Administrador de Discord (`administrator=True`).
-   - Permiso de Gestión de Servidor (`manage_guild=True`).
-   
-   Soporta evaluación tanto síncrona como asíncrona mediante `inspect.isawaitable`. Si el invocador no supera la validación, se deniega la ejecución:
+   - Rol de Staff (`staff_role_id`).
+   - Rol de Admin (`admin_role_id`).
+   - Rol de CEO general (`ceo_role_id`, si está configurado).
+
+   El permiso «Gestionar servidor» (`manage_guild=True`) por sí solo no autoriza: solo decide la visibilidad del comando. Si el invocador no supera la validación, se deniega la ejecución:
    ```text
    ❌ Solo el personal de staff tiene autorización para gestionar posiciones.
    ```
-4. **Verificación de Disponibilidad del Servicio (`L174–L181`):**
+4. **Verificación de Disponibilidad del Servicio (`L176–L181`):**
    Comprueba que `self.roster_sync_service` esté inicializado en la instancia del bot. Si es `None`, aborta la interacción informando el estado:
    ```text
    ❌ El servicio de sincronización de plantillas no está disponible.

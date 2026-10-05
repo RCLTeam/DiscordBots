@@ -158,6 +158,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │   │   ├── cli.md                            # Consola CLI (liga-cli), comandos de sembrado y formatos
 │   │   ├── configuration.md                  # Matriz de 18 variables de entorno con Pydantic Settings v2
 │   │   ├── database-engine.md                # Persistencia dual (PostgreSQL asyncpg y PGlite embebido)
+│   │   ├── permissions.md                    # Política de autorización del staff por tipo de acción
 │   │   └── runtime.md                        # Ciclo de vida asíncrono de LigaBot, inyección de dependencias y hooks
 │   ├── features/                             # Módulos funcionales del bot organizados por dominios
 │   │   ├── database/                         # Modelos, esquemas relacionales y persistencia SQLAlchemy 2.0
@@ -213,7 +214,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │       │   ├── admin.py                      # Comandos administrativos de bajo nivel y utilidades
 │       │   ├── admin_cog.py                  # Cog de sincronización de comandos slash (/sync, /sincronizar)
 │       │   ├── casters.py                    # Cog de cartelera interactiva de casters y retransmisiones
-│       │   ├── permissions.py                # Verificadores de permisos y decoradores de autorización por rol
+│       │   ├── permissions.py                # Política de autorización del staff por tipo de acción
 │       │   ├── roles.py                      # Cog y listeners para el flujo de verificación de roles
 │       │   ├── roster.py                     # Implementación interna de comandos de gestión de plantillas
 │       │   ├── roster_cog.py                 # Cog de registro de plantillas, capitanías y agentes libres
@@ -315,6 +316,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │   ├── test_roster_ui.py                     # Componentes visuales de confirmación de roster
 │   ├── test_roster_ui_adversarial.py         # Interacciones duplicadas o desincronizadas en UI de roster
 │   ├── test_services.py                      # Pruebas unitarias de servicios de dominio
+│   ├── test_staff_permissions_policy.py      # Matriz de la política de autorización del staff
 │   ├── test_suggestion_service.py            # Despacho de sugerencias a canales designados de Discord
 │   ├── test_suggestion_service_resilience.py # Resiliencia ante fallos en envío de sugerencias o canal inválido
 │   ├── test_websocket_bridge_concurrency.py  # Concurrencia de múltiples clientes WebSocket simultáneos
@@ -495,6 +497,7 @@ Toda la documentación técnica se encuentra modularizada bajo el directorio [`d
   - [Configuración (`configuration.md`)](docs/architecture/configuration.md): Matriz de 18 variables, validadores Pydantic y constantes.
   - [Consola CLI (`cli.md`)](docs/architecture/cli.md): Sintaxis de `seed-teams`, esquemas JSON/CSV y transacciones.
   - [Motor de Base de Datos (`database-engine.md`)](docs/architecture/database-engine.md): Persistencia dual PostgreSQL/PGlite y context managers.
+  - [Política de Autorización (`permissions.md`)](docs/architecture/permissions.md): Roles y permisos que autorizan cada tipo de acción de staff.
 - 🧩 [**Hub de Módulos Funcionales (`docs/features/README.md`)**](docs/features/README.md):
   - 🗄️ [**Base de Datos y Modelos (`docs/features/database/README.md`)**](docs/features/database/README.md):
     - [Modelos Relacionales (`models.md`)](docs/features/database/models.md)

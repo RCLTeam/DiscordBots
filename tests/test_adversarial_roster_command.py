@@ -324,12 +324,13 @@ class TestEmpiricalPermissionStress:
         service.get_user_teams.assert_awaited_once_with(str(target_member.id))
 
     @pytest.mark.asyncio
-    async def test_permission_authorized_with_only_manage_guild_flag(self) -> None:
+    async def test_permission_denied_with_only_manage_guild_flag(self) -> None:
         """
         Usuario que posee ÚNICAMENTE el permiso nativo manage_guild:
         - Sin roles en Discord (roles=[]).
         - is_admin=False.
-        - Debe ser autorizado exitosamente (cumple default_permissions y is_staff).
+        - Debe ser rechazado: «Gestionar servidor» solo decide la visibilidad del
+          comando (default_permissions), no autoriza como staff.
         """
         service = make_roster_sync_service()
         bot = make_bot(roster_sync_service=service)
@@ -346,8 +347,11 @@ class TestEmpiricalPermissionStress:
 
         await cog.gestionar_posicion.callback(cog, inter, target_member)
 
-        inter.response.defer.assert_awaited_once_with(ephemeral=True)
-        service.get_user_teams.assert_awaited_once_with(str(target_member.id))
+        inter.response.defer.assert_not_awaited()
+        service.get_user_teams.assert_not_awaited()
+        args, kwargs = inter.response.send_message.call_args
+        assert "staff" in args[0]
+        assert kwargs.get("ephemeral") is True
 
     @pytest.mark.asyncio
     async def test_permission_authorized_with_only_ceo_role(self) -> None:

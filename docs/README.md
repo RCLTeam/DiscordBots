@@ -10,7 +10,7 @@ Bienvenido al centro neurálgico de documentación técnica de **LigaBot**, el b
 
 Este repositorio de documentación está estructurado bajo un estándar de arquitectura hipergranular y desacoplada, dividiendo la especificación técnica en tres áreas principales de ingeniería:
 
-1. **Arquitectura y Núcleo de Ejecución (`architecture/`)**: Fundamentos del ciclo de vida del bot, inyección de dependencias, configuración validada con Pydantic Settings v2, consola CLI y arquitectura dual de persistencia.
+1. **Arquitectura y Núcleo de Ejecución (`architecture/`)**: Fundamentos del ciclo de vida del bot, inyección de dependencias, configuración validada con Pydantic Settings v2, consola CLI, arquitectura dual de persistencia y política de autorización del staff.
 2. **Módulos Funcionales (`features/`)**: Especificaciones atómicas de cada funcionalidad del sistema organizadas por slices verticales (base de datos, pasarela WebSocket, gestión de plantillas y rosters, solicitudes de roles de onboarding, sistema de tickets, calendario competitivo y cartelera de casters).
 3. **Subsistema de Testing y Calidad (`testing/`)**: Estrategia de pruebas en pirámide de 4 niveles, inventario completo de suites y análisis de límites de entorno e infraestructura (PGlite, descriptores de sockets UNIX y buffers de red).
 
