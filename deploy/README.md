@@ -40,6 +40,13 @@ Cada `LOGIN` con un supertoken incorrecto cierra la conexión y deja en el journ
 
 El fichero contiene credenciales: `sudo chown rcl:rcl .env && sudo chmod 600 .env`.
 
+Si la contraseña de PostgreSQL contiene `@ / ? # % :`, codifícalos en
+`DATABASE_URL` (`%40 %2F %3F %23 %25 %3A`). Por ejemplo, `pa@ss/1` se escribe
+`pa%40ss%2F1`. Sin codificar, la URL se interpreta mal y el bot no puede describirla
+en el log (solo muestra `*** [credenciales sin codificar]`).
+Para obtener el valor codificado:
+`python3 -c "import urllib.parse, getpass; print(urllib.parse.quote(getpass.getpass(), safe=''))"`.
+
 Instala dependencias y aplica migraciones **antes** de arrancar el servicio:
 
 ```bash
@@ -68,6 +75,27 @@ sudo systemctl stop liga-bot       # parar
 
 Tras arrancar por primera vez, registra los slash commands escribiendo `!sync`
 en cualquier canal del servidor de Discord.
+
+### Credenciales y logs
+
+Al arrancar, el bot registra qué motor de base de datos inicializa con la URL
+saneada (motor, host, puerto y base de datos, por ejemplo
+`PostgreSQL (postgresql+asyncpg://localhost:5432/rcl)`); nunca el usuario, la
+contraseña ni los parámetros de `DATABASE_URL`. Tampoco aparecen en los errores
+de una `DATABASE_URL` mal escrita.
+
+Las versiones anteriores escribían `DATABASE_URL` completa en el journal en cada
+arranque. Si el servidor ejecutó alguna de ellas, la contraseña sigue en los logs
+antiguos: cámbiala y actualiza `.env`.
+
+```bash
+sudo -u postgres psql -c '\password rcl_user'      # pide la contraseña sin mostrarla
+sudoedit /opt/rcl/discord-bots/.env      # actualiza DATABASE_URL
+sudo systemctl restart liga-bot
+```
+
+Revisa también quién puede leer el journal (`root` y los grupos `adm` y
+`systemd-journal`): `getent group adm systemd-journal`.
 
 ## 5. Actualizar a una versión nueva
 

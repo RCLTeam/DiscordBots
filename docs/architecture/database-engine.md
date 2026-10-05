@@ -27,14 +27,14 @@ El módulo `src/liga_bot/database.py` desacopla la aplicación del gestor relaci
 ```
 
 ### 1.1 PostgreSQL de Producción
-Configurado cuando la URL inicia con `postgres://` o `postgresql://` (`src/liga_bot/database.py:107-112`):
+Configurado cuando la URL inicia con `postgres://` o `postgresql://` (`src/liga_bot/database.py:147-159`):
 - **Driver Asíncrono:** Utiliza `asyncpg` mediante la normalización en `settings.async_database_url` (`postgresql+asyncpg://...`).
 - **Verificación de Liveness (`pool_pre_ping=True`):** Ejecuta una consulta de prueba transparente (`SELECT 1`) antes de entregar una conexión del pool, descartando de forma automática conexiones caídas por reinicios del servidor o timeouts de firewall.
 - **Logging Adaptativo (`echo=(settings.log_level == "DEBUG")`):** Muestra sentencias SQL generadas únicamente cuando el nivel de logging del sistema está configurado en `DEBUG`.
 - **Pool de Conexiones:** Opera sobre `AsyncAdaptedQueuePool` con concurrencia real multi-conexión (por defecto 5 conexiones fijas + 10 de desbordamiento).
 
 ### 1.2 PGlite para Entornos de Pruebas y Local
-Configurado cuando la URL inicia con `pglite://` (`src/liga_bot/database.py:113-122`):
+Configurado cuando la URL inicia con `pglite://` (`src/liga_bot/database.py:160-169`):
 - **Motor WebAssembly:** Ejecuta PostgreSQL compilado a WebAssembly en un subproceso Node.js mediante `py-pglite[sqlalchemy]`.
 - **Comunicación por Socket UNIX:** Se comunica mediante un archivo de socket UNIX dedicado (`.s.PGSQL.5432`).
 - **Modos de Operación:**
@@ -42,7 +42,27 @@ Configurado cuando la URL inicia con `pglite://` (`src/liga_bot/database.py:113-
   - *Directorio Persistente (`pglite:///ruta/al/directorio`):* En `_prepare_pglite_config()`, resuelve la ruta absoluta y asegura el directorio con `mkdir(parents=True, exist_ok=True)`.
 
 ### 1.3 Validación Temprana de Esquemas
-Si la URL no pertenece a los esquemas soportados (ej. `sqlite://`, `mysql://`), la factoría dispara de inmediato un `ValueError` explicativo (`src/liga_bot/database.py:124-127`), previniendo configuraciones inválidas en el arranque.
+Si la URL no pertenece a los esquemas soportados (ej. `sqlite://`, `mysql://`), la factoría dispara de inmediato un `ValueError` explicativo (`src/liga_bot/database.py:170-174`), previniendo configuraciones inválidas en el arranque. El mensaje muestra la URL ya saneada con `describe_database_url` (ver §1.4) y sigue enumerando los prefijos admitidos.
+
+### 1.4 URL de Conexión en Logs y Errores (`describe_database_url`)
+`DATABASE_URL` incluye en producción el usuario y la contraseña de PostgreSQL, así que nunca se escribe tal cual en logs ni en mensajes de excepción. `describe_database_url()` (`src/liga_bot/database.py:84-119`) devuelve una descripción apta para el journal:
+
+| `DATABASE_URL` | Descripción |
+| --- | --- |
+| `postgresql+asyncpg://usuario:secreto@localhost:5432/liga_bot` | `PostgreSQL (postgresql+asyncpg://localhost:5432/liga_bot)` |
+| `pglite:///:memory:` | `PGlite (memoria)` |
+| `pglite:///./.data/pglite_dev_db` | `PGlite (ruta local: ./.data/pglite_dev_db)` |
+| `mysql://usuario:secreto@localhost/liga_bot` | `mysql://localhost/liga_bot` |
+| URL que SQLAlchemy no puede interpretar | `<URL no interpretable>` |
+| `postgresql+asyncpg://usuario:pa@se/creto@localhost:5432/liga_bot` | `PostgreSQL (postgresql+asyncpg://*** [credenciales sin codificar])` |
+| `pglite://usuario:secreto@localhost/liga_bot` | `PGlite (ruta local: ***)` |
+
+- Solo conserva dialecto, host, puerto y base de datos: se descartan el usuario, la contraseña y los parámetros de consulta (`?password=...` también es una forma válida de pasar credenciales).
+- Si la URL tiene más de una `@`, o el host o la base de datos contienen `@`, la contraseña lleva una `@` sin codificar y el parser la reparte entre host, base de datos y consulta según los `/`, `?` o `#` que la acompañen. En ese caso solo se muestra el dialecto, seguido de `*** [credenciales sin codificar]`.
+- En PGlite, una ruta que contenga `@` se muestra como `***`.
+- Los caracteres `@ / ? # % :` de la contraseña deben ir codificados en `DATABASE_URL` (`%40 %2F %3F %23 %25 %3A`).
+- La usan el log de arranque de `LigaBot.setup_hook` y los dos `ValueError` de `get_engine`: el de esquema no soportado y el que sustituye a los errores de SQLAlchemy al interpretar una URL de PostgreSQL mal formada (`src/liga_bot/database.py:153-159`). Este último se lanza con `from None` para que la traza que registra `__main__.run_bot` a nivel `CRITICAL` no arrastre la excepción original.
+- Pruebas: `tests/test_database_url_redaction.py`.
 
 ---
 
@@ -55,7 +75,7 @@ PGlite y los motores configurados con `StaticPool` operan sobre una **única con
 - Como consecuencia, las operaciones activas de `session_a` son abortadas de manera cruzada y silenciosa (*rollback bleed*), corrompiendo la consistencia de los datos.
 
 ### 2.2 La Solución: Registro de Locks por Motor
-Para erradicar esta condición de carrera sin degradar el rendimiento de PostgreSQL en producción, `database.py` implementa un registro de cerrojos asíncronos indexado por motor (`src/liga_bot/database.py:34`):
+Para erradicar esta condición de carrera sin degradar el rendimiento de PostgreSQL en producción, `database.py` implementa un registro de cerrojos asíncronos indexado por motor (`src/liga_bot/database.py:36`):
 
 ```python
 _engine_locks: dict[AsyncEngine, asyncio.Lock] = {}
@@ -84,7 +104,7 @@ def _requires_serialization(engine: AsyncEngine | None) -> bool:
 
 ## 3. Factoría de Sesiones Asíncronas (`get_session_factory`)
 
-Definida en `src/liga_bot/database.py:135-162`:
+Definida en `src/liga_bot/database.py:183-210`:
 
 ```python
 factory = async_sessionmaker(
@@ -113,7 +133,7 @@ factory = async_sessionmaker(
 
 El módulo expone dos context managers asíncronos para delimitar transacciones:
 
-### 4.1 `transactional_session` (`src/liga_bot/database.py:190-214`)
+### 4.1 `transactional_session` (`src/liga_bot/database.py:238-262`)
 Diseñado para operaciones que requieren la semántica atómica de `session.begin()` de SQLAlchemy:
 
 ```python
@@ -144,7 +164,7 @@ async def transactional_session(
   - Si se propaga una excepción, emite `ROLLBACK` y re-lanza el error.
   - Adquiere preventivamente el `asyncio.Lock` solo si `_requires_serialization()` es `True`.
 
-### 4.2 `get_session` (`src/liga_bot/database.py:216-247`)
+### 4.2 `get_session` (`src/liga_bot/database.py:264-295`)
 Diseñado como inyector de dependencias para comandos y servicios donde se requiere control explícito del ciclo `try...commit / except...rollback`:
 
 ```python
@@ -181,7 +201,7 @@ async def get_session(
 
 ## 5. Ciclo de Vida y Prevención de Fugas de Memoria (`close_engine`)
 
-La función `close_engine()` (`src/liga_bot/database.py:165-188`) garantiza la liberación ordenada de recursos físicos y de memoria:
+La función `close_engine()` (`src/liga_bot/database.py:213-235`) garantiza la liberación ordenada de recursos físicos y de memoria:
 
 ```python
 async def close_engine(engine: AsyncEngine | None = None) -> None:
