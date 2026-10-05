@@ -25,7 +25,7 @@ El componente central `WebsocketBridgeService` (`src/liga_bot/services/websocket
 | Documento | Descripción Técnica |
 |---|---|
 | [**protocol.md**](protocol.md) | Arquitectura del servidor, endpoints `/ws/bridge` y `/health`, opcodes de cliente/servidor, decodificación de tramas y protocolo de sugerencias en 2 fases con tareas desacopladas. |
-| [**security.md**](security.md) | Validación estricta RFC 4122, política de descarte silencioso pre-login, `secrets.compare_digest`, protección de supertoken vacío y códigos de cierre 4001 (timeout) y 1000 (shutdown). |
+| [**security.md**](security.md) | Validación estricta RFC 4122, política de descarte silencioso pre-login, `secrets.compare_digest`, protección de supertoken vacío, cierre tras un login fallido con registro de la IP, códigos de cierre 4001 (timeout), 4003 (login fallido) y 1000 (shutdown), y exposición del puerto fuera de localhost. |
 | [**rate-limiter.md**](rate-limiter.md) | Algoritmo `SlidingWindowRateLimiter`, cerrojo `asyncio.Lock`, marcas de tiempo monótonas, purga en deque, respuesta `RATE_LIMITED` y reinicio híbrido `_AwaitableNone`. |
 
 ---

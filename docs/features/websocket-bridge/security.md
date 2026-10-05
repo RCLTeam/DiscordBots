@@ -45,7 +45,7 @@ La función `extract_request_id` (`bridge_protocol.py`) valida de forma determin
 
 ## 2. Descarte Silencioso Pre-Autenticación (*Zero Reconnaissance Leakage*)
 
-Para mitigar ataques de reconocimiento de puertos, escaneo de vulnerabilidades y ataques de diccionario (*fuzzing*), el servidor implementa una política de **descarte silencioso absoluto** antes de que la sesión esté autenticada (`src/liga_bot/services/websocket_bridge_service.py:217-250`).
+Para mitigar ataques de reconocimiento de puertos, escaneo de vulnerabilidades y ataques de diccionario (*fuzzing*), el servidor implementa una política de **descarte silencioso absoluto** antes de que la sesión esté autenticada (`src/liga_bot/services/websocket_bridge_service.py:216-256`). La única excepción es un `LOGIN` con token inválido, que cierra la conexión (sección 4), también sin ninguna trama JSON.
 
 ### Matriz de Comportamiento Pre-Autenticación
 
@@ -56,13 +56,14 @@ Para mitigar ataques de reconocimiento de puertos, escaneo de vulnerabilidades y
 | Ausencia de `data` o UUID no válido | `extract_request_id` devuelve `None`, `continue` | **0 bytes** |
 | Comando no reconocido (e.g. `PING`, `ADMIN`, `STATUS`) | `continue` (ignorado en pre-login) | **0 bytes** |
 | Comando `SUGGESTION_CREATED` sin autenticar | `continue` (ignorado en pre-login) | **0 bytes** |
-| Comando `LOGIN` con token inválido o erróneo | No autentica, `continue` | **0 bytes** |
+| Comando `LOGIN` con token inválido, vacío o ausente | Registra un `WARNING` con la IP remota (sin el token) y cierra la conexión con el código `4003`; los `LOGIN` posteriores de esa conexión no se procesan | **0 bytes de datos** (solo la trama de cierre WebSocket) |
 | Comando `LOGIN` con token válido | Emite `LOGIN_SUCCESS` | Respuesta JSON legítima |
 
 ### Beneficios de Seguridad
 
 - **Cero fugas de información:** Un atacante que intente descubrir si el servicio expone una API interna o probee comandos arbitrarios no recibe ningún mensaje de error JSON (`ERROR`, `UNAUTHORIZED`, `INVALID_COMMAND`, etc.).
-- **Imposibilidad de inferencia sintáctica:** No es posible determinar si un JSON enviado fue rechazado por formato, por ausencia de UUID o por token inválido, eliminando oráculos de error.
+- **Imposibilidad de inferencia sintáctica:** No es posible determinar si un JSON enviado fue rechazado por formato o por ausencia de UUID. El cierre con `4003` solo revela que un `LOGIN` bien formado no autenticó, sin indicar el motivo.
+- **Un intento por conexión:** Cada conexión admite un único `LOGIN` fallido; para probar otro token hay que abrir una conexión nueva, y cada intento queda en el log.
 
 ---
 
@@ -92,7 +93,27 @@ def _validate_token(self, token: str | None) -> bool:
 
 ---
 
-## 4. Timeout de Autenticación (Código de Cierre 4001)
+## 4. Login Fallido (Código de Cierre 4003)
+
+Cuando llega un `LOGIN` con un UUID válido y `_validate_token` lo rechaza (token incorrecto, vacío, ausente o supertoken sin configurar), `_handle_ws` (`src/liga_bot/services/websocket_bridge_service.py:246-254`):
+
+1. Registra una línea `WARNING` en el logger `liga_bot.services.websocket_bridge` con la IP remota (`request.remote`). El valor del token **nunca** se escribe en el log.
+2. Cierra la conexión con el código `4003` y la razón `b"Authentication failed"`, sin enviar ninguna trama JSON.
+3. Sale del bucle de lectura: cualquier trama que el cliente hubiera enviado después en esa conexión (incluido otro `LOGIN`) se descarta.
+
+Ejemplo de la línea de log:
+
+```
+[WARNING] liga_bot.services.websocket_bridge: Intento de login fallido en el WebSocket Bridge desde 203.0.113.7; se cierra la conexión (código 4003).
+```
+
+Si el supertoken no está configurado, antes aparece además el aviso `Intento de login rechazado: discord_bot_supertoken no configurado.`
+
+No hay límite de intentos ni de conexiones por IP. Si la web llega a través de un proxy o túnel en la misma máquina (sección 7), todas las conexiones comparten la IP del proxy, y un bloqueo por IP permitiría a un tercero dejar fuera a la web provocando fallos a propósito. El control de quién puede conectarse queda en la red (sección 7).
+
+---
+
+## 5. Timeout de Autenticación (Código de Cierre 4001)
 
 Para prevenir el agotamiento de recursos o descriptores de archivos (*File Descriptors*) mediante conexiones inactivas (*Slowloris / Idle Sockets*), se ejecuta una tarea vigilante en segundo plano (`src/liga_bot/services/websocket_bridge_service.py:192-205`):
 
@@ -115,12 +136,12 @@ async def _auth_timeout(
 
 1. **Temporizador inmutable:** El temporizador se inicializa inmediatamente al aceptar el socket (`prepare()`) con una duración por defecto de `10.0` segundos (`auth_timeout_seconds`, acotado a un mínimo de `0.01s`).
 2. **Cancelación ante éxito:** Si el cliente envía una trama `LOGIN` con credenciales válidas antes de expirar el plazo, se ejecuta `login_timer.cancel()`, desactivando el cierre.
-3. **Inmunidad ante saturación de tráfico:** El envío de tramas no autenticadas o tráfico basura no reinicia el temporizador. La conexión se desconecta exactamente tras los 10 segundos iniciales con el código de cierre personalizado `4001` y mensaje `b"Authentication timeout"`.
+3. **Inmunidad ante saturación de tráfico:** El envío de tramas no autenticadas o tráfico basura no reinicia el temporizador (un `LOGIN` con token inválido no espera al temporizador: cierra la conexión de inmediato con `4003`, sección 4). La conexión se desconecta exactamente tras los 10 segundos iniciales con el código de cierre personalizado `4001` y mensaje `b"Authentication timeout"`.
 4. **Limpieza en bloque `finally`:** Si la conexión finaliza por cualquier otra razón (desconexión del cliente o error de red), el temporizador se cancela para evitar corrutinas huérfanas en el bucle de eventos.
 
 ---
 
-## 5. Cierre Ordenado y Limpieza de Recursos (Código 1000)
+## 6. Cierre Ordenado y Limpieza de Recursos (Código 1000)
 
 Durante la detención del bot o la parada explícita del servicio (`WebsocketBridgeService.stop()`), el sistema ejecuta un protocolo de parada en tres etapas consecutivas (`src/liga_bot/services/websocket_bridge_service.py:108-140`):
 
@@ -149,3 +170,13 @@ Durante la detención del bot o la parada explícita del servicio (`WebsocketBri
 - **Código de cierre RFC 6455:** Se utiliza el código estándar `1000` (`WS_NORMAL_CLOSURE`) con la razón en bytes `b"Server shutting down"`.
 - **Ventana de gracia para entregas:** Las publicaciones en Discord en vuelo disponen de un margen de hasta `2.0` segundos para completar la interacción HTTP con Discord antes de ser canceladas de forma segura.
 - **Idempotencia:** Si `stop()` es invocado múltiples veces consecutivas, las llamadas subsecuentes no generan errores ni excepciones.
+
+---
+
+## 7. Exposición del Puerto Fuera de Localhost
+
+Con `BRIDGE_HOST=127.0.0.1` (valor por defecto) solo pueden conectarse procesos de la propia máquina. Si la web corre en otra máquina y se usa otro valor (por ejemplo `0.0.0.0`):
+
+- **Restringir el puerto por cortafuegos** (`BRIDGE_PORT`, por defecto `8765`) para que solo acepte conexiones desde la IP de la máquina de la web.
+- **Cifrar el tráfico.** El servidor solo habla `ws://`: el supertoken viaja en claro en la trama `LOGIN`. Hay que ponerlo detrás de un proxy inverso con TLS (`wss://`) o de un túnel cifrado (SSH, WireGuard) y, en ese caso, dejar `BRIDGE_HOST=127.0.0.1` para que solo el proxy o el túnel lleguen al puerto.
+- **Vigilar el log.** Los `LOGIN` fallidos dejan una línea `WARNING` con la IP de origen (sección 4). Detrás de un proxy esa IP es la del proxy.

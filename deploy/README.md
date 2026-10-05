@@ -31,6 +31,13 @@ SUGGESTIONS_CHANNEL_ID=...        # si queda en 0, no se publican sugerencias
 BRIDGE_HOST=127.0.0.1             # 0.0.0.0 solo si la web corre en otra máquina
 ```
 
+Si la web corre en otra máquina y `BRIDGE_HOST` no es `127.0.0.1`, el puerto del bridge (`BRIDGE_PORT`, por defecto `8765`) queda accesible desde la red:
+
+- restringe ese puerto en el cortafuegos para que solo acepte conexiones desde la IP de la máquina de la web;
+- cifra el tráfico: el bridge habla `ws://` y el supertoken viaja en claro. Ponlo detrás de un proxy inverso con TLS (`wss://`) o de un túnel cifrado (SSH, WireGuard), y en ese caso deja `BRIDGE_HOST=127.0.0.1`.
+
+Cada `LOGIN` con un supertoken incorrecto cierra la conexión y deja en el journal una línea `WARNING` con la IP de origen (`journalctl -u liga-bot | grep "login fallido"`).
+
 El fichero contiene credenciales: `sudo chown rcl:rcl .env && sudo chmod 600 .env`.
 
 Instala dependencias y aplica migraciones **antes** de arrancar el servicio:
