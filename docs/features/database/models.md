@@ -120,14 +120,14 @@ Representa un club o equipo participante en las competiciones de la liga.
 | `name` | `String(100)` | `varchar(100)` | No | — (Unique) | Nombre completo oficial del equipo. |
 | `tag` | `String(4)` | `varchar(4)` | No | — | Siglas o acrónimo del club (máximo 4 caracteres). |
 | `slug` | `String(100)` | `varchar(100)` | No | — | Identificador alfanumérico amigable para URLs. |
-| `division` | `Enum(Division)` | `division` | No | — | División asignada (`PREMIER` o `ASCEND`). |
+| `season_division_id` | `Uuid` | `uuid` | No | — | FK a `seasons_divisions.id` (`ON DELETE CASCADE`). La propiedad `Team.division` deduce de ella la división (`PREMIER` o `ASCEND`); ver [conversión del nombre](./enums.md#11-division). |
 | `discord_role_id` | `BigInteger` | `bigint` | No | — (Unique) | Snowflake del rol de Discord representativo del equipo. |
 | `created_at` | `DateTime(timezone=True)` | `timestamptz` | No | `func.now()` (Timestamp Mixin) | Fecha de registro del club. |
 
 **Restricciones e Índices:**
 - `CheckConstraint("char_length(tag) <= 4", name="ck_teams_tag_length")`: Validación DDL estricta de longitud del tag.
 - `Index("ix_teams_slug", "slug")`: Búsqueda indexada por slug.
-- `Index("ix_teams_division", "division")`: Filtrado indexado por categoría competitiva.
+- `Index("ix_teams_season_division_id", "season_division_id")`: Filtrado indexado por división de temporada.
 
 **Relaciones ORM:**
 - `home_matches: Mapped[list[Match]]`: Partidos en los que compite como local (`team1`), con `cascade="all, delete-orphan"`, `passive_deletes=True` y `lazy="selectin"`.
@@ -252,7 +252,7 @@ Representa un enfrentamiento competitivo programado entre dos clubes dentro de u
 |---|---|---|:---:|---|---|
 | `id` | `Uuid` | `uuid` | No | `uuid.uuid4` (PK Mixin) | Clave primaria universal v4. |
 | `jornada` | `Integer` | `integer` | No | — | Número ordinal de la jornada competitiva. |
-| `division` | `Enum(Division)` | `division` | No | — | División en la que se disputa el partido. |
+| `id_season_division` | `Uuid` | `uuid` | No | — | FK a `seasons_divisions.id` (`ON DELETE CASCADE`). La propiedad `Match.division` deduce de ella la división en la que se disputa el partido; ver [conversión del nombre](./enums.md#11-division). |
 | `team1_id` | `Uuid` | `uuid` | No | — | FK a `teams.id` (`ON DELETE CASCADE`) del equipo local. |
 | `team2_id` | `Uuid` | `uuid` | No | — | FK a `teams.id` (`ON DELETE CASCADE`) del visitante. |
 | `discord_channel_id` | `BigInteger` | `bigint` | Sí | `None` (Unique) | Canal de texto privado asignado al partido. |

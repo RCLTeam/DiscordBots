@@ -23,8 +23,13 @@ class Match(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "matches"
 
     jornada: Mapped[int] = mapped_column(Integer, nullable=False)
-    division: Mapped[Division] = mapped_column(
-        Enum(Division, name="division", native_enum=True),
+    id_season_division: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey(
+            "seasons_divisions.id",
+            name="fk_matches_id_season_division",
+            ondelete="CASCADE",
+        ),
         nullable=False,
     )
     team1_id: Mapped[uuid.UUID] = mapped_column(
@@ -66,7 +71,7 @@ class Match(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 |---|---|---|:---:|---|---|
 | `id` | `Uuid` | `uuid.UUID` | No | `uuid.uuid4()` | Clave primaria única del partido. |
 | `jornada` | `Integer` | `int` | No | — | Número de jornada a la que pertenece el partido. |
-| `division` | `Enum(Division, native_enum=True)` | `Division` | No | — | División competitiva (`PREMIER` o `ASCEND`). |
+| `id_season_division` | `Uuid` (FK `seasons_divisions.id`) | `uuid.UUID` | No | — | División de temporada del partido. La propiedad `Match.division` deduce de ella la división competitiva (`PREMIER` o `ASCEND`) sin distinguir mayúsculas; ver [conversión del nombre](../database/enums.md#11-division). |
 | `team1_id` | `Uuid` (FK `teams.id`) | `uuid.UUID` | No | — | Identificador del equipo local. Borrado en cascada (`CASCADE`). |
 | `team2_id` | `Uuid` (FK `teams.id`) | `uuid.UUID` | No | — | Identificador del equipo visitante. Borrado en cascada (`CASCADE`). |
 | `discord_channel_id` | `BigInteger` | `int \| None` | Sí | `None` | Snowflake de 64 bits del canal de Discord creado. Unicidad estricta para valores no nulos. |
@@ -81,7 +86,7 @@ class Match(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
 Definidos en `src/liga_bot/models/enums.py`:
 
-- **`Division`** (`src/liga_bot/models/enums.py:6-10`):
+- **`Division`** (`src/liga_bot/models/enums.py:11-33`):
   ```python
   class Division(str, enum.Enum):
       PREMIER = "PREMIER"
@@ -177,7 +182,7 @@ condition = ((Match.team1_id == u1) & (Match.team2_id == u2)) | (
 
 #### `list_by_jornada(jornada: int, division: Division | str | None = None, with_teams: bool = False) -> Sequence[Match]`
 Obtiene todos los enfrentamientos de una jornada específica con ordenamiento determinista:
-- **Filtro de división opcional**: Si se indica `division`, restringe la consulta (`Match.division == div_val`).
+- **Filtro de división opcional**: Si se indica `division`, une con `seasons_divisions` y compara sin distinguir mayúsculas ni espacios (`upper(trim(division_name)) == div.value`), de modo que una división guardada por la web como `Ascend` coincide con `Division.ASCEND`. Un valor que no es una división válida lanza `ValueError`.
 - **Criterio de ordenamiento**:
   ```python
   order_by(Match.scheduled_at.asc().nulls_last(), Match.created_at.asc())

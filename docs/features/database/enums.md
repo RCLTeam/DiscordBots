@@ -19,11 +19,18 @@ class Division(str, enum.Enum):
     ASCEND = "ASCEND"
 ```
 
-- **Tipo PostgreSQL Subyacente:** `division` (creado en la migración inicial de Alembic).
+- **Origen en base de datos:** no hay columna `division` en `teams` ni en `matches`. La división se deduce de `seasons_divisions.division_name` a través de `teams.season_division_id` y `matches.id_season_division`. `seasons_divisions` es una tabla compartida que gestiona RCL-Next y guarda el nombre con su propio formato (por ejemplo `Premier` o `Ascend`).
 - **Valores Permitidos:**
   - `PREMIER`: Primera división competitiva de mayor nivel.
   - `ASCEND`: División de ascenso y desarrollo de nuevos clubes.
-- **Modelos que lo utilizan:** `Team.division`, `Match.division`.
+- **Modelos que lo utilizan:** `Team.division`, `Match.division` (propiedades calculadas).
+
+#### Conversión del nombre guardado (`src/liga_bot/models/enums.py:17-92`)
+
+- **`Division.from_name(name)`**: único punto de conversión. Quita espacios y compara en mayúsculas, así que `Ascend`, ` ascend ` y `ASCEND` dan `Division.ASCEND`. Devuelve `None` si el nombre no corresponde a ninguna división.
+- **Lectura (`resolve_entity_division`)**: `Team.division` y `Match.division` convierten `season_division.division_name` con `from_name`. Si el nombre no se reconoce, registran un `WARNING` en el logger `liga_bot.models.enums` con el nombre y el `id` de la fila de `seasons_divisions`, y devuelven el valor asignado en memoria o, en su defecto, `PREMIER`.
+- **Filtros SQL**: `TeamRepository.list_by_division` y `MatchRepository.list_by_jornada` comparan `upper(trim(seasons_divisions.division_name))` con el valor del enum. Un filtro que no es una división válida lanza `ValueError`.
+- **Escritura (`ensure_division_assignable`)**: el bot nunca modifica `seasons_divisions.division_name`. Asignar `Team.division` o `Match.division` a una entidad cuya `season_division` ya está cargada solo se acepta si es la misma división; si es otra, lanza `ValueError`. Para cambiar un equipo de división, `TeamRepository.update(team, division=...)` lo reasigna a la fila de `seasons_divisions` de la misma temporada cuyo nombre corresponde a esa división, y lanza `ValueError` si la temporada no la tiene.
 
 ---
 
