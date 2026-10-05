@@ -55,6 +55,18 @@ A continuación se detalla la totalidad de los 18 campos configurables en `Setti
 | 17 | `bridge_rate_limit_per_minute` | 138-144 | `int` | `10` | `BRIDGE_RATE_LIMIT_PER_MINUTE` | Límite máximo global de peticiones por minuto admitidas a través de la pasarela WebSocket. |
 | 18 | `log_level` | 147-150 | `str` | `"INFO"` | `LOG_LEVEL` | Nivel de verbosidad del logger (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`). |
 
+### 2.1 Ajustes de la auditoría de tickets
+
+`TicketService` lee estos tres campos de `Settings` (grupo «Auditoría de tickets» en `src/liga_bot/config.py`). Sus valores por defecto reproducen el comportamiento anterior a que fueran configurables:
+
+| Atributo Python | Tipo | Valor Predeterminado | Variable de Entorno | Descripción Funcional |
+|---|---|---|---|---|
+| `organizador_role_id` | `int` | `0` | `ORGANIZADOR_ROLE_ID` | Rol adicional cuyos mensajes cuentan como respuesta del staff en los tickets. `0` lo desactiva. |
+| `ticket_revision_hours` | `int` (`>= 1`) | `24` (`DEFAULT_TICKET_REVISION_HOURS`) | `TICKET_REVISION_HOURS` | Horas sin respuesta del staff a partir de las que se avisa en un ticket; también es la ventana mínima entre dos avisos al mismo canal. Un valor menor que 1 hace fallar la carga de la configuración. |
+| `tickets_category_name` | `str` | `""` | `TICKETS_CATEGORY_NAME` | Categoría adicional que auditar además de `DEFAULT_TICKETS_CATEGORY_NAMES`. La comparación es exacta tras normalizar el nombre (ver [Servicios de tickets](../features/tickets/services.md)). |
+
+La frecuencia del bucle periódico (`@tasks.loop(hours=24)` en `TicketsCog`) no depende de `TICKET_REVISION_HOURS`.
+
 ---
 
 ## 3. Validadores y Propiedades Computadas

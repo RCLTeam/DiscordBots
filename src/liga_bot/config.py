@@ -130,6 +130,27 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Auditoría de tickets
+    organizador_role_id: int = Field(
+        default=0,
+        description=(
+            "ID de un rol adicional cuyos mensajes cuentan como respuesta del staff en la "
+            "auditoría de tickets. 0 lo desactiva."
+        ),
+    )
+    ticket_revision_hours: int = Field(
+        default=DEFAULT_TICKET_REVISION_HOURS,
+        ge=1,
+        description="Horas sin respuesta del staff a partir de las que se avisa en un ticket.",
+    )
+    tickets_category_name: str = Field(
+        default="",
+        description=(
+            "Nombre de una categoría adicional que auditar además de "
+            "DEFAULT_TICKETS_CATEGORY_NAMES. Vacío no añade ninguna."
+        ),
+    )
+
     # Persistencia y Motores Duales
     database_url: str = Field(
         default="pglite:///:memory:",

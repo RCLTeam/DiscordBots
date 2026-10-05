@@ -140,7 +140,7 @@ Estos comandos ejecutan una inspección bajo demanda de todos los canales de tic
   - **Color:** Verde (`discord.Color.green()`) si `alerts_sent == 0`, o Dorado (`discord.Color.gold()`) si hubo canales notificados.
   - **Título:** `"🔍 Auditoría de Inactividad de Tickets"`.
   - **Campo "📊 Resumen General":** Muestra canales auditados, categorías revisadas y avisos enviados.
-  - **Campo "⏭️ Canales Descartados / En Regla":** Desglose de canales con actividad reciente (<24h), respondidos por staff, ya notificados (<24h), vacíos y con error o falta de permisos.
+  - **Campo "⏭️ Canales Descartados / En Regla":** Desglose de canales con actividad reciente, respondidos por staff, ya notificados, vacíos y con error o falta de permisos. Las etiquetas «Activos» y «Ya notificados» muestran el umbral configurado en `TICKET_REVISION_HOURS` (`TicketAuditResult.revision_hours`, 24 h por defecto).
   - **Campo "🚨 Tickets Notificados" (Condicional si `alerts_sent > 0`):**
     - Muestra hasta 15 menciones de canal con formato `• <#channel_id> (channel_name)`.
     - Si hay más de 15 canales, agrega la línea `\n*... y {more} ticket(s) más.*`.

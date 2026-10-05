@@ -346,6 +346,9 @@ A continuación se muestra la matriz completa de las 18 variables sincronizada c
 | `CEO_ROLE_ID` | `int` | `0` | No | Snowflake del rol de CEO general unificado de la liga. |
 | `SIN_VERIFICAR_ROLE_ID` | `int` | `0` | No | Snowflake del rol 'Sin Verificar' asignado a nuevos miembros. |
 | `TICKET_ROL_CATEGORY_ID` | `int` | `0` | No | Snowflake de la categoría de Discord para canales de solicitud de rol. |
+| `ORGANIZADOR_ROLE_ID` | `int` | `0` | No | Rol adicional cuyos mensajes cuentan como respuesta del staff en la auditoría de tickets (`0` lo desactiva). |
+| `TICKET_REVISION_HOURS` | `int` | `24` | No | Horas sin respuesta del staff tras las que se avisa en un ticket (mínimo 1). |
+| `TICKETS_CATEGORY_NAME` | `str` | `""` | No | Categoría adicional que auditar, con coincidencia exacta del nombre, además de las cinco categorías de tickets predefinidas. |
 | `FREE_ROLE_NAME` | `str` | `"Libre"` | No | Nombre textual del rol asignado a agentes libres en el servidor. |
 | `DATABASE_URL` | `str` | `"pglite:///:memory:"` | No | URI de conexión SQLAlchemy (`pglite:///:memory:` o `postgresql+asyncpg://...`). |
 | `BRIDGE_ENABLED` | `bool` | `True` | No | Conmutador booleano maestro para activar/desactivar el servidor WebSocket. |
