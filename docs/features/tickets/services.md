@@ -15,7 +15,7 @@ El servicio `TicketService` opera como centinela pasivo y activo del estado de l
   `TicketService` **NO** elimina, archiva ni cierra canales de tickets automáticamente bajo ninguna circunstancia. Su responsabilidad se limita a:
   1. Auditar los canales de texto ubicados en las categorías de tickets configuradas.
   2. Determinar el tiempo transcurrido desde el último mensaje relevante.
-  3. Despachar una mención de advertencia al Staff si el canal permanece $\ge 24\text{h}$ sin respuesta oficial.
+  3. Despachar una mención de advertencia al Staff si el canal permanece sin respuesta oficial durante al menos `ticket_revision_hours` horas (24 por defecto, `TICKET_REVISION_HOURS`).
   4. Actualizar el estado en la base de datos relacional (`ticket_notices.is_pending_staff = True`).
   
   La resolución, confirmación y borrado final de los canales de tickets corresponde exclusivamente a la interacción de los usuarios y moderadores mediante las vistas interactivas (`src/liga_bot/ui/roles.py:336, 432`).
@@ -150,7 +150,7 @@ El método `is_staff_author` determina si el autor de un mensaje pertenece a los
    - `settings.admin_role_id`
    - `settings.ceo_premier_role_id`
    - `settings.ceo_ascend_role_id`
-   - `settings.organizador_role_id` (si está presente)
+   - `settings.organizador_role_id` (variable `ORGANIZADOR_ROLE_ID`; se ignora con el valor por defecto `0`)
 2. Descarta al bot propio (`author.id == self.bot.user.id -> False`).
 3. Resuelve el objeto `discord.Member` mediante caché local o llamada API (`resolve_member`).
 4. Si el autor posee alguno de los roles de staff:
@@ -161,10 +161,10 @@ El método `is_staff_author` determina si el autor de un mensaje pertenece a los
 
 ### 3.3 Supresión de Alertas Repetidas y Ventana de 24 Horas (`L257-274`)
 
-Si el autor no es staff y el delta respecto a `msg_time` supera el umbral (`ticket_revision_hours`, por defecto 24 horas):
+Si el autor no es staff y el delta respecto a `msg_time` supera el umbral (`settings.ticket_revision_hours`, variable `TICKET_REVISION_HOURS`, por defecto 24 horas y como mínimo 1):
 1. Consulta `TicketNoticeRepository.get_by_channel_id(channel.id)`.
 2. Si existe un registro con `last_alert_sent_at` y `(now - last_alert_sent_at) < threshold`, el aviso se suprime y se devuelve `SKIPPED_ALREADY_ALERTED`.
-3. Esto garantiza que un canal inactivo reciba como máximo una alerta por día natural, evitando el acoso por spam en canales desatendidos.
+3. Esto garantiza que un canal inactivo reciba como máximo una alerta por cada periodo del umbral, evitando avisos repetidos en canales desatendidos.
 
 ### 3.4 Despacho y Formato Canónico del Mensaje (`L297-321`)
 
@@ -176,6 +176,7 @@ Cuando procede enviar la alerta, el método `_send_alert_message` resuelve las m
   ⚠️ TICKET_SIN_RESPUESTA
   <@&staff_role_id> <@&admin_role_id> — Este ticket lleva más de 24h sin respuesta del staff.
   ```
+  Las horas del mensaje son las de `ticket_revision_hours`.
 
 Tras el envío exitoso, ejecuta `await repo.record_alert(...)` registrando la hora UTC actual y marcando `is_pending_staff = True`.
 
@@ -183,23 +184,24 @@ Tras el envío exitoso, ejecuta `await repo.record_alert(...)` registrando la ho
 
 ## 4. Normalización NFKD y Throttling contra Rate Limits
 
-### 4.1 Normalización de Categorías con Unicode NFKD (`L92-94, L331-344`)
+### 4.1 Normalización de Categorías con Unicode NFKD (`L93-95, L327-340`)
 
 Discord permite que los administradores utilicen fuentes Unicode estilizadas en los nombres de categoría (por ejemplo: negritas matemáticas, caracteres góticos o acentos diacríticos). Para identificar las categorías sin falsos negativos:
 
 ```python
 def normalize_category_name(texto: str) -> str:
-    return unicodedata.normalize("NFKD", texto).lower()
+    return unicodedata.normalize("NFKD", texto).strip().lower()
 ```
 
-El método `check_tickets` busca coincidencias contra un conjunto canónico predefinido (`src/liga_bot/config.py:126`):
+El método `check_tickets` audita las categorías cuyo nombre normalizado coincide **exactamente** con alguno de estos (`DEFAULT_TICKETS_CATEGORY_NAMES` en `src/liga_bot/config.py`):
 - `"TICKETS-GENERAL-PREMIER"`
 - `"TICKETS-GENERAL-ASCEND"`
 - `"TICKETS-FICHAJES-PREMIER"`
 - `"TICKETS-FICHAJES-ASCEND"`
 - `"TICKETS-ADMINISTRACION"`
-- Categoría personalizada en `settings.tickets_category_name`
-- Nombre genérico `"tickets"`
+- La categoría adicional de `settings.tickets_category_name` (variable `TICKETS_CATEGORY_NAME`), si no está vacía.
+
+No hay coincidencia parcial: una categoría como `"TICKETS-ARCHIVADOS"` no se audita aunque contenga «tickets» en el nombre. Para auditar una categoría con otro nombre hay que configurarla en `TICKETS_CATEGORY_NAME`. La normalización solo convierte tipografías estilizadas y mayúsculas y quita los espacios de los extremos; los emojis u otros adornos del nombre deben figurar también en el valor configurado.
 
 ### 4.2 Throttling Defensivo de 0.3 Segundos (`L109, L369-371`)
 
