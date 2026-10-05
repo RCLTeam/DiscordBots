@@ -33,6 +33,17 @@ logger = logging.getLogger(__name__)
 # Discord admite 25 opciones por desplegable; la última se reserva para agente libre.
 MAX_TEAM_OPTIONS = 24
 
+# Discord limita a 100 caracteres el label, value y description de una opción.
+MAX_SELECT_OPTION_LENGTH = 100
+
+# Prefijo del value de las opciones de equipos cuyo nombre no cabe en 100 caracteres.
+LONG_TEAM_VALUE_PREFIX = "equipo-largo:"
+
+
+def _truncate(text: str, limit: int = MAX_SELECT_OPTION_LENGTH) -> str:
+    """Recorta el texto al límite indicado, marcando el corte con '…'."""
+    return text if len(text) <= limit else f"{text[: limit - 1]}…"
+
 
 # ---------------------------------------------------------------------------
 # 1. Modal de Solicitud de Rol
@@ -122,14 +133,22 @@ class EquipoSelect(discord.ui.Select[Any]):
             )
             resolved_teams = resolved_teams[:MAX_TEAM_OPTIONS]
 
-        options: list[discord.SelectOption] = [
-            discord.SelectOption(
-                label=equipo,
-                value=equipo,
-                description=f"Solicitar rol para {equipo}",
+        # Los nombres que no caben como value se sustituyen por una clave corta que
+        # el callback traduce de nuevo al nombre completo.
+        self._team_by_value: dict[str, str] = {}
+        options: list[discord.SelectOption] = []
+        for index, equipo in enumerate(resolved_teams):
+            value = equipo
+            if len(equipo) > MAX_SELECT_OPTION_LENGTH:
+                value = f"{LONG_TEAM_VALUE_PREFIX}{index}"
+                self._team_by_value[value] = equipo
+            options.append(
+                discord.SelectOption(
+                    label=_truncate(equipo),
+                    value=value,
+                    description=_truncate(f"Solicitar rol para {equipo}"),
+                )
             )
-            for equipo in resolved_teams
-        ]
         options.append(
             discord.SelectOption(
                 label=resolved_free_role,
@@ -164,7 +183,7 @@ class EquipoSelect(discord.ui.Select[Any]):
         if not self.values:
             return
 
-        equipo = self.values[0]
+        equipo = self._team_by_value.get(self.values[0], self.values[0])
         role_service = getattr(interaction.client, "role_service", None)
         if role_service is None:
             await interaction.response.send_message(
@@ -333,11 +352,27 @@ class PosicionSelect(discord.ui.Select[Any]):
             color=discord.Color.blue(),
         )
         embed.set_footer(text="Usa los botones de abajo para gestionar la solicitud.")
-        await channel.send(
-            content=f"Solicitud de rol para {interaction.user.mention}:",
-            embed=embed,
-            view=TicketView(user_id=member.id, equipo=self.equipo),
-        )
+        try:
+            await channel.send(
+                content=f"Solicitud de rol para {interaction.user.mention}:",
+                embed=embed,
+                view=TicketView(user_id=member.id, equipo=self.equipo),
+            )
+        except Exception as exc:
+            # Sin el mensaje, el ticket no tiene botones: se deshace para que no quede un
+            # canal huérfano ni una solicitud pendiente que bloquee al jugador.
+            logger.error(
+                "No se pudo publicar el mensaje del ticket %s; se deshace: %s",
+                channel.id,
+                exc,
+            )
+            await role_service.discard_role_request_ticket(channel)
+            await interaction.followup.send(
+                "No se pudo publicar la solicitud en el canal del ticket y se ha cancelado. "
+                "Vuelve a intentarlo y, si se repite, avisa al staff.",
+                ephemeral=True,
+            )
+            return
         await interaction.followup.send(f"Ticket creado en {channel.mention}.", ephemeral=True)
 
 
@@ -464,25 +499,28 @@ class PanelPedirRolView(discord.ui.View):
 
 class ConfirmarRolButton(
     discord.ui.DynamicItem[discord.ui.Button[Any]],
-    template=r"confirmar_rol:(?P<user_id>\d+):(?P<equipo>.+)",
+    template=r"confirmar_rol:(?P<user_id>\d+)(?::(?P<equipo>.+))?$",
 ):
     """
     Botón interactivo persistente ante reinicios del bot mediante DynamicItem.
-    Codifica en su custom_id el user_id del solicitante y el equipo pedido:
-    confirmar_rol:{user_id}:{equipo}
+    Codifica en su custom_id solo el user_id del solicitante: confirmar_rol:{user_id}.
+    El nombre del equipo no se incluye porque Discord limita el custom_id a 100
+    caracteres; la confirmación localiza la solicitud por el canal del ticket.
+    La plantilla sigue aceptando el formato anterior, confirmar_rol:{user_id}:{equipo},
+    para que los botones de tickets ya abiertos sigan funcionando.
     """
 
-    def __init__(self, user_id: int, equipo: str) -> None:
+    def __init__(self, user_id: int, equipo: str | None = None) -> None:
         super().__init__(
             discord.ui.Button(
                 label="Confirmar Rol",
                 style=discord.ButtonStyle.success,
                 emoji="✅",
-                custom_id=f"confirmar_rol:{user_id}:{equipo}",
+                custom_id=f"confirmar_rol:{user_id}",
             )
         )
         self.user_id: int = user_id
-        self.equipo: str = equipo
+        self.equipo: str | None = equipo
 
     @classmethod
     async def from_custom_id(
@@ -492,8 +530,11 @@ class ConfirmarRolButton(
         match: re.Match[str],
         /,
     ) -> ConfirmarRolButton:
-        """Reconstruye el botón a partir del match regex de custom_id."""
-        return cls(user_id=int(match["user_id"]), equipo=match["equipo"])
+        """Reconstruye el botón a partir del match regex de custom_id (formato nuevo o anterior)."""
+        button = cls(user_id=int(match["user_id"]), equipo=match["equipo"])
+        # Conserva el custom_id recibido para que coincida con el del mensaje original.
+        button.custom_id = match.group(0)
+        return button
 
     async def callback(self, interaction: discord.Interaction) -> None:
         """
@@ -575,15 +616,15 @@ class ConfirmarRolButton(
 class TicketView(discord.ui.View):
     """
     Vista persistente (timeout=None) asociada a un canal de ticket de solicitud de rol.
-    Contiene el botón para denegar la solicitud y opcionalmente añade ConfirmarRolButton
-    cuando se inicializa con user_id y equipo.
+    Contiene el botón para denegar la solicitud y añade ConfirmarRolButton cuando se
+    inicializa con user_id (el equipo se conserva como dato, no va en el custom_id).
     """
 
     def __init__(self, user_id: int | None = None, equipo: str | None = None) -> None:
         super().__init__(timeout=None)
         self.user_id: int | None = user_id
         self.equipo: str | None = equipo
-        if user_id is not None and equipo is not None:
+        if user_id is not None:
             self.confirm_button: ConfirmarRolButton | None = ConfirmarRolButton(
                 user_id=user_id, equipo=equipo
             )

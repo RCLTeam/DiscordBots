@@ -43,6 +43,7 @@ from liga_bot.ui.roles import (
     ConfirmarRolButton,
     EquipoSelectView,
     PanelPedirRolView,
+    PosicionSelect,
     PosicionSelectView,
     SolicitudRolModal,
     TicketView,
@@ -531,7 +532,7 @@ class TestFullLifecycleOfficialTeamApproval:
         ticket_view: TicketView = send_kwargs.get("view")
         assert isinstance(ticket_view, TicketView)
         assert ticket_view.confirm_button is not None
-        assert ticket_view.confirm_button.custom_id == f"confirmar_rol:{member_id}:Vanguard Gaming"
+        assert ticket_view.confirm_button.custom_id == f"confirmar_rol:{member_id}"
 
         # 4. Un miembro del staff interactúa con el botón ConfirmarRolButton
         staff_id = 998877665544
@@ -1151,6 +1152,61 @@ class TestBoundaryAndEdgeCasesE2E:
             stmt = select(RoleRequest).where(RoleRequest.canal_id == channel.id)
             res = await session.execute(stmt)
             assert res.scalar_one().estado == RoleRequestStatus.PENDING
+
+    @pytest.mark.asyncio
+    async def test_ticket_message_failure_removes_channel_and_unblocks_player(
+        self,
+        e2e_role_service: RoleService,
+        e2e_settings: Settings,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """Si el mensaje del ticket no se publica, no queda canal ni solicitud pendiente."""
+        guild = make_mock_guild(e2e_settings)
+        member = make_mock_member(user_id=556688, name="PlayerY", guild=guild)
+        guild._members_map[member.id] = member
+
+        failing_send = AsyncMock(
+            side_effect=discord.HTTPException(MagicMock(status=400), "Invalid Form Body")
+        )
+        original_create = guild.create_text_channel.side_effect
+        created: list[AsyncMock] = []
+
+        async def create_failing_channel(*args: object, **kwargs: object) -> AsyncMock:
+            chan = await original_create(*args, **kwargs)
+            chan.send = failing_send
+            created.append(chan)
+            return chan
+
+        guild.create_text_channel.side_effect = create_failing_channel
+        inter = make_mock_interaction(user=member, guild=guild, role_service=e2e_role_service)
+
+        posicion_select = PosicionSelect(
+            nombre_lol="PlayerY", riot_tag="EUW", equipo="Vanguard Gaming"
+        )
+        posicion_select.values = ["mid"]
+        await posicion_select.callback(inter)
+
+        assert len(created) == 1
+        created[0].delete.assert_awaited_once()
+        message = inter.followup.send.await_args.args[0]
+        assert "No se pudo publicar" in message
+
+        async with session_factory() as session:
+            stmt = select(RoleRequest).where(RoleRequest.user_id == member.id)
+            assert (await session.execute(stmt)).scalars().all() == []
+
+        # El jugador puede volver a pedir rol
+        guild.create_text_channel.side_effect = original_create
+        ok, msg, channel = await e2e_role_service.create_role_request_ticket(
+            guild=guild,
+            member=member,
+            nombre_lol="PlayerY",
+            riot_tag="EUW",
+            equipo="Vanguard Gaming",
+            posicion="mid",
+        )
+        assert ok is True, msg
+        assert channel is not None
 
     @pytest.mark.asyncio
     async def test_member_not_found_on_confirm_reports_error(

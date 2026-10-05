@@ -468,6 +468,33 @@ class RoleService:
 
         return True, "Canal de solicitud creado correctamente.", channel
 
+    async def discard_role_request_ticket(self, channel: discord.abc.GuildChannel) -> None:
+        """
+        Deshace un ticket cuyo mensaje con los botones no se pudo publicar:
+        - Elimina la solicitud PENDING asociada al canal, para que el jugador pueda
+          volver a pedir rol.
+        - Elimina el canal del ticket.
+        Defensivo: registra los fallos en el log sin propagarlos. La cuenta de juego
+        registrada al abrir el ticket se conserva.
+        """
+        try:
+            async with transactional_session(self.session_factory) as session:
+                repo = RoleRequestRepository(session)
+                req = await repo.get_by_channel_id(channel.id)
+                if req is not None and req.estado == RoleRequestStatus.PENDING:
+                    await repo.delete(req)
+        except Exception as exc:
+            logger.error(
+                "No se pudo eliminar la solicitud pendiente del ticket %s: %s",
+                channel.id,
+                exc,
+            )
+
+        try:
+            await channel.delete(reason="No se pudo publicar el mensaje del ticket de rol")
+        except Exception as exc:
+            logger.warning("No se pudo eliminar el canal huérfano %s: %s", channel.id, exc)
+
     async def _resolve_team_role(
         self,
         session: AsyncSession,
