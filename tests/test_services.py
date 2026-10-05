@@ -252,6 +252,50 @@ async def test_create_match_happy_path_premier(
 
 
 @pytest.mark.asyncio
+async def test_create_match_mentions_configured_reglamento_channel(
+    session_factory: async_sessionmaker[AsyncSession],
+    db_session: AsyncSession,
+    test_settings: Settings,
+):
+    """El mensaje de coordinación menciona REGLAMENTO_CHANNEL_ID de los settings del servicio."""
+    team_repo = TeamRepository(db_session)
+    await team_repo.create(
+        name="Reglamento Uno",
+        tag="RG1",
+        slug="reglamento-uno",
+        division=Division.PREMIER,
+        discord_role_id=1201,
+    )
+    await team_repo.create(
+        name="Reglamento Dos",
+        tag="RG2",
+        slug="reglamento-dos",
+        division=Division.PREMIER,
+        discord_role_id=1202,
+    )
+    await db_session.commit()
+
+    settings = test_settings.model_copy(update={"reglamento_channel_id": 1999})
+    role1 = create_mock_role(1201, "Reglamento Uno")
+    role2 = create_mock_role(1202, "Reglamento Dos")
+    guild = create_mock_guild(settings, roles=[role1, role2])
+    service = ScheduleService(session_factory=session_factory, settings=settings)
+
+    res = await service.create_match(
+        guild=guild,
+        jornada=1,
+        team1_name="Reglamento Uno",
+        team2_name="Reglamento Dos",
+        scheduled_at=datetime(2026, 9, 20, 21, 0, tzinfo=timezone.utc),
+    )
+
+    assert res.success is True
+    assert res.channel is not None
+    msg2_embed = res.channel.send.call_args_list[1].kwargs["embed"]
+    assert "Tenéis la normativa completa en <#1999>." in msg2_embed.description
+
+
+@pytest.mark.asyncio
 async def test_create_match_happy_path_ascend_existing_category(
     session_factory: async_sessionmaker[AsyncSession],
     db_session: AsyncSession,

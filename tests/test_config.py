@@ -3,8 +3,11 @@ Pruebas unitarias para el módulo de configuración src/liga_bot/config.py
 y verificación de compatibilidad de migraciones Alembic sobre PGlite.
 """
 
+import logging
 import os
+import re
 import subprocess
+from pathlib import Path
 
 import pytest
 from alembic.config import Config
@@ -219,3 +222,96 @@ def test_alembic_cli_default_fallback_without_env_var():
     assert res.returncode == 0, f"Alembic default upgrade failed: {res.stderr}"
     assert "0000, initial_shared_tables" in (res.stdout + res.stderr)
     assert "0001, bot_tables" in (res.stdout + res.stderr)
+
+
+# ---------------------------------------------------------------------------
+# IDs de Discord con valor por defecto y sincronía de la documentación
+# ---------------------------------------------------------------------------
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+_DEFAULTED_ID_VARS = (
+    "GUILD_ID",
+    "STAFF_ROLE_ID",
+    "ADMIN_ROLE_ID",
+    "CEO_PREMIER_ROLE_ID",
+    "CEO_ASCEND_ROLE_ID",
+    "MODERATORS_CHANNEL_ID",
+    "CASTERS_CHANNEL_ID",
+    "REGLAMENTO_CHANNEL_ID",
+)
+
+
+def _clear_id_env(monkeypatch):
+    for var in _DEFAULTED_ID_VARS:
+        monkeypatch.delenv(var, raising=False)
+    # Las migraciones de Alembic ejecutadas en esta suite llaman a fileConfig(),
+    # que deshabilita los loggers ya existentes.
+    monkeypatch.setattr(logging.getLogger("liga_bot.config"), "disabled", False)
+
+
+def test_reglamento_channel_id_default_and_override(monkeypatch):
+    """REGLAMENTO_CHANNEL_ID conserva el canal actual por defecto y se puede sobrescribir."""
+    _clear_id_env(monkeypatch)
+    assert Settings().reglamento_channel_id == 1548038711697080491
+    assert DEFAULT_REGLAMENTO_CHANNEL == f"<#{Settings().reglamento_channel_id}>"
+    monkeypatch.setenv("REGLAMENTO_CHANNEL_ID", "42")
+    assert Settings().reglamento_channel_id == 42
+
+
+def test_get_settings_warns_for_each_defaulted_id(monkeypatch, caplog):
+    """Sin STAFF_ROLE_ID (ni el resto de IDs) en el entorno, se avisa nombrando cada variable."""
+    _clear_id_env(monkeypatch)
+    with caplog.at_level(logging.WARNING, logger="liga_bot.config"):
+        settings = get_settings()
+
+    messages = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    for var in _DEFAULTED_ID_VARS:
+        matching = [m for m in messages if var in m]
+        assert len(matching) == 1, f"Falta el aviso de {var}: {messages}"
+    staff_msg = next(m for m in messages if "STAFF_ROLE_ID" in m)
+    assert str(settings.staff_role_id) in staff_msg
+
+
+def test_get_settings_does_not_warn_for_ids_defined_in_env(monkeypatch, caplog):
+    """Un ID definido en el entorno (aunque coincida con el valor por defecto) no genera aviso."""
+    _clear_id_env(monkeypatch)
+    monkeypatch.setenv("STAFF_ROLE_ID", "1547729760384319518")
+    monkeypatch.setenv("GUILD_ID", "123")
+    with caplog.at_level(logging.WARNING, logger="liga_bot.config"):
+        get_settings()
+
+    messages = [r.getMessage() for r in caplog.records]
+    assert not any("STAFF_ROLE_ID" in m for m in messages)
+    assert not any("GUILD_ID" in m for m in messages)
+    assert any("ADMIN_ROLE_ID" in m for m in messages)
+
+
+def _env_example_vars() -> set[str]:
+    text_env = (REPO_ROOT / ".env.example").read_text(encoding="utf-8")
+    return set(re.findall(r"^([A-Z][A-Z0-9_]*)=", text_env, flags=re.MULTILINE))
+
+
+def _settings_env_vars() -> set[str]:
+    return {name.upper() for name in Settings.model_fields}
+
+
+def test_env_example_lists_exactly_the_settings_fields():
+    """Cada campo de Settings aparece en .env.example, y no hay variables sobrantes."""
+    assert _env_example_vars() == _settings_env_vars()
+
+
+@pytest.mark.parametrize(
+    "doc_path",
+    ["README.md", "docs/architecture/configuration.md"],
+)
+def test_docs_variable_tables_list_every_settings_field(doc_path):
+    """Las tablas de variables del README y de configuration.md recogen todos los campos."""
+    text_doc = (REPO_ROOT / doc_path).read_text(encoding="utf-8")
+    table_rows = [line for line in text_doc.splitlines() if line.startswith("|")]
+    documented = {name for row in table_rows for name in re.findall(r"`([A-Z][A-Z0-9_]+)`", row)}
+    missing = _settings_env_vars() - documented
+    assert not missing, f"{doc_path} no documenta: {sorted(missing)}"
+    count = len(Settings.model_fields)
+    assert f"{count} variables" in text_doc
+    stale = {f"{n} variables" for n in range(10, 40) if n != count}
+    assert not any(s in text_doc for s in stale), f"{doc_path} conserva un recuento desfasado"
