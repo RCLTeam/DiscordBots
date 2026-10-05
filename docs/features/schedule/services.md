@@ -253,26 +253,17 @@ async def set_stream_url(
 
 ---
 
-## 6. Alias de Compatibilidad con Especificaciones Previas
-
-`ScheduleService` incluye dos métodos alias para garantizar compatibilidad con interfaces definidas en la arquitectura:
-
-- **`create_single_match`** (`src/liga_bot/services/schedule_service.py:368-384`): Reenvía sus argumentos a `create_match`.
-- **`process_schedule_csv`** (`src/liga_bot/services/schedule_service.py:482-492`): Reenvía a `create_jornada_from_csv` retornando directamente la lista `j_res.matches`.
-
----
-
-## 7. Utilidades de Formateo y Plantillas Oficiales (`src/liga_bot/utils/formatting.py`)
+## 6. Utilidades de Formateo y Plantillas Oficiales (`src/liga_bot/utils/formatting.py`)
 
 Ubicadas en `src/liga_bot/utils/formatting.py`:
 
-### 7.1 Normalización de Slugs y Canales
+### 6.1 Normalización de Slugs y Canales
 - **`normalize_slug(text: str, max_length: int = 100) -> str`**: Aplica descomposición Unicode NFKD, descarta diacríticos (`unicodedata.combining`), convierte a minúsculas, sustituye caracteres no alfanuméricos por guiones, colapsa guiones repetidos y acota a `max_length`.
 - **`normalize_tag(tag: str, max_length: int = 4) -> str`**: Elimina espacios, pasa a mayúsculas y acota a 4 caracteres para cumplir la restricción relacional del tag de equipo.
 - **`format_match_channel_name(jornada: int, team1_tag_or_slug: str, team2_tag_or_slug: str, max_length: int = 100) -> str`**: Genera el nombre del canal bajo el patrón canónico `j{jornada}-{slug1}-vs-{slug2}` truncado a un máximo de 100 caracteres.
 - **`normalize_name(name: str) -> str`**: Normaliza nombres para comparaciones insensibles a caracteres tipográficos o emojis decorativos.
 
-### 7.2 Plantillas Oficiales Verbatim
+### 6.2 Plantillas Oficiales Verbatim
 - **`MENSAJE_1`**: Texto reglamentario de acuerdo de horario (plazo límite martes 23:59h) y convocatoria de alineaciones OP.GG con suplentes (6 horas previas; sin alineación a tiempo, el partido se disputa sin derecho a bans).
 - **`MENSAJE_2`**: Texto reglamentario de Fearless Draft (`https://lol.draftcore.net/`, fallback a `https://drafter.lol/`) y referencia al canal de normas: `format_mensaje_2` menciona `<#REGLAMENTO_CHANNEL_ID>` (por defecto `<#1548038711697080491>`, `DEFAULT_REGLAMENTO_CHANNEL`); `ScheduleService` le pasa sus `settings`.
 - **`format_mensaje_1(...) -> str`**: Interpola `jornada`, `fecha`, `hora`, `equipo1` y `equipo2` admitiendo firmas flexibles por palabras clave o posicionales.
@@ -280,7 +271,7 @@ Ubicadas en `src/liga_bot/utils/formatting.py`:
 
 ---
 
-## 8. Aclaraciones Fácticas sobre Métodos Inexistentes
+## 7. Aclaraciones Fácticas sobre Métodos Inexistentes
 
 1. **Construcción de Embeds**: `ScheduleService` **NO** contiene métodos como `format_match_embed`. La creación y serialización de los embeds visuales corresponde exclusivamente a la capa del Cog (`ScheduleCog.crear_partido`, `ScheduleCog._importar_jornada_impl` y `ScheduleCog._stream_url_impl`).
 2. **Transmisión de Calendario**: No existe ningún método `broadcast_schedule` en el servicio; el aprovisionamiento opera creando canales privados específicos para cada enfrentamiento individual.

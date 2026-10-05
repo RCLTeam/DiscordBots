@@ -33,9 +33,8 @@ El modelo `TicketNotice` almacena el estado temporal de los canales de tickets e
 
 El repositorio `TicketNoticeRepository` gestiona el ciclo de vida de los avisos de inactividad encapsulando las consultas sobre sesiones asíncronas de SQLAlchemy 2.0.
 
-- **Ubicación en código:** `src/liga_bot/repositories/ticket_repo.py:13-98`
+- **Ubicación en código:** `src/liga_bot/repositories/ticket_repo.py:13-94`
 - **Clase Base:** `BaseRepository[TicketNotice]` (`src/liga_bot/repositories/base.py`)
-- **Alias Exportado:** `TicketRepository = TicketNoticeRepository` (`L98`)
 
 ### 2.1 Métodos del Repositorio
 

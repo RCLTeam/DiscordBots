@@ -366,11 +366,3 @@ class TicketService:
                     await asyncio.sleep(self.throttle_delay)
 
         return result
-
-    async def audit_tickets(
-        self,
-        guild: discord.Guild,
-        category_name: str | None = None,
-    ) -> TicketAuditResult:
-        """Alias para compatibilidad de contrato con PROJECT.md."""
-        return await self.check_tickets(guild=guild, category_name=category_name)

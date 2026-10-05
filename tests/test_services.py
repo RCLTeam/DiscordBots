@@ -21,6 +21,7 @@ import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+import liga_bot.repositories
 from liga_bot.config import (
     DEFAULT_TICKET_AVISO_MARCADOR,
     DEFAULT_TICKETS_CATEGORY_NAMES,
@@ -28,6 +29,7 @@ from liga_bot.config import (
 )
 from liga_bot.models.enums import Division, MatchStatus
 from liga_bot.models.match import DEFAULT_PREMIER_SEASON_DIVISION_ID
+from liga_bot.repositories import ticket_repo
 from liga_bot.repositories.match_repo import MatchRepository
 from liga_bot.repositories.team_repo import TeamRepository
 from liga_bot.repositories.ticket_repo import TicketNoticeRepository
@@ -628,45 +630,6 @@ async def test_create_match_rollback_orphan_channel_on_db_error(
 
 
 @pytest.mark.asyncio
-async def test_create_single_match_alias(
-    session_factory: async_sessionmaker[AsyncSession],
-    db_session: AsyncSession,
-    test_settings: Settings,
-):
-    team_repo = TeamRepository(db_session)
-    await team_repo.create(
-        name="Team Alias1",
-        tag="TA1",
-        slug="team-alias1",
-        division=Division.PREMIER,
-        discord_role_id=2001,
-    )
-    await team_repo.create(
-        name="Team Alias2",
-        tag="TA2",
-        slug="team-alias2",
-        division=Division.PREMIER,
-        discord_role_id=2002,
-    )
-    await db_session.commit()
-
-    guild = create_mock_guild(
-        test_settings,
-        roles=[create_mock_role(2001, "Team Alias1"), create_mock_role(2002, "Team Alias2")],
-    )
-
-    service = ScheduleService(session_factory=session_factory, settings=test_settings)
-    res = await service.create_single_match(
-        jornada=1,
-        team1_name="Team Alias1",
-        team2_name="Team Alias2",
-        scheduled_at=None,
-        guild=guild,
-    )
-    assert res.success is True
-
-
-@pytest.mark.asyncio
 async def test_create_jornada_from_csv_happy_path(
     session_factory: async_sessionmaker[AsyncSession],
     db_session: AsyncSession,
@@ -807,41 +770,20 @@ async def test_create_jornada_from_csv_partial_errors_and_duplicates(
     assert "Fila 4: enfrentamiento duplicado" in j_res.errors[1]
 
 
-@pytest.mark.asyncio
-async def test_process_schedule_csv_alias(
-    session_factory: async_sessionmaker[AsyncSession],
-    db_session: AsyncSession,
-    test_settings: Settings,
-):
-    team_repo = TeamRepository(db_session)
-    await team_repo.create(
-        name="Equipo P1",
-        tag="P1",
-        slug="equipo-p1",
-        division=Division.PREMIER,
-        discord_role_id=2401,
-    )
-    await team_repo.create(
-        name="Equipo P2",
-        tag="P2",
-        slug="equipo-p2",
-        division=Division.PREMIER,
-        discord_role_id=2402,
-    )
-    await db_session.commit()
-
-    guild = create_mock_guild(
-        test_settings,
-        roles=[create_mock_role(2401, "Equipo P1"), create_mock_role(2402, "Equipo P2")],
-    )
-
-    csv_text = "equipo1,equipo2,fecha,hora\nEquipo P1,Equipo P2,13/09/2026,21:00\n"
-
-    service = ScheduleService(session_factory=session_factory, settings=test_settings)
-    matches = await service.process_schedule_csv(jornada=1, csv_content=csv_text, guild=guild)
-
-    assert len(matches) == 1
-    assert matches[0].success is True
+@pytest.mark.parametrize(
+    ("owner", "alias"),
+    [
+        (ScheduleService, "create_single_match"),
+        (ScheduleService, "process_schedule_csv"),
+        (TicketService, "audit_tickets"),
+        (ticket_repo, "TicketRepository"),
+        (liga_bot.repositories, "TicketRepository"),
+    ],
+)
+def test_sin_alias_de_compatibilidad(owner: object, alias: str) -> None:
+    """Cada operación tiene un único nombre: create_match, create_jornada_from_csv,
+    check_tickets y TicketNoticeRepository."""
+    assert not hasattr(owner, alias)
 
 
 # ---------------------------------------------------------------------------
@@ -1498,7 +1440,7 @@ async def test_ticket_bot_alert_message_ignored(
 
 
 @pytest.mark.asyncio
-async def test_ticket_audit_tickets_alias(
+async def test_ticket_check_tickets_sin_canales_devuelve_resumen(
     session_factory: async_sessionmaker[AsyncSession],
     test_settings: Settings,
 ):
@@ -1508,7 +1450,7 @@ async def test_ticket_audit_tickets_alias(
         settings=test_settings,
         throttle_delay=0.0,
     )
-    result = await service.audit_tickets(guild)
+    result = await service.check_tickets(guild)
     assert isinstance(result, TicketAuditResult)
     assert "Revisión completada" in result.summary()
 
