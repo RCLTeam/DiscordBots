@@ -41,7 +41,7 @@ def mock_suggestion_service():
 
 @pytest.mark.asyncio
 async def test_challenge_pre_login_silence_flood(mock_bot, mock_suggestion_service):
-    """Flood unauthenticated socket with 60+ malformed, invalid, and non-login frames.
+    """Flood unauthenticated socket with 60 malformed, invalid, and non-login frames.
 
     Verification: Exactly 0 frames/bytes must be returned by the server.
     """
@@ -106,26 +106,11 @@ async def test_challenge_pre_login_silence_flood(mock_bot, mock_suggestion_servi
                         )
                     )
 
-                # 5. JSON with valid UUID and wrong token
-                for _ in range(10):
-                    valid_u = str(uuid.uuid4())
-                    flood_payloads.append(
-                        json.dumps(
-                            {
-                                "type": "LOG IN",
-                                "data": {
-                                    "id": valid_u,
-                                    "content": {
-                                        "token": "wrong-secret",
-                                    },
-                                },
-                            }
-                        )
-                    )
+                # Un LOGIN con UUID válido y token erróneo cierra la conexión (4003),
+                # por eso no forma parte de esta ráfaga.
+                assert len(flood_payloads) == 60
 
-                assert len(flood_payloads) == 70
-
-                # Send all 70 frames in rapid burst
+                # Send all 60 frames in rapid burst
                 for p in flood_payloads:
                     await ws.send_str(p)
 
@@ -219,11 +204,11 @@ async def test_challenge_auth_timeout_not_postponed_by_invalid_traffic(
                 for _ in range(5):
                     await ws.send_json(
                         {
-                            "type": "LOG IN",
+                            "type": "SUGGESTION_CREATED",
                             "data": {
                                 "id": str(uuid.uuid4()),
                                 "content": {
-                                    "token": "bad-token",
+                                    "suggestion": "pre-auth traffic",
                                 },
                             },
                         }
@@ -293,14 +278,14 @@ async def test_challenge_empty_supertoken_bypass_prevention(
                 }
                 await ws.send_json(payload)
 
-                # Server must remain silent until closed by timeout
+                # Login rejected: closed with 4003 without any JSON frame
                 msg = await asyncio.wait_for(ws.receive(), timeout=0.4)
                 assert msg.type in (
                     aiohttp.WSMsgType.CLOSE,
                     aiohttp.WSMsgType.CLOSING,
                     aiohttp.WSMsgType.CLOSED,
                 )
-                assert ws.close_code == 4001
+                assert ws.close_code == 4003
     finally:
         await service.stop()
 

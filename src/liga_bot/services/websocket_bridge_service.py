@@ -242,9 +242,16 @@ class WebsocketBridgeService:
                                     "data": {"id": req_id, "status": "ok"},
                                 }
                             )
-                        else:
-                            # Token inválido: silencio absoluto sin respuesta de error
-                            pass
+                            continue
+                        # Token inválido: se registra sin el token y se cierra la
+                        # conexión sin ninguna trama JSON (un intento por conexión).
+                        logger.warning(
+                            "Intento de login fallido en el WebSocket Bridge desde %s; "
+                            "se cierra la conexión (código 4003).",
+                            request.remote or "IP desconocida",
+                        )
+                        await ws.close(code=4003, message=b"Authentication failed")
+                        break
                     # Pre-login: cualquier otro comando es ignorado en silencio
                     continue
 

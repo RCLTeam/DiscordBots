@@ -108,7 +108,7 @@ async def acquire(self, key: str = "global") -> tuple[bool, float]:
 
 ## 4. Respuesta ante Límite de Tasa Excedido
 
-Cuando `acquire("global")` devuelve `(False, retry_after)` en `WebsocketBridgeService._process_suggestion` (`src/liga_bot/services/websocket_bridge_service.py:276-292`), la solicitud entrante es rechazada de inmediato y el servidor emite una trama `ERROR`:
+Cuando `acquire("global")` devuelve `(False, retry_after)` en `WebsocketBridgeService._process_suggestion` (`src/liga_bot/services/websocket_bridge_service.py:283-299`), la solicitud entrante es rechazada de inmediato y el servidor emite una trama `ERROR`:
 
 ```json
 {

@@ -156,6 +156,8 @@ Autentica la sesión WebSocket con el supertoken secreto.
 - `data.content` (cadena de texto plana).
 - `data.token` (cadena de texto plana sobre el objeto `data`).
 
+*Token inválido:* si el token no coincide con el supertoken, el servidor no responde con ninguna trama JSON: cierra la conexión con el código `4003` (`Authentication failed`) y registra el intento en su log. Para reintentar hay que abrir una conexión nueva. Detalle en [security.md](security.md#4-login-fallido-código-de-cierre-4003).
+
 #### `SUGGESTION_CREATED`
 Envía una sugerencia comunitaria para ser procesada y publicada en Discord.
 
@@ -181,6 +183,16 @@ Envía una sugerencia comunitaria para ser procesada y publicada en Discord.
 - `suggestion`: contenido de la sugerencia (fallback a `content`).
 - `avatar_url`: URL opcional para el avatar en el embed de Discord.
 - `created_at`: marca temporal ISO 8601 opcional.
+
+*Textos largos (límites de los embeds de Discord):* `SuggestionService.post_suggestion` (`src/liga_bot/services/suggestion_service.py:106-116`) recorta los campos del embed antes de enviarlo, en lugar de rechazar la sugerencia:
+
+| Campo del embed | Origen | Límite | Recorte |
+|---|---|---|---|
+| Descripción | `suggestion` | 4096 | Se corta y termina en `… [texto recortado]` |
+| Nombre del autor | `author_username` | 256 | Se corta y termina en `…` |
+| Campo «Autor» | `<@author_id> (author_username)` | 1024 | Se corta y termina en `…` |
+
+Con estos recortes el embed completo queda por debajo del límite total de 6000 caracteres. La sugerencia se publica y la web recibe `SUGGESTION_CONFIRMED` como con cualquier otra; el texto que supera el límite no se publica en Discord. Cada recorte de la descripción deja una línea `INFO` en el log del bot con la longitud original.
 
 ---
 
@@ -303,7 +315,7 @@ sequenceDiagram
 
 ### Mecánica de Retención y Prevención de Fugas de Tareas
 
-En Python `asyncio`, una tarea creada con `asyncio.create_task` cuya referencia no se conserve puede ser eliminada prematuramente por el recolector de basura (*garbage collector*). `WebsocketBridgeService` implementa una política de ciclo de vida hermética (`src/liga_bot/services/websocket_bridge_service.py:310-312`):
+En Python `asyncio`, una tarea creada con `asyncio.create_task` cuya referencia no se conserve puede ser eliminada prematuramente por el recolector de basura (*garbage collector*). `WebsocketBridgeService` implementa una política de ciclo de vida hermética (`src/liga_bot/services/websocket_bridge_service.py:318-320`):
 
 1. **Registro:** `self._background_tasks.add(task)` mantiene una referencia fuerte en el conjunto interno.
 2. **Limpieza automática:** `task.add_done_callback(self._background_tasks.discard)` desasocia la tarea de memoria tan pronto como finaliza su ejecución, ya sea por éxito o por excepción.
