@@ -8,6 +8,8 @@ nombres de canal para Discord y plantillas verbatim de mensajes de coordinación
 import string
 from datetime import datetime, timezone
 
+import pytest
+
 from liga_bot.config import DEFAULT_REGLAMENTO_CHANNEL, Settings, get_settings
 from liga_bot.utils.formatting import (
     MENSAJE_1,
@@ -176,15 +178,19 @@ def test_format_mensaje_1_verbatim():
     assert "y los suplentes" in msg
 
 
-def test_format_mensaje_1_role_ids_signature():
-    # Comprobar llamada con team1_role_id y team2_role_id
-    msg = format_mensaje_1(team1_role_id=111, team2_role_id=222)
-    assert "<@&111> VS <@&222>" in msg
-    assert "**Jornada 1 [Por definir Por definir]**" in msg
-
-    # Comprobar llamada posicional con dos enteros
-    msg2 = format_mensaje_1(333, 444)
-    assert "<@&333> VS <@&444>" in msg2
+@pytest.mark.parametrize(
+    ("args", "kwargs"),
+    [
+        ((1, "13/09/2026", "21:00", "<@&111>", "<@&222>"), {}),
+        ((333, 444), {}),
+        ((), {"team1_role_id": 111, "team2_role_id": 222}),
+        ((), {"jornada": 1, "fecha": "13/09/2026", "hora": "21:00"}),
+    ],
+    ids=["posicional", "dos-roles-posicionales", "ids-de-rol", "faltan-equipos"],
+)
+def test_format_mensaje_1_solo_admite_los_cinco_argumentos_por_nombre(args, kwargs):
+    with pytest.raises(TypeError):
+        format_mensaje_1(*args, **kwargs)
 
 
 def test_format_mensaje_2_verbatim():

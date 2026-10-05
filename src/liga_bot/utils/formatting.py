@@ -15,7 +15,7 @@ import re
 import unicodedata
 from collections.abc import Iterable
 from datetime import datetime, timezone
-from typing import Any, Final
+from typing import Final
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
@@ -237,63 +237,23 @@ def normalize_name(name: str) -> str:
 
 
 def format_mensaje_1(
-    *args: Any,
-    jornada: int | None = None,
-    fecha: str | None = None,
-    hora: str | None = None,
-    equipo1: str | int | None = None,
-    equipo2: str | int | None = None,
-    team1_role_id: int | None = None,
-    team2_role_id: int | None = None,
-    **kwargs: Any,
+    *,
+    jornada: int,
+    fecha: str,
+    hora: str,
+    equipo1: str,
+    equipo2: str,
 ) -> str:
     """
     Formatea el primer mensaje de coordinación de partido con reglas y convocatorias.
     Coincide exactamente con la plantilla verbatim de liga_bot.py:57-74.
 
-    Soporta firmas flexibles:
-    - format_mensaje_1(team1_role_id=111, team2_role_id=222)
-    - format_mensaje_1(111, 222) [cuando se pasan 2 enteros de roles]
-    - format_mensaje_1(jornada=1, fecha="13/09/2026", hora="21:00", equipo1="<@&111>", ...)
-    - format_mensaje_1(1, "13/09/2026", "21:00", "<@&111>", "<@&222>")
+    ``equipo1`` y ``equipo2`` son las menciones de rol ya construidas (``<@&id>``).
     """
-    # Resolución por argumentos posicionales
-    if len(args) == 2 and isinstance(args[0], int) and isinstance(args[1], int):
-        if team1_role_id is None:
-            team1_role_id = args[0]
-        if team2_role_id is None:
-            team2_role_id = args[1]
-    elif len(args) >= 5:
-        jornada = args[0] if jornada is None else jornada
-        fecha = args[1] if fecha is None else fecha
-        hora = args[2] if hora is None else hora
-        equipo1 = args[3] if equipo1 is None else equipo1
-        equipo2 = args[4] if equipo2 is None else equipo2
-
-    if team1_role_id is not None and equipo1 is None:
-        equipo1 = f"<@&{team1_role_id}>"
-    if team2_role_id is not None and equipo2 is None:
-        equipo2 = f"<@&{team2_role_id}>"
-
-    # Si se pasaron enteros directos en equipo1/equipo2
-    if isinstance(equipo1, int):
-        equipo1 = f"<@&{equipo1}>"
-    elif equipo1 is None:
-        equipo1 = "Equipo 1"
-
-    if isinstance(equipo2, int):
-        equipo2 = f"<@&{equipo2}>"
-    elif equipo2 is None:
-        equipo2 = "Equipo 2"
-
-    jornada_val = 1 if jornada is None else jornada
-    fecha_val = "Por definir" if fecha is None else fecha
-    hora_val = "Por definir" if hora is None else hora
-
     return MENSAJE_1.format(
-        jornada=jornada_val,
-        fecha=fecha_val,
-        hora=hora_val,
+        jornada=jornada,
+        fecha=fecha,
+        hora=hora,
         equipo1=equipo1,
         equipo2=equipo2,
     )
