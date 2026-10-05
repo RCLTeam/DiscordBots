@@ -114,7 +114,7 @@ async def handle_role_added(
 
 - **Paso a Paso:**
   1. **Comprobación de Club:** Consulta `team_repo.get_by_role_id(role.id)`. Si el rol no corresponde a ningún club registrado en la tabla `teams`, retorna `None` sin efectos colaterales.
-  2. **Normalización de IDs:** Limpia identificadores con `_clean_user_id`.
+  2. **Normalización de IDs:** Limpia identificadores con `clean_user_id_str` (`src/liga_bot/utils/ids.py`).
   3. **Asegurar Usuario:** Llama a `_ensure_discord_user` para el miembro y para el actor (si fue provisto).
   4. **Idempotencia:** Consulta `membership_repo.get(team.id, user_id_str)`. Si el registro ya existe, lo retorna directamente sin duplicar movimientos ni bitácoras.
   5. **Creación:** Crea el registro en `team_memberships` con `role=self.default_join_role` e `is_captain=False`.

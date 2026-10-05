@@ -16,7 +16,7 @@ from liga_bot.models import (
     Match,
     Team,
 )
-from liga_bot.repositories.caster_repo import CasterRepository, _clean_user_id
+from liga_bot.repositories.caster_repo import CasterRepository
 from liga_bot.repositories.team_repo import TeamRepository
 from liga_bot.services.caster_service import (
     CasterAssignmentResult,
@@ -890,23 +890,6 @@ class TestCasterServiceEdgeCasesAndAdversarial:
         res = await caster_service.assign_caster(sample_match.id, 123456, CasterRole.CASTER)
         assert res.success is False
         assert res.error == "Error de integridad en la asignación."
-
-    def test_clean_user_id_helper_pure(self):
-        """Validación pura del helper _clean_user_id."""
-        assert _clean_user_id(123) == 123
-        assert _clean_user_id("123") == 123
-        assert _clean_user_id("  123  ") == 123
-        assert _clean_user_id("+123") == 123
-        assert _clean_user_id("") is None
-        assert _clean_user_id("   ") is None
-        assert _clean_user_id("abc") is None
-        assert _clean_user_id(0) is None
-        assert _clean_user_id("0") is None
-        assert _clean_user_id(-10) is None
-        assert _clean_user_id("-10") is None
-        assert _clean_user_id(None) is None
-        assert _clean_user_id(True) is None
-        assert _clean_user_id(False) is None
 
     @pytest.mark.asyncio
     async def test_repo_user_id_sanitization_direct(

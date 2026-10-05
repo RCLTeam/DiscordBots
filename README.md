@@ -256,7 +256,8 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │       │   └── roster.py                     # Vistas interactivas de confirmación y selección de plantillas
 │       ├── utils/                            # Utilidades auxiliares y funciones de formateo
 │       │   ├── __init__.py                   # Inicialización del módulo de utilidades
-│       │   └── formatting.py                 # Normalización de textos, formato de fechas y constructores de embeds
+│       │   ├── formatting.py                 # Normalización de textos, formato de fechas y constructores de embeds
+│       │   └── ids.py                        # Limpieza de UUID e IDs de usuario de Discord (int o str) antes de consultar la BD
 │       ├── __init__.py                       # Metadatos del paquete liga_bot y versión oficial
 │       ├── __main__.py                       # Punto de entrada de ejecución directa (python -m liga_bot)
 │       ├── background_tasks.py               # Registro de tareas en segundo plano (referencia fuerte y espera en el apagado)
@@ -291,6 +292,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │   ├── test_config.py                        # Validación estricta de las 25 variables con Pydantic Settings
 │   ├── test_database.py                      # Conexión, pooling y sesiones asíncronas con PGlite y PostgreSQL
 │   ├── test_formatting.py                    # Formateo de plantillas oficiales de coordinación y embeds
+│   ├── test_ids.py                           # Limpieza de UUID e IDs de usuario de Discord (utils/ids.py)
 │   ├── test_models.py                        # Instanciación y restricciones de modelos relacionales
 │   ├── test_rate_limiter.py                  # Pruebas de consumo de tokens y tasa de reposición en el limitador
 │   ├── test_repositories.py                  # Operaciones CRUD en repositorios de persistencia

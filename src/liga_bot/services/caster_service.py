@@ -17,7 +17,8 @@ from liga_bot.config import Settings, get_settings
 from liga_bot.database import get_session_factory, transactional_session
 from liga_bot.models.caster import CasterRole, MatchCaster, MatchCasterCard
 from liga_bot.models.match import Match
-from liga_bot.repositories.caster_repo import CasterRepository, _clean_user_id, _clean_uuid
+from liga_bot.repositories.caster_repo import CasterRepository
+from liga_bot.utils.ids import clean_user_id_int, clean_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +72,7 @@ class CasterService:
 
     async def get_match_casters_data(self, match_id: UUID | str) -> MatchCastersData:
         """Obtiene el estado actual de casters y streamer para un partido."""
-        clean_id = _clean_uuid(match_id)
+        clean_id = clean_uuid(match_id)
         if clean_id is None:
             return MatchCastersData(has_streamer=False, streamer=None, casters=[])
 
@@ -83,7 +84,7 @@ class CasterService:
         self, match_id: UUID | str, user_id: Any, role: CasterRole | str
     ) -> CasterAssignmentResult:
         """Asigna un usuario a un rol de casteo en un partido con verificación de exclusividad."""
-        clean_id = _clean_uuid(match_id)
+        clean_id = clean_uuid(match_id)
         if clean_id is None:
             return CasterAssignmentResult(
                 success=False,
@@ -92,7 +93,7 @@ class CasterService:
                 error="Identificador de partido inválido.",
             )
 
-        clean_uid = _clean_user_id(user_id)
+        clean_uid = clean_user_id_int(user_id)
         if clean_uid is None:
             current_data = await self.get_match_casters_data(clean_id)
             return CasterAssignmentResult(
@@ -178,7 +179,7 @@ class CasterService:
 
     async def remove_caster(self, match_id: UUID | str, user_id: Any) -> CasterAssignmentResult:
         """Desasigna a un usuario del partido y devuelve el nuevo estado."""
-        clean_id = _clean_uuid(match_id)
+        clean_id = clean_uuid(match_id)
         if clean_id is None:
             return CasterAssignmentResult(
                 success=False,
@@ -187,7 +188,7 @@ class CasterService:
                 error="Identificador de partido inválido.",
             )
 
-        clean_uid = _clean_user_id(user_id)
+        clean_uid = clean_user_id_int(user_id)
         if clean_uid is None:
             current_data = await self.get_match_casters_data(clean_id)
             return CasterAssignmentResult(
@@ -243,7 +244,7 @@ class CasterService:
 
     async def get_match(self, match_id: UUID | str) -> Match | None:
         """Obtiene un partido por su ID con equipos, división y casters cargados eager."""
-        clean_id = _clean_uuid(match_id)
+        clean_id = clean_uuid(match_id)
         if clean_id is None:
             return None
 

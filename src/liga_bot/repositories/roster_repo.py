@@ -24,28 +24,7 @@ from sqlalchemy.orm import selectinload
 from liga_bot.models.enums import RosterMovementAction, RosterRole
 from liga_bot.models.roster import AuditLog, RosterMovement, TeamMembership
 from liga_bot.repositories.base import BaseRepository
-
-
-def _clean_uuid(val: UUID | str | None) -> UUID | None:
-    """Valida y convierte de forma segura un valor a UUID evitando DataError en PostgreSQL."""
-    if val is None:
-        return None
-    if isinstance(val, UUID):
-        return val
-    if isinstance(val, str):
-        try:
-            return UUID(val.strip())
-        except ValueError:
-            return None
-    return None
-
-
-def _clean_user_id(val: str | int | None) -> str | None:
-    """Normaliza un identificador de usuario de Discord eliminando espacios en blanco."""
-    if val is None:
-        return None
-    cleaned = str(val).strip()
-    return cleaned if cleaned else None
+from liga_bot.utils.ids import clean_user_id_str, clean_uuid
 
 
 def _to_json_safe(value: Any) -> Any:
@@ -99,8 +78,8 @@ class TeamMembershipRepository(BaseRepository[TeamMembership]):
         Recupera una membresía por su clave primaria compuesta (team_id, discord_user_id).
         Retorna None de forma segura ante identificadores malformados sin abortar transacciones.
         """
-        clean_team_id = _clean_uuid(team_id)
-        clean_user_id = _clean_user_id(discord_user_id)
+        clean_team_id = clean_uuid(team_id)
+        clean_user_id = clean_user_id_str(discord_user_id)
         if clean_team_id is None or clean_user_id is None:
             return None
 
@@ -125,7 +104,7 @@ class TeamMembershipRepository(BaseRepository[TeamMembership]):
         Obtiene todas las membresías activas asociadas a un usuario en cualquier equipo.
         Ordenadas cronológicamente por fecha de registro (created_at).
         """
-        clean_user_id = _clean_user_id(discord_user_id)
+        clean_user_id = clean_user_id_str(discord_user_id)
         if clean_user_id is None:
             return []
 
@@ -146,7 +125,7 @@ class TeamMembershipRepository(BaseRepository[TeamMembership]):
         Obtiene todos los integrantes y cuerpo técnico asignados a un equipo.
         Ordena primero capitanes, luego por rol y fecha de incorporación.
         """
-        clean_team_id = _clean_uuid(team_id)
+        clean_team_id = clean_uuid(team_id)
         if clean_team_id is None:
             return []
 
@@ -175,7 +154,7 @@ class TeamMembershipRepository(BaseRepository[TeamMembership]):
         competitiva ('top', 'jungle', 'mid', 'adc', 'support', 'substitute') en como máximo
         1 equipo simultáneamente. Retorna None si no tiene rol competitivo activo.
         """
-        clean_user_id = _clean_user_id(discord_user_id)
+        clean_user_id = clean_user_id_str(discord_user_id)
         if clean_user_id is None:
             return None
 
@@ -203,11 +182,11 @@ class TeamMembershipRepository(BaseRepository[TeamMembership]):
         Registra y persiste una nueva membresía en la plantilla de un equipo.
         Sincroniza mediante flush y refresh sin cerrar la transacción.
         """
-        clean_team_id = _clean_uuid(team_id)
+        clean_team_id = clean_uuid(team_id)
         if clean_team_id is None:
             raise ValueError(f"Identificador de equipo inválido: {team_id!r}")
 
-        clean_user_id = _clean_user_id(discord_user_id)
+        clean_user_id = clean_user_id_str(discord_user_id)
         if clean_user_id is None:
             raise ValueError("El discord_user_id no puede ser nulo ni vacío.")
 
@@ -239,11 +218,11 @@ class TeamMembershipRepository(BaseRepository[TeamMembership]):
         - TeamMembership si se insertó exitosamente una nueva fila.
         - None si ocurrió un conflicto (la membresía ya existía).
         """
-        clean_team_id = _clean_uuid(team_id)
+        clean_team_id = clean_uuid(team_id)
         if clean_team_id is None:
             raise ValueError(f"Identificador de equipo inválido: {team_id!r}")
 
-        clean_user_id = _clean_user_id(discord_user_id)
+        clean_user_id = clean_user_id_str(discord_user_id)
         if clean_user_id is None:
             raise ValueError("El discord_user_id no puede ser nulo ni vacío.")
 
@@ -275,11 +254,11 @@ class TeamMembershipRepository(BaseRepository[TeamMembership]):
         PostgreSQL ON CONFLICT (team_id, discord_user_id) DO UPDATE.
         Reservado exclusivamente para transferencias explícitas de jugadores (transfer_player).
         """
-        clean_team_id = _clean_uuid(team_id)
+        clean_team_id = clean_uuid(team_id)
         if clean_team_id is None:
             raise ValueError(f"Identificador de equipo inválido: {team_id!r}")
 
-        clean_user_id = _clean_user_id(discord_user_id)
+        clean_user_id = clean_user_id_str(discord_user_id)
         if clean_user_id is None:
             raise ValueError("El discord_user_id no puede ser nulo ni vacío.")
 
@@ -409,11 +388,11 @@ class RosterMovementRepository(BaseRepository[RosterMovement]):
         Retorna:
         - Instancia de RosterMovement persistida con id y timestamps asignados.
         """
-        clean_team_id = _clean_uuid(team_id)
+        clean_team_id = clean_uuid(team_id)
         if clean_team_id is None:
             raise ValueError(f"Identificador de equipo inválido: {team_id!r}")
 
-        clean_user_id = _clean_user_id(discord_user_id)
+        clean_user_id = clean_user_id_str(discord_user_id)
         if clean_user_id is None:
             raise ValueError("El discord_user_id no puede ser nulo ni vacío.")
 
@@ -423,7 +402,7 @@ class RosterMovementRepository(BaseRepository[RosterMovement]):
         r: RosterRole | None = (
             role if (role is None or isinstance(role, RosterRole)) else RosterRole(role)
         )
-        act_id: str | None = _clean_user_id(actor_id)
+        act_id: str | None = clean_user_id_str(actor_id)
 
         kwargs: dict[str, Any] = {
             "team_id": clean_team_id,
@@ -453,7 +432,7 @@ class RosterMovementRepository(BaseRepository[RosterMovement]):
         Alineado con el índice DB: roster_movements_team_id_idx.
         Retorna lista vacía de forma segura si team_id no es un UUID válido.
         """
-        clean_team_id = _clean_uuid(team_id)
+        clean_team_id = clean_uuid(team_id)
         if clean_team_id is None:
             return []
 
@@ -480,7 +459,7 @@ class RosterMovementRepository(BaseRepository[RosterMovement]):
         Alineado con el índice DB: roster_movements_discord_user_id_idx.
         Retorna lista vacía de forma segura si discord_user_id es nulo o vacío.
         """
-        clean_user_id = _clean_user_id(discord_user_id)
+        clean_user_id = clean_user_id_str(discord_user_id)
         if clean_user_id is None:
             return []
 
@@ -530,10 +509,10 @@ class AuditLogRepository(BaseRepository[AuditLog]):
         Retorna:
         - Instancia de AuditLog persistida.
         """
-        clean_actor_id = _clean_user_id(actor_discord_user_id)
+        clean_actor_id = clean_user_id_str(actor_discord_user_id)
         clean_entity_id: UUID | None = None
         if entity_id is not None:
-            clean_entity_id = _clean_uuid(entity_id)
+            clean_entity_id = clean_uuid(entity_id)
             if clean_entity_id is None:
                 raise ValueError(
                     f"entity_id must be a valid UUID or UUID string, got {entity_id!r}"
@@ -572,7 +551,7 @@ class AuditLogRepository(BaseRepository[AuditLog]):
         Alineado con el índice DB: audit_logs_entity_idx (entity_type, entity_id).
         Retorna lista vacía si entity_id no es un UUID válido.
         """
-        clean_entity_id = _clean_uuid(entity_id)
+        clean_entity_id = clean_uuid(entity_id)
         if clean_entity_id is None:
             return []
 
@@ -602,7 +581,7 @@ class AuditLogRepository(BaseRepository[AuditLog]):
         Alineado con el índice DB: audit_logs_actor_discord_user_id_idx.
         Retorna lista vacía de forma segura si actor_discord_user_id es nulo o vacío.
         """
-        clean_actor_id = _clean_user_id(actor_discord_user_id)
+        clean_actor_id = clean_user_id_str(actor_discord_user_id)
         if clean_actor_id is None:
             return []
 

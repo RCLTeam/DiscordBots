@@ -111,10 +111,10 @@ El modelo `AuditLog` proporciona una pista de auditoría inmutable y transaccion
 
 El repositorio `AuditLogRepository` gestiona la inserción y consulta de registros de auditoría garantizando que los datos complejos sean compatibles con el tipo de datos `JSONB` de PostgreSQL.
 
-- **Ubicación en código:** `src/liga_bot/repositories/roster_repo.py:416-537`
+- **Ubicación en código:** `src/liga_bot/repositories/roster_repo.py:478-604`
 - **Clase Base:** `BaseRepository[AuditLog]`
 
-### 4.1 Normalización Recursiva `_to_json_safe` (`src/liga_bot/repositories/roster_repo.py:50-81`)
+### 4.1 Normalización Recursiva `_to_json_safe` (`src/liga_bot/repositories/roster_repo.py:30-61`)
 
 El motor de persistencia interactúa con PostgreSQL y motores de prueba como PGlite, los cuales rechazan tipos nativos de Python no serializables en columnas JSONB (como instancias de `UUID`, `datetime`, `Decimal` o `Enum`). La función auxiliar `_to_json_safe` aplica una transformación recursiva determinista:
 
@@ -141,15 +141,15 @@ def _to_json_safe(value: Any) -> Any:
 
 ### 4.2 Métodos de `AuditLogRepository`
 
-#### `log(...) -> AuditLog` (`L425-478`)
+#### `log(...) -> AuditLog` (`L487-539`)
 Registra una mutación transaccional:
-1. Sanitiza el identificador del usuario mediante `_clean_user_id(actor_discord_user_id)`.
-2. Valida `entity_id` con `_clean_uuid(entity_id)`. Si se suministra un identificador no convertible a UUID válido, lanza `ValueError("entity_id must be a valid UUID...")`.
+1. Sanitiza el identificador del usuario mediante `clean_user_id_str(actor_discord_user_id)`.
+2. Valida `entity_id` con `clean_uuid(entity_id)`. Si se suministra un identificador no convertible a UUID válido, lanza `ValueError("entity_id must be a valid UUID...")`.
 3. Procesa los diccionarios `before` y `after` a través de `_to_json_safe`.
 4. Instancia `AuditLog`, lo agrega a la sesión y ejecuta `flush()` + `refresh(entry)`.
 
-#### `list_by_entity(entity_type: str, entity_id: UUID | str, limit: int | None = None) -> Sequence[AuditLog]` (`L479-509`)
+#### `list_by_entity(entity_type: str, entity_id: UUID | str, limit: int | None = None) -> Sequence[AuditLog]` (`L541-570`)
 Recupera el historial de cambios de una entidad concreta ordenado cronológicamente de forma descendente (`order_by(AuditLog.created_at.desc())`). Si `entity_id` no es un UUID válido, la función intercepta el valor y devuelve una lista vacía (`[]`) de forma segura sin generar una excepción SQL. Aprovecha el índice `audit_logs_entity_idx`.
 
-#### `list_by_actor(actor_discord_user_id: str | int, limit: int | None = None) -> Sequence[AuditLog]` (`L510-536`)
+#### `list_by_actor(actor_discord_user_id: str | int, limit: int | None = None) -> Sequence[AuditLog]` (`L572-604`)
 Recupera las acciones ejecutadas por un actor de Discord ordenadas de más reciente a más antigua. Si `actor_discord_user_id` es nulo o vacío tras la sanitización, retorna `[]` inmediatamente sin consultar a la base de datos. Aprovecha el índice `audit_logs_actor_discord_user_id_idx`.

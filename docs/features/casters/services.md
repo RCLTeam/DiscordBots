@@ -2,7 +2,7 @@
 
 [⬅️ Volver a Cartelera y Casters](./README.md)
 
-La capa de lógica de negocio y persistencia para la cartelera de casters está implementada en `src/liga_bot/services/caster_service.py` (310 líneas brutas, 266 SLOC) mediante la clase `CasterService`, y en `src/liga_bot/repositories/caster_repo.py` (278 líneas brutas, 250 SLOC) mediante `CasterRepository`.
+La capa de lógica de negocio y persistencia para la cartelera de casters está implementada en `src/liga_bot/services/caster_service.py` (297 líneas) mediante la clase `CasterService`, y en `src/liga_bot/repositories/caster_repo.py` (230 líneas) mediante `CasterRepository`.
 
 Esta arquitectura desacopla estrictamente las operaciones de Discord (embeds, vistas, interacciones) de las reglas de negocio de la liga, la validación de exclusividad de streamer y las transacciones relacionales en PostgreSQL.
 
@@ -36,7 +36,7 @@ class CasterAssignmentResult:
 
 ## 2. Servicio de Dominio: `CasterService`
 
-- **Ubicación**: `src/liga_bot/services/caster_service.py:44-311`.
+- **Ubicación**: `src/liga_bot/services/caster_service.py:45-297`.
 - **Inyección de Dependencias**:
   ```python
   def __init__(
@@ -86,7 +86,7 @@ async def _build_casters_data(self, repo: CasterRepository, match_id: UUID) -> M
 #### Flujo de Validación y Persistencia
 
 1. **Sanitización de Identificadores**:  
-   Limpia `match_id` con `_clean_uuid` y `user_id` con `_clean_user_id`. Si son inválidos, rechaza sin tocar la base de datos.
+   Limpia `match_id` con `clean_uuid` y `user_id` con `clean_user_id_int` (`src/liga_bot/utils/ids.py`). Si son inválidos, rechaza sin tocar la base de datos.
 2. **Validación de Rol**:  
    Convierte el rol a `CasterRole`. Si el valor es ilegítimo, rechaza con `"Rol de casteo inválido: {role}"`.
 3. **Verificación de Exclusividad en Memoria**:  
@@ -149,7 +149,7 @@ Para evitar la duplicación de mensajes en Discord cuando `/panel-casters` se in
 
 ## 3. Repositorio de Persistencia: `CasterRepository`
 
-- **Ubicación**: `src/liga_bot/repositories/caster_repo.py:54-279`.
+- **Ubicación**: `src/liga_bot/repositories/caster_repo.py:21-230`.
 - **Herencia**: `BaseRepository[MatchCaster]`.
 - **Sesión**: Asíncrona (`AsyncSession`) con propagación de transacciones atómicas.
 
@@ -170,10 +170,10 @@ Para evitar la duplicación de mensajes en Discord cuando `/panel-casters` se in
 
 ### 3.2 Funciones Auxiliares de Sanitización Defensiva
 
-Definidas en `src/liga_bot/repositories/caster_repo.py:20-52`:
+Definidas en `src/liga_bot/utils/ids.py`, compartidas con los repositorios y servicios de plantillas:
 
-- **`_clean_uuid(val)`**: Convierte de forma segura strings o instancias de `UUID`. Rechaza `None`, cadenas malformadas o tipos no compatibles retornando `None`.
-- **`_clean_user_id(val)`**: Convierte identificadores de Discord a enteros estrictamente positivos (`> 0`). Descarta de inmediato valores booleanos (`isinstance(val, bool)`), números negativos, ceros y cadenas vacías o compuestas exclusivamente de espacios en blanco.
+- **`clean_uuid(val)`**: Devuelve el `UUID` o `None`. Acepta instancias de `UUID`, cadenas (recortando espacios) y cualquier objeto cuya representación `str` sea un UUID; rechaza `None`, cadenas malformadas y tipos no convertibles.
+- **`clean_user_id_int(val)`**: Convierte identificadores de Discord a enteros estrictamente positivos (`> 0`). Descarta de inmediato valores booleanos (`isinstance(val, bool)`), números negativos, ceros y cadenas vacías o compuestas exclusivamente de espacios en blanco.
 
 ---
 
