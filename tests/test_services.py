@@ -293,6 +293,47 @@ async def test_create_match_happy_path_ascend_existing_category(
 
 
 @pytest.mark.asyncio
+async def test_create_match_premier_no_reutiliza_categoria_de_ascend(
+    session_factory: async_sessionmaker[AsyncSession],
+    db_session: AsyncSession,
+    test_settings: Settings,
+):
+    """Cada división usa su categoría: un partido Premier no cae en la de Ascend."""
+    team_repo = TeamRepository(db_session)
+    await team_repo.create(
+        name="Premier Uno",
+        tag="PU1",
+        slug="premier-uno",
+        division=Division.PREMIER,
+        discord_role_id=1301,
+    )
+    await team_repo.create(
+        name="Premier Dos",
+        tag="PU2",
+        slug="premier-dos",
+        division=Division.PREMIER,
+        discord_role_id=1302,
+    )
+    await db_session.commit()
+
+    role1 = create_mock_role(1301, "Premier Uno")
+    role2 = create_mock_role(1302, "Premier Dos")
+    cat_ascend = create_mock_category(9002, "ASCEND - JORNADA 6")
+    guild = create_mock_guild(test_settings, roles=[role1, role2], categories=[cat_ascend])
+
+    service = ScheduleService(session_factory=session_factory, settings=test_settings)
+    res = await service.create_match(
+        guild=guild,
+        jornada=6,
+        team1_name="Premier Uno",
+        team2_name="Premier Dos",
+    )
+
+    assert res.success is True
+    guild.create_category.assert_called_once_with("PREMIER - JORNADA 6")
+
+
+@pytest.mark.asyncio
 async def test_create_match_team_not_found(
     session_factory: async_sessionmaker[AsyncSession],
     db_session: AsyncSession,

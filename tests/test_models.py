@@ -518,3 +518,18 @@ class TestEnums:
 
         assert AppRole.OWNER == "owner"
         assert AppRole.OWNER.value == "owner"
+
+
+def test_team_division_tolera_el_formato_de_la_web():
+    """La web guarda 'Premier'/'Ascend'; la división debe resolverse igual."""
+
+    class _SD:
+        def __init__(self, nombre: str) -> None:
+            self.division_name = nombre
+
+    team = Team(name="Prueba", tag="PRU", slug="prueba", discord_role_id=1)
+    team.season_division = _SD("Ascend")
+    assert team.division == Division.ASCEND
+
+    team.season_division = _SD("Premier")
+    assert team.division == Division.PREMIER
