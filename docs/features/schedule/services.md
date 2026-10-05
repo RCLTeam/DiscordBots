@@ -38,6 +38,8 @@ class JornadaResult:
     total_rows: int
     matches: list[MatchResult] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    # Filas creadas sin horario porque su fecha u hora no se pudieron interpretar.
+    warnings: list[str] = field(default_factory=list)
 
     @property
     def success_count(self) -> int:
@@ -203,6 +205,7 @@ El método `create_jornada_from_csv` (`src/liga_bot/services/schedule_service.py
 ### 4.2 Deduplicación y Aislamiento por Fila
 1. **Detección de duplicados internos**: Registra cada pareja como un conjunto inmutable `pair_key = frozenset({raw1.lower(), raw2.lower()})`. Si una fila repite un enfrentamiento ya presente en el mismo archivo (en orden directo o invertido), se rechaza con error específico sin llamar a Discord ni a la base de datos.
 2. **Tolerancia a fallos por fila**: Cada fila se procesa de forma secuencial llamando a `create_match`. Si una fila falla (por ejemplo, equipo inexistente o conflicto de división), se añade el error a `errors` y la ejecución continúa con las siguientes filas, logrando importaciones parciales seguras.
+3. **Horario no reconocido**: Si una fila trae `fecha` y `hora` pero `parse_scheduled_at` no las puede interpretar (formato esperado `DD/MM/YYYY` y `HH:MM`, en hora de Madrid), el partido se crea con `scheduled_at = None` y, si la creación tiene éxito, se añade un aviso a `warnings` con el número de fila, los valores recibidos y el formato esperado (`SCHEDULE_FORMAT_HINT`). Los avisos no cuentan en `error_count`. Si la creación falla, la fila solo figura en `errors`.
 
 ---
 
