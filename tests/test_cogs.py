@@ -840,6 +840,33 @@ async def test_crear_partido_sin_fecha_ni_hora_no_avisa():
     assert all("no reconocido" not in f.name for f in embed.fields)
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("fecha", "hora", "tentativo"),
+    [("21/10/2026", None, "21/10/2026"), (None, "21:00", "21:00")],
+    ids=["solo-fecha", "solo-hora"],
+)
+async def test_crear_partido_solo_fecha_u_hora_es_tentativo_sin_aviso(fecha, hora, tentativo):
+    """Con solo fecha o solo hora se muestra el horario tentativo, sin aviso de error."""
+    cog, mock_service, inter = _crear_partido_cog_con_exito()
+
+    await cog.crear_partido.callback(
+        cog,
+        inter,
+        jornada=1,
+        equipo1="Equipo 1",
+        equipo2="Equipo 2",
+        fecha=fecha,
+        hora=hora,
+    )
+
+    assert mock_service.create_match.await_args.kwargs["scheduled_at"] is None
+    embed = inter.followup.send.await_args.kwargs["embed"]
+    fields = {f.name: f.value for f in embed.fields}
+    assert fields["Horario Tentativo"] == tentativo
+    assert all("no reconocido" not in name for name in fields)
+
+
 def test_crear_partido_limita_la_longitud_de_fecha_y_hora():
     """Discord rechaza fecha y hora más largas que los formatos aceptados."""
     params = {p.name: p for p in ScheduleCog.crear_partido.parameters}
