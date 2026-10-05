@@ -10,7 +10,7 @@ Este directorio documenta los fundamentos arquitectónicos, el ciclo de vida de 
 
 | Documento | Descripción |
 |---|---|
-| [**runtime.md**](./runtime.md) | Detalla la clase `LigaBot`, el contenedor de inyección de dependencias (6 servicios de dominio), el ciclo de vida asíncrono en `setup_hook`, el cierre ordenado e idempotente en `close`, el manejo de señales OS y el desacoplamiento de `on_ready`. |
+| [**runtime.md**](./runtime.md) | Detalla la clase `LigaBot`, el contenedor de inyección de dependencias (6 servicios de dominio), el ciclo de vida asíncrono en `setup_hook`, el cierre ordenado e idempotente en `close`, el manejo de señales OS, el desacoplamiento de `on_ready` y el manejador global de errores de los slash commands (`LigaCommandTree`). |
 | [**configuration.md**](./configuration.md) | Describe la configuración mediante Pydantic Settings v2, la matriz exhaustiva de las 18 variables de entorno, constantes canónicas de la liga, normalización asíncrona de URLs y la factoría singleton en caché. |
 | [**cli.md**](./cli.md) | Explica la interfaz de línea de comandos construida sobre la librería estándar `argparse`, la sintaxis del comando `seed-teams`, los esquemas JSON/CSV, la delimitación transaccional y el algoritmo de coincidencia idempotente. |
 | [**permissions.md**](./permissions.md) | Define la política de autorización del staff: qué roles y permisos de Discord autorizan cada tipo de acción (roles y plantillas, calendario y casters, tickets, sincronización de comandos) y qué comandos pertenecen a cada uno. |

@@ -2,7 +2,7 @@
 
 [⬅️ Volver a Arquitectura](./README.md)
 
-Este documento detalla la arquitectura de ejecución, el ciclo de vida, la inyección de dependencias y el sistema de manejo de procesos y señales del bot principal (`LigaBot`), implementado en `src/liga_bot/bot.py` y `src/liga_bot/__main__.py`.
+Este documento detalla la arquitectura de ejecución, el ciclo de vida, la inyección de dependencias y el sistema de manejo de procesos y señales del bot principal (`LigaBot`), implementado en `src/liga_bot/bot.py` y `src/liga_bot/__main__.py`, y el manejador global de errores de los slash commands (`src/liga_bot/command_tree.py`).
 
 ---
 
@@ -263,3 +263,47 @@ def handle_signal(sig: signal.Signals) -> None:
 - **Espera del cierre:** como `close()` cierra Discord antes que la base de datos, `bot.start()` retorna mientras `close()` sigue en las fases 5 y 6. Si la parada la inició una señal, `run_bot()` espera siempre a `close_task` antes de retornar; si no, invoca `bot.close()` cuando `not bot.is_closed()`. Sin esa espera, `asyncio.run` cancelaría la tarea de cierre a medio cerrar el motor de base de datos. Un error en `close_task` se registra con nivel `CRITICAL` y devuelve `1`.
 - **Salida forzada:** si una segunda señal cancela `run_bot()` (también mientras espera a `close_task`), registra un `ERROR` y devuelve `1`.
 - La función síncrona `main()` envuelve `asyncio.run(run_bot())` y finaliza el proceso con `sys.exit(exit_code)`.
+
+---
+
+## 7. Manejador Global de Errores de los Slash Commands (`command_tree.py`)
+
+`LigaBot.__init__` crea el árbol de comandos con la subclase `LigaCommandTree` (`kwargs.setdefault("tree_cls", LigaCommandTree)`, `src/liga_bot/bot.py:86`). Quien construya `LigaBot` con otro `tree_cls` lo sustituye. La subclase está en `src/liga_bot/command_tree.py:70-144` y solo redefine `on_error`.
+
+discord.py llama a `CommandTree.on_error` cuando un slash command o menú contextual termina con una excepción que no ha capturado: la del callback llega envuelta en `app_commands.CommandInvokeError`, y los fallos de checks, de conversión de opciones o de búsqueda del comando llegan como su propia subclase de `AppCommandError`. Sin este manejador, discord.py solo registraba la traza y el usuario veía «La aplicación no ha respondido» o el indicador «está pensando…» sin respuesta si el comando ya había hecho `defer()`.
+
+### 7.1 Qué no pasa por el manejador
+
+- **Comandos que gestionan sus errores:** si el comando captura la excepción y responde (por ejemplo, el `try/except discord.HTTPException` de `/sync`), discord.py no llama a `on_error` y la respuesta no cambia.
+- **Denegaciones de permisos actuales:** los comandos comprueban `has_staff_access` (o sus envoltorios `is_staff`, `is_authorized_scheduler`…) dentro del propio cuerpo, responden en efímero y hacen `return` sin lanzar nada (ver [permissions.md](./permissions.md)). El manejador no interviene.
+- **Comandos con manejador propio:** si el comando tiene `@comando.error` o su Cog define `cog_app_command_error`, `on_error` sale sin responder ni registrar (`src/liga_bot/command_tree.py:80-82`), igual que el `on_error` por defecto de discord.py. Hoy ningún comando lo usa.
+- **Botones, desplegables y modales:** se gestionan con el `on_error` de cada `discord.ui.View` (por ejemplo `GestionarPosicionView`, ver [roster/ui.md](../features/roster/ui.md)).
+- **`!sync` (comando de prefijo):** usa el sistema de `commands.Bot`, no el árbol de slash commands.
+
+### 7.2 Decisión por tipo de error
+
+| Error recibido | Registro (logger `liga_bot.command_tree`) | Aviso al usuario (siempre efímero) |
+|---|---|---|
+| `CheckFailure` si la interacción ya tiene respuesta | `INFO`, sin traza | Ninguno: el check ya respondió. |
+| `NoPrivateMessage` | `INFO`, sin traza | «❌ Este comando solo puede usarse dentro de un servidor.» |
+| `BotMissingPermissions` | `INFO`, sin traza | «❌ Al bot le faltan permisos para ejecutar este comando: …» con la lista de permisos. |
+| `CommandOnCooldown` | `INFO`, sin traza | «⏳ Has usado este comando hace muy poco. Vuelve a intentarlo en N s.» |
+| Otro `CheckFailure` (`MissingPermissions`, `MissingRole`, check propio que devuelve `False`…) | `INFO`, sin traza | «❌ No tienes permisos para usar este comando.» |
+| `TransformerError` (opción que no se puede convertir) | `INFO`, sin traza | «❌ El valor «…» no es válido para una de las opciones del comando.» El valor se recorta a 100 caracteres y se escapa el Markdown. |
+| `CommandNotFound` / `CommandSignatureMismatch` | `WARNING`, sin traza | «❌ Este comando no coincide con la versión actual del bot. El staff debe sincronizar los comandos con /sync.» |
+| Cualquier otro (`CommandInvokeError` con la excepción del callback incluida) | `ERROR` con la traza de la excepción original, el nombre del comando, el ID del usuario y el ID del servidor | «❌ Se ha producido un error inesperado al ejecutar el comando. Inténtalo de nuevo más tarde y, si se repite, avisa al staff.» |
+
+El aviso nunca incluye el texto de la excepción: puede contener datos internos (URL de base de datos, rutas). El detalle queda solo en el log.
+
+### 7.3 Envío del aviso (`_avisar`, `src/liga_bot/command_tree.py:134-144`)
+
+- Si la interacción no tiene respuesta (`interaction.response.is_done()` es `False`), usa `interaction.response.send_message(..., ephemeral=True)`.
+- Si ya la tiene (el comando hizo `defer()` o respondió antes de fallar), usa `interaction.followup.send(..., ephemeral=True)`.
+- Si el envío falla con `discord.HTTPException` (por ejemplo, la interacción caducó) o `discord.InteractionResponded`, registra un `WARNING` y termina: el manejador no propaga excepciones.
+
+**Visibilidad tras un `defer()` público:** según la documentación de la API de Discord, el primer `followup` después de `defer()` sustituye al mensaje «está pensando…» y conserva la visibilidad del `defer()` (no se ha comprobado contra Discord en ejecución). En `/equipos`, que hace `defer(ephemeral=False)` (`src/liga_bot/cogs/teams.py:246`), el aviso de error sería visible para todo el canal aunque se envíe con `ephemeral=True`. El resto de comandos que hacen `defer()` lo hacen con `ephemeral=True`.
+
+### 7.4 Pruebas
+
+`tests/test_command_tree_errors.py` registra comandos reales en el árbol de un `LigaBot` y los invoca con `CommandTree._call`, el método por el que discord.py despacha la interacción, para que la excepción recorra el camino real hasta `on_error`. Cubre la respuesta antes y después de `defer()`, el registro `ERROR` con traza, los mensajes específicos, que un check que ya respondió no recibe un segundo aviso, que un comando con manejador propio no recibe aviso y que un fallo al enviar el aviso no propaga excepciones.
+
