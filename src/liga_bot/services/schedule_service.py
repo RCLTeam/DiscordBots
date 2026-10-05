@@ -353,7 +353,7 @@ class ScheduleService:
                 equipo1=role1.mention,
                 equipo2=role2.mention,
             )
-            msg2_text = format_mensaje_2()
+            msg2_text = format_mensaje_2(settings=self.settings)
 
             await created_channel.send(
                 content=f"{role1.mention} {role2.mention}",

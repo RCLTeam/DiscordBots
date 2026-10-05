@@ -20,7 +20,7 @@ Este repositorio de documentación está estructurado bajo un estándar de arqui
 
 | Sección | Directorio | Descripción |
 |---|---|---|
-| 🏛️ **Arquitectura y Runtime** | [**`architecture/`**](./architecture/README.md) | Ciclo de vida asíncrono (`setup_hook`, `close`), inyección de servicios, configuración estricta (18 variables de entorno), consola CLI y motor dual PostgreSQL/PGlite. |
+| 🏛️ **Arquitectura y Runtime** | [**`architecture/`**](./architecture/README.md) | Ciclo de vida asíncrono (`setup_hook`, `close`), inyección de servicios, configuración estricta (25 variables de entorno), consola CLI y motor dual PostgreSQL/PGlite. |
 | 🧩 **Módulos Funcionales (Features)** | [**`features/`**](./features/README.md) | Hub de funcionalidades divididas por dominio de negocio: base de datos, WebSocket bridge, roster, roles, tickets, calendario y casters. |
 | 🧪 **Estrategia y Suites de Testing** | [**`testing/`**](./testing/README.md) | Metodología de pruebas (1.138 casos en 49 suites), aislamiento transaccional hermético con PGlite y mitigación de cuellos de botella del kernel. |
 

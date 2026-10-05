@@ -6,6 +6,7 @@ resolución de variables de entorno y preservación de constantes
 canónicas de la liga.
 """
 
+import logging
 import os
 from functools import lru_cache
 from typing import Final
@@ -13,10 +14,14 @@ from typing import Final
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+logger = logging.getLogger(__name__)
+
 # Constantes canónicas auxiliares de la liga (preservadas de liga_bot.py:41-52)
-# Mención al canal de normas de la liga (#reglas). Se usa por ID para que Discord
-# la renderice como enlace aunque el canal se renombre.
-DEFAULT_REGLAMENTO_CHANNEL: Final[str] = "<#1548038711697080491>"
+# Canal de normas de la liga (#reglas). Se menciona por ID para que Discord lo
+# renderice como enlace aunque el canal se renombre. Es el valor por defecto de
+# REGLAMENTO_CHANNEL_ID.
+DEFAULT_REGLAMENTO_CHANNEL_ID: Final[int] = 1548038711697080491
+DEFAULT_REGLAMENTO_CHANNEL: Final[str] = f"<#{DEFAULT_REGLAMENTO_CHANNEL_ID}>"
 DEFAULT_TICKETS_CATEGORY_NAMES: Final[tuple[str, ...]] = (
     "TICKETS-GENERAL-PREMIER",
     "TICKETS-GENERAL-ASCEND",
@@ -113,6 +118,13 @@ class Settings(BaseSettings):
     moderators_channel_id: int = Field(
         default=1548038711697080494,
         description="ID del canal de moderadores (#moderators-only) para alertas del sistema.",
+    )
+    reglamento_channel_id: int = Field(
+        default=DEFAULT_REGLAMENTO_CHANNEL_ID,
+        description=(
+            "ID del canal del reglamento que se menciona en el mensaje de coordinación "
+            "de cada canal de partido."
+        ),
     )
     free_role_name: str = Field(
         default="Libre",
@@ -228,10 +240,52 @@ class Settings(BaseSettings):
         return url
 
 
+# IDs de Discord cuyo valor por defecto apunta al servidor real de la liga. Se
+# conservan para no romper despliegues cuyo entorno no los define, pero se avisa
+# en el log de cada uno que no venga del entorno ni del fichero .env.
+DEFAULTED_DISCORD_ID_FIELDS: Final[tuple[str, ...]] = (
+    "guild_id",
+    "staff_role_id",
+    "admin_role_id",
+    "ceo_premier_role_id",
+    "ceo_ascend_role_id",
+    "moderators_channel_id",
+    "casters_channel_id",
+    "reglamento_channel_id",
+)
+
+
+def warn_defaulted_discord_ids(settings: Settings) -> list[str]:
+    """
+    Registra un aviso por cada ID de DEFAULTED_DISCORD_ID_FIELDS que no se ha
+    definido en el entorno ni en el fichero .env y toma su valor por defecto.
+
+    Devuelve los nombres de las variables de entorno afectadas.
+    """
+    defaulted: list[str] = []
+    for field_name in DEFAULTED_DISCORD_ID_FIELDS:
+        if field_name in settings.model_fields_set:
+            continue
+        env_var = field_name.upper()
+        defaulted.append(env_var)
+        logger.warning(
+            "%s no está definida en el entorno; se usa el valor por defecto %s "
+            "(servidor de la liga). Defínela en el .env si el bot opera en otro servidor.",
+            env_var,
+            getattr(settings, field_name),
+        )
+    return defaulted
+
+
 @lru_cache
 def get_settings() -> Settings:
     """
     Provee una instancia singleton en caché de Settings.
     Permite limpiar la caché en pruebas unitarias mediante get_settings.cache_clear().
+
+    Al crear la instancia avisa en el log de los IDs de Discord que toman su
+    valor por defecto (ver warn_defaulted_discord_ids).
     """
-    return Settings()
+    settings = Settings()
+    warn_defaulted_discord_ids(settings)
+    return settings
