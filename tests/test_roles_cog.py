@@ -7,8 +7,8 @@ Cubre:
    - Registro de vistas persistentes y dynamic items en cog_load().
    - Listener on_member_join y delegación a RoleService.
    - /pedir-rol: apertura de SolicitudRolModal.
-   - /asignar-rol: comprobación de staff, asignación de Libre y de equipos oficiales,
-     eliminación de rol sin verificar, actualización de apodo y persistencia transaccional.
+   - /asignar-rol: comprobación de staff, regla de no autoasignación, defer previo y
+     delegación en RoleService (assign_free_role / assign_team_role).
    - /publicar-panel-rol: comprobación de staff, publicación en canal destino y embed.
    - Idempotencia de la función setup().
 2. Permisos administrativos (@app_commands.default_permissions(manage_guild=True)):
@@ -20,12 +20,10 @@ Cubre:
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import discord
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from liga_bot.bot import DEFAULT_EXTENSIONS, LigaBot
 from liga_bot.cogs.roles import RolesCog
@@ -33,9 +31,6 @@ from liga_bot.cogs.roles import setup as roles_setup
 from liga_bot.cogs.schedule import ScheduleCog
 from liga_bot.cogs.tickets import TicketsCog
 from liga_bot.config import Settings
-from liga_bot.models.enums import RoleRequestStatus
-from liga_bot.models.role_request import RoleRequest
-from liga_bot.repositories.role_request_repo import RoleRequestRepository
 from liga_bot.services.role_service import RoleService
 from liga_bot.services.ticket_service import TicketAuditResult, TicketService
 from liga_bot.ui.roles import (
@@ -312,7 +307,8 @@ class TestRolesCogCommands:
         )
 
         mock_service.assign_free_role.assert_awaited_once_with(target_user, "Invocador", "EUW")
-        inter.response.send_message.assert_awaited_once_with(
+        inter.response.defer.assert_awaited_once_with(ephemeral=True)
+        inter.followup.send.assert_awaited_once_with(
             "Rol Libre asignado correctamente.", ephemeral=True
         )
 
@@ -364,150 +360,140 @@ class TestRolesCogCommands:
         assert "dentro de un servidor" in inter.response.send_message.await_args[0][0]
 
     @pytest.mark.asyncio
-    async def test_asignar_rol_team_role_not_found(self) -> None:
-        """Verifica mensaje de error si el rol del equipo solicitado no existe en el servidor."""
-        settings = Settings(staff_role_id=101)
-        bot = make_mock_bot(settings=settings)
-        cog = RolesCog(bot)
-
-        staff_user = make_mock_member(roles=[make_mock_role(101, "Staff")])
-        guild = make_mock_guild()
-        guild.roles = []  # Sin roles
-
-        inter = make_mock_interaction(user=staff_user, guild=guild)
-        target_user = make_mock_member(user_id=999)
-
-        await cog.asignar_rol.callback(
-            cog,
-            inter,
-            usuario=target_user,
-            equipo="Equipo Inexistente",
-            nombre_lol="Player",
-            riot_tag="123",
-        )
-
-        inter.response.send_message.assert_awaited_once_with(
-            "El rol 'Equipo Inexistente' no existe en el servidor.", ephemeral=True
-        )
-
-    @pytest.mark.asyncio
-    async def test_asignar_rol_team_success_flow(self) -> None:
-        """
-        Verifica el flujo completo exitoso de /asignar-rol para un equipo oficial:
-        - Remueve el rol 'Sin Verificar' del usuario.
-        - Añade el rol del equipo.
-        - Actualiza el apodo del miembro con formato 'NombreLoL #RiotTag'.
-        - Registra la solicitud aprobada en BD.
-        - Responde confirmando la asignación.
-        """
-        settings = Settings(staff_role_id=101, sin_verificar_role_id=202)
-        sin_verificar_role = make_mock_role(202, "Sin Verificar")
-        team_role = make_mock_role(303, "Planar Shock Pingus")
-
-        guild = make_mock_guild()
-        guild.roles = [sin_verificar_role, team_role]
-
-        target_user = make_mock_member(user_id=555, name="TargetMember", roles=[sin_verificar_role])
-
-        # Mock de session_factory para persistencia
-        mock_session_factory = MagicMock(spec=async_sessionmaker)
-        mock_session = AsyncMock(spec=AsyncSession)
-
-        mock_role_service = MagicMock(spec=RoleService)
-        mock_role_service.session_factory = mock_session_factory
-
-        # Mock de repositorio
-        mock_req = MagicMock(spec=RoleRequest)
-        mock_req.id = 42
-
-        bot = make_mock_bot(settings=settings, role_service=mock_role_service)
+    async def test_asignar_rol_rechaza_asignarse_a_si_mismo(self) -> None:
+        """El staff no puede usar /asignar-rol sobre sí mismo, ni con equipo ni con Libre."""
+        mock_service = MagicMock(spec=RoleService)
+        mock_service.assign_team_role = AsyncMock()
+        mock_service.assign_free_role = AsyncMock()
+        settings = Settings(staff_role_id=101, free_role_name="Libre")
+        bot = make_mock_bot(settings=settings, role_service=mock_service)
         cog = RolesCog(bot)
 
         staff_user = make_mock_member(user_id=111, roles=[make_mock_role(101, "Staff")])
-        inter = make_mock_interaction(user=staff_user, guild=guild)
-
-        @asynccontextmanager
-        async def fake_tx_session(factory=None):
-            yield mock_session
-
-        with (
-            patch("liga_bot.cogs.roles.transactional_session", fake_tx_session),
-            patch("liga_bot.cogs.roles.RoleRequestRepository") as mock_repo_cls,
-        ):
-            mock_repo = MagicMock(spec=RoleRequestRepository)
-            mock_repo.create_request = AsyncMock(return_value=mock_req)
-            mock_repo.update_status = AsyncMock()
-            mock_repo_cls.return_value = mock_repo
-
+        for equipo in ("Planar Shock Pingus", "Libre"):
+            inter = make_mock_interaction(user=staff_user)
             await cog.asignar_rol.callback(
                 cog,
                 inter,
-                usuario=target_user,
-                equipo="Planar Shock Pingus",
-                nombre_lol="Faker",
-                riot_tag="KR1",
+                usuario=staff_user,
+                equipo=equipo,
+                nombre_lol="Yo",
+                riot_tag="EUW",
+                posicion="mid",
             )
-
-            # 1. Remoción de Sin Verificar
-            target_user.remove_roles.assert_awaited_once_with(sin_verificar_role)
-
-            # 2. Asignación del rol de equipo
-            target_user.add_roles.assert_awaited_once_with(team_role)
-
-            # 3. Actualización de apodo
-            target_user.edit.assert_awaited_once_with(nick="Faker #KR1")
-
-            # 4. Registro en BD
-            mock_repo.create_request.assert_awaited_once_with(
-                user_id=555,
-                nombre_lol="Faker",
-                riot_tag="KR1",
-                equipo="Planar Shock Pingus",
-                canal_id=None,
+            inter.response.send_message.assert_awaited_once_with(
+                "No puedes asignarte un rol a ti mismo.", ephemeral=True
             )
-            mock_repo.update_status.assert_awaited_once_with(
-                request_id=42,
-                estado=RoleRequestStatus.APPROVED,
-                staff_id=111,
-            )
+            inter.response.defer.assert_not_called()
 
-            # 5. Respuesta de confirmación
-            inter.response.send_message.assert_awaited_once()
-            msg = inter.response.send_message.await_args[0][0]
-            assert "Planar Shock Pingus" in msg
-            assert "TargetMember" in msg
+        mock_service.assign_team_role.assert_not_called()
+        mock_service.assign_free_role.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_asignar_rol_team_handles_forbidden(self) -> None:
-        """Verifica que /asignar-rol capture discord.Forbidden al añadir rol."""
-        settings = Settings(staff_role_id=101)
-        team_role = make_mock_role(303, "Fnix Esports")
-        guild = make_mock_guild()
-        guild.roles = [team_role]
+    async def test_asignar_rol_equipo_difiere_antes_de_delegar_en_el_servicio(self) -> None:
+        """La interacción se difiere antes de que el servicio toque Discord o la base de datos."""
+        orden: list[str] = []
+        mock_service = MagicMock(spec=RoleService)
 
-        target_user = make_mock_member(user_id=555)
-        target_user.add_roles.side_effect = discord.Forbidden(
-            MagicMock(status=403), "Missing permissions"
-        )
+        async def fake_assign(**_kwargs: object) -> tuple[bool, str]:
+            orden.append("servicio")
+            return True, "Rol Planar Shock Pingus asignado a TargetMember (mid)."
 
-        bot = make_mock_bot(settings=settings)
+        mock_service.assign_team_role = AsyncMock(side_effect=fake_assign)
+        settings = Settings(staff_role_id=101, free_role_name="Libre")
+        bot = make_mock_bot(settings=settings, role_service=mock_service)
         cog = RolesCog(bot)
 
-        staff_user = make_mock_member(roles=[make_mock_role(101, "Staff")])
-        inter = make_mock_interaction(user=staff_user, guild=guild)
+        staff_user = make_mock_member(user_id=111, roles=[make_mock_role(101, "Staff")])
+        inter = make_mock_interaction(user=staff_user)
+        inter.response.defer.side_effect = lambda **_kw: orden.append("defer")
+        target_user = make_mock_member(user_id=555, name="TargetMember")
 
         await cog.asignar_rol.callback(
             cog,
             inter,
             usuario=target_user,
-            equipo="Fnix Esports",
-            nombre_lol="Player",
-            riot_tag="123",
+            equipo="Planar Shock Pingus",
+            nombre_lol="Faker",
+            riot_tag="KR1",
+            posicion="mid",
         )
 
-        inter.response.send_message.assert_awaited_once()
-        msg = inter.response.send_message.await_args[0][0]
-        assert "Permisos insuficientes" in msg
+        assert orden == ["defer", "servicio"]
+        inter.response.defer.assert_awaited_once_with(ephemeral=True)
+        mock_service.assign_team_role.assert_awaited_once_with(
+            guild=inter.guild,
+            member=target_user,
+            staff_member=staff_user,
+            equipo="Planar Shock Pingus",
+            nombre_lol="Faker",
+            riot_tag="KR1",
+            posicion="mid",
+        )
+        inter.followup.send.assert_awaited_once_with(
+            "Rol Planar Shock Pingus asignado a TargetMember (mid).", ephemeral=True
+        )
+        inter.response.send_message.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_asignar_rol_equipo_no_busca_roles_por_nombre(self) -> None:
+        """Un rol del servidor que no es de un equipo registrado no se asigna desde el cog."""
+        mock_service = MagicMock(spec=RoleService)
+        mock_service.assign_team_role = AsyncMock(
+            return_value=(False, "El equipo 'Administración' no está registrado.")
+        )
+        settings = Settings(staff_role_id=101, free_role_name="Libre")
+        bot = make_mock_bot(settings=settings, role_service=mock_service)
+        cog = RolesCog(bot)
+
+        admin_role = make_mock_role(999, "Administración")
+        guild = make_mock_guild()
+        guild.roles = [admin_role]
+        staff_user = make_mock_member(user_id=111, roles=[make_mock_role(101, "Staff")])
+        inter = make_mock_interaction(user=staff_user, guild=guild)
+        target_user = make_mock_member(user_id=555)
+
+        await cog.asignar_rol.callback(
+            cog,
+            inter,
+            usuario=target_user,
+            equipo="Administración",
+            nombre_lol="Faker",
+            riot_tag="KR1",
+            posicion="mid",
+        )
+
+        target_user.add_roles.assert_not_called()
+        inter.followup.send.assert_awaited_once_with(
+            "El equipo 'Administración' no está registrado.", ephemeral=True
+        )
+
+    def test_asignar_rol_posicion_ofrece_las_opciones_del_ticket(self) -> None:
+        """El parámetro posicion tiene las mismas opciones que el desplegable del ticket."""
+        from liga_bot.ui.roles import POSICION_DESCRIPCIONES
+
+        bot = make_mock_bot()
+        cog = RolesCog(bot)
+        param = next(p for p in cog.asignar_rol.parameters if p.name == "posicion")
+        assert [c.value for c in param.choices] == [p.value for p in POSICION_DESCRIPCIONES]
+
+    @pytest.mark.asyncio
+    async def test_asignar_rol_autocompleta_equipos_registrados_y_libre(self) -> None:
+        """El autocompletado sugiere equipos registrados y Libre, filtrando por el texto."""
+        mock_service = MagicMock(spec=RoleService)
+        mock_service.list_team_names = AsyncMock(
+            return_value=["Planar Shock Pingus", "Storm Legion", "X" * 101]
+        )
+        settings = Settings(staff_role_id=101, free_role_name="Libre")
+        bot = make_mock_bot(settings=settings, role_service=mock_service)
+        cog = RolesCog(bot)
+        inter = make_mock_interaction()
+
+        todos = await cog.asignar_rol_equipo_autocomplete(inter, "")
+        filtrados = await cog.asignar_rol_equipo_autocomplete(inter, "storm")
+
+        assert [c.value for c in todos] == ["Planar Shock Pingus", "Storm Legion", "Libre"]
+        assert [c.value for c in filtrados] == ["Storm Legion"]
 
     def test_publicar_panel_rol_default_permissions(self) -> None:
         """Verifica que /publicar-panel-rol tenga default_permissions(manage_guild=True)."""
@@ -573,143 +559,6 @@ class TestRolesCogCommands:
         inter.response.send_message.assert_awaited_once_with(
             f"Panel publicado en {current_channel.mention}.", ephemeral=True
         )
-
-    @pytest.mark.asyncio
-    async def test_asignar_rol_team_handles_http_exception(self) -> None:
-        """Verifica que /asignar-rol capture discord.HTTPException al añadir rol."""
-        settings = Settings(staff_role_id=101)
-        team_role = make_mock_role(303, "Fnix Esports")
-        guild = make_mock_guild()
-        guild.roles = [team_role]
-
-        target_user = make_mock_member(user_id=555)
-        target_user.add_roles.side_effect = discord.HTTPException(
-            MagicMock(status=500), "Internal Server Error"
-        )
-
-        bot = make_mock_bot(settings=settings)
-        cog = RolesCog(bot)
-
-        staff_user = make_mock_member(roles=[make_mock_role(101, "Staff")])
-        inter = make_mock_interaction(user=staff_user, guild=guild)
-
-        await cog.asignar_rol.callback(
-            cog,
-            inter,
-            usuario=target_user,
-            equipo="Fnix Esports",
-            nombre_lol="Player",
-            riot_tag="123",
-        )
-
-        inter.response.send_message.assert_awaited_once()
-        msg = inter.response.send_message.await_args[0][0]
-        assert "Error al asignar el rol" in msg
-
-    @pytest.mark.asyncio
-    async def test_asignar_rol_handles_remove_roles_warning(self) -> None:
-        """Verifica que si remove_roles falla, el flujo de /asignar-rol continúa."""
-        settings = Settings(staff_role_id=101, sin_verificar_role_id=202)
-        sin_verificar_role = make_mock_role(202, "Sin Verificar")
-        team_role = make_mock_role(303, "Planar Shock Pingus")
-
-        guild = make_mock_guild()
-        guild.roles = [sin_verificar_role, team_role]
-
-        target_user = make_mock_member(user_id=555, name="TargetMember", roles=[sin_verificar_role])
-        target_user.remove_roles.side_effect = discord.Forbidden(
-            MagicMock(status=403), "Cannot remove role"
-        )
-
-        bot = make_mock_bot(settings=settings)
-        cog = RolesCog(bot)
-
-        staff_user = make_mock_member(roles=[make_mock_role(101, "Staff")])
-        inter = make_mock_interaction(user=staff_user, guild=guild)
-
-        await cog.asignar_rol.callback(
-            cog,
-            inter,
-            usuario=target_user,
-            equipo="Planar Shock Pingus",
-            nombre_lol="Faker",
-            riot_tag="KR1",
-        )
-
-        # Continúa con add_roles y responde
-        target_user.add_roles.assert_awaited_once_with(team_role)
-        inter.response.send_message.assert_awaited_once()
-        assert "Planar Shock Pingus" in inter.response.send_message.await_args[0][0]
-
-    @pytest.mark.asyncio
-    async def test_asignar_rol_handles_edit_nick_warning(self) -> None:
-        """Verifica que si actualizar el apodo falla, el comando responde positivamente."""
-        settings = Settings(staff_role_id=101)
-        team_role = make_mock_role(303, "Planar Shock Pingus")
-
-        guild = make_mock_guild()
-        guild.roles = [team_role]
-
-        target_user = make_mock_member(user_id=555, name="TargetMember")
-        target_user.edit.side_effect = discord.HTTPException(
-            MagicMock(status=400), "Cannot change nick"
-        )
-
-        bot = make_mock_bot(settings=settings)
-        cog = RolesCog(bot)
-
-        staff_user = make_mock_member(roles=[make_mock_role(101, "Staff")])
-        inter = make_mock_interaction(user=staff_user, guild=guild)
-
-        await cog.asignar_rol.callback(
-            cog,
-            inter,
-            usuario=target_user,
-            equipo="Planar Shock Pingus",
-            nombre_lol="Faker",
-            riot_tag="KR1",
-        )
-
-        inter.response.send_message.assert_awaited_once()
-        assert "Planar Shock Pingus" in inter.response.send_message.await_args[0][0]
-
-    @pytest.mark.asyncio
-    async def test_asignar_rol_handles_db_exception_gracefully(self) -> None:
-        """Verifica que si la BD lanza excepción, se captura y se confirma la asignación."""
-        settings = Settings(staff_role_id=101)
-        team_role = make_mock_role(303, "Planar Shock Pingus")
-
-        guild = make_mock_guild()
-        guild.roles = [team_role]
-
-        target_user = make_mock_member(user_id=555, name="TargetMember")
-        mock_role_service = MagicMock(spec=RoleService)
-        mock_role_service.session_factory = MagicMock()
-
-        bot = make_mock_bot(settings=settings, role_service=mock_role_service)
-        cog = RolesCog(bot)
-
-        staff_user = make_mock_member(roles=[make_mock_role(101, "Staff")])
-        inter = make_mock_interaction(user=staff_user, guild=guild)
-
-        @asynccontextmanager
-        async def failing_tx_session(factory=None):
-            if False:
-                yield
-            raise RuntimeError("Database pool failure")
-
-        with patch("liga_bot.cogs.roles.transactional_session", failing_tx_session):
-            await cog.asignar_rol.callback(
-                cog,
-                inter,
-                usuario=target_user,
-                equipo="Planar Shock Pingus",
-                nombre_lol="Faker",
-                riot_tag="KR1",
-            )
-
-        inter.response.send_message.assert_awaited_once()
-        assert "Planar Shock Pingus" in inter.response.send_message.await_args[0][0]
 
     @pytest.mark.asyncio
     async def test_publicar_panel_rol_invalid_channel(self) -> None:

@@ -378,6 +378,67 @@ class TestEquipoSelect:
             "Ya tienes una solicitud de rol pendiente.", ephemeral=True
         )
 
+    def test_equipo_select_respeta_los_limites_de_discord_con_nombres_largos(self) -> None:
+        """label, value y description no pasan de 100 caracteres aunque el nombre sí."""
+        nombre_100 = "C" * 100
+        nombre_120 = "L" * 120
+        select = EquipoSelect(
+            nombre_lol="Ninym",
+            riot_tag="EUW",
+            free_role_name="Libre",
+            teams=["Corto", nombre_100, nombre_120],
+        )
+
+        for opt in select.options:
+            assert len(opt.label) <= 100
+            assert len(opt.value) <= 100
+            assert opt.description is None or len(opt.description) <= 100
+        values = [opt.value for opt in select.options]
+        assert len(set(values)) == len(values)
+        assert "Corto" in values
+        assert nombre_100 in values
+
+    @pytest.mark.asyncio
+    async def test_equipo_largo_llega_completo_a_la_posicion(self) -> None:
+        """Un equipo cuyo nombre no cabe como value se resuelve a su nombre completo."""
+        nombre_120 = "L" * 120
+        service = make_mock_role_service()
+        interaction = make_mock_interaction(role_service=service)
+        select = EquipoSelect(
+            nombre_lol="Faker", riot_tag="KR1", free_role_name="Libre", teams=[nombre_120]
+        )
+        select.values = [select.options[0].value]
+
+        await select.callback(interaction)
+
+        _, kwargs = interaction.response.send_message.call_args
+        assert kwargs["view"].select.equipo == nombre_120
+
+    @pytest.mark.asyncio
+    async def test_posicion_callback_si_falla_el_mensaje_deshace_el_ticket(self) -> None:
+        """Si no se puede publicar el mensaje del ticket, se deshace y se avisa al jugador."""
+        ticket_channel = make_mock_channel(channel_id=445, name="rol-faker")
+        ticket_channel.send = AsyncMock(
+            side_effect=discord.HTTPException(MagicMock(status=400), "Invalid Form Body")
+        )
+        service = make_mock_role_service()
+        service.create_role_request_ticket = AsyncMock(
+            return_value=(True, "Canal creado.", ticket_channel)
+        )
+        service.discard_role_request_ticket = AsyncMock()
+        interaction = make_mock_interaction(role_service=service)
+
+        select = PosicionSelect(nombre_lol="Faker", riot_tag="KR1", equipo="Vanguard Gaming")
+        select.values = ["mid"]
+
+        await select.callback(interaction)
+
+        service.discard_role_request_ticket.assert_awaited_once_with(ticket_channel)
+        interaction.followup.send.assert_awaited_once()
+        args, kwargs = interaction.followup.send.call_args
+        assert kwargs.get("ephemeral") is True
+        assert "No se pudo publicar" in args[0]
+
     @pytest.mark.asyncio
     async def test_team_selection_asks_for_position(self) -> None:
         """Elegir equipo no crea el ticket todavía: primero pregunta la posición."""
@@ -461,15 +522,15 @@ class TestConfirmarRolButton:
 
         assert btn.user_id == 123456789
         assert btn.equipo == "Nexus Esports"
-        assert btn.custom_id == "confirmar_rol:123456789:Nexus Esports"
+        assert btn.custom_id == "confirmar_rol:123456789"
         assert btn.item.label == "Confirmar Rol"
         assert btn.item.style == discord.ButtonStyle.success
 
         # El template debe coincidir con el custom_id
-        match = btn.template.match(btn.custom_id)
+        match = btn.template.fullmatch(btn.custom_id)
         assert match is not None
         assert match.group("user_id") == "123456789"
-        assert match.group("equipo") == "Nexus Esports"
+        assert match.group("equipo") is None
 
     def test_dynamic_item_template_rejects_invalid_custom_ids(self) -> None:
         """Valida que custom_ids inválidos no coincidan con la plantilla."""
@@ -478,6 +539,7 @@ class TestConfirmarRolButton:
         assert template.match("confirmar_rol:no_digits:Nexus Esports") is None
         assert template.match("denegar_rol:123456789:Nexus Esports") is None
         assert template.match("confirmar_rol:") is None
+        assert template.match("confirmar_rol:123456789:") is None
 
     @pytest.mark.asyncio
     async def test_from_custom_id_deserialization(self) -> None:
@@ -492,6 +554,31 @@ class TestConfirmarRolButton:
         assert button.user_id == 9876543210
         assert button.equipo == "Storm Legion"
         assert button.custom_id == custom_id
+
+    def test_custom_id_no_supera_100_caracteres_con_nombres_largos(self) -> None:
+        """Con un equipo de 120 caracteres y un ID de 20 dígitos el custom_id cabe en Discord."""
+        user_id = 12345678901234567890
+        equipo = "E" * 120
+
+        btn = ConfirmarRolButton(user_id=user_id, equipo=equipo)
+        view = TicketView(user_id=user_id, equipo=equipo)
+
+        assert len(btn.custom_id) <= 100
+        assert all(len(child.custom_id) <= 100 for child in view.children)
+        assert btn.equipo == equipo
+
+    @pytest.mark.asyncio
+    async def test_custom_id_con_formato_anterior_sigue_reconstruyendo_el_boton(self) -> None:
+        """Los botones de tickets abiertos antes del cambio (con el equipo) siguen funcionando."""
+        legacy_custom_id = "confirmar_rol:987654321012345678:Vanguard Gaming"
+        match = ConfirmarRolButton.__discord_ui_compiled_template__.fullmatch(legacy_custom_id)
+        assert match is not None
+
+        button = await ConfirmarRolButton.from_custom_id(None, None, match)
+
+        assert button.user_id == 987654321012345678
+        assert button.equipo == "Vanguard Gaming"
+        assert button.custom_id == legacy_custom_id
 
     @pytest.mark.asyncio
     async def test_callback_denied_for_non_staff(self) -> None:
@@ -610,7 +697,7 @@ class TestTicketView:
         # Comprobar ambos botones
         custom_ids = [child.custom_id for child in view.children]
         assert "solicitud_rol:ticket_view:denegar" in custom_ids
-        assert "confirmar_rol:12345:Titan Gaming" in custom_ids
+        assert "confirmar_rol:12345" in custom_ids
 
     @pytest.mark.asyncio
     async def test_denegar_rol_denied_for_non_staff(self) -> None:

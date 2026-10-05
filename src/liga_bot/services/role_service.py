@@ -19,9 +19,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from liga_bot.config import Settings, get_settings
 from liga_bot.database import get_session_factory, transactional_session
-from liga_bot.models.enums import RoleRequestStatus
+from liga_bot.models.enums import RoleRequestStatus, RosterRole
 from liga_bot.repositories.role_request_repo import RoleRequestRepository
 from liga_bot.repositories.team_repo import TeamRepository
+from liga_bot.services.roster_sync_service import RosterSyncError
 from liga_bot.ui.roles import (
     PanelPedirRolView,
     build_panel_rol_embed,
@@ -33,7 +34,13 @@ from liga_bot.utils.formatting import apply_team_tag
 if TYPE_CHECKING:
     from discord.ext import commands
 
+    from liga_bot.models.team import Team
+
 logger = logging.getLogger(__name__)
+
+
+class TeamRoleNotResolvedError(Exception):
+    """El equipo pedido no está registrado o su rol de Discord no existe en el servidor."""
 
 
 class RoleService:
@@ -461,6 +468,142 @@ class RoleService:
 
         return True, "Canal de solicitud creado correctamente.", channel
 
+    async def discard_role_request_ticket(self, channel: discord.abc.GuildChannel) -> None:
+        """
+        Deshace un ticket cuyo mensaje con los botones no se pudo publicar:
+        - Elimina la solicitud PENDING asociada al canal, para que el jugador pueda
+          volver a pedir rol.
+        - Elimina el canal del ticket.
+        Defensivo: registra los fallos en el log sin propagarlos. La cuenta de juego
+        registrada al abrir el ticket se conserva.
+        """
+        try:
+            async with transactional_session(self.session_factory) as session:
+                repo = RoleRequestRepository(session)
+                req = await repo.get_by_channel_id(channel.id)
+                if req is not None and req.estado == RoleRequestStatus.PENDING:
+                    await repo.delete(req)
+        except Exception as exc:
+            logger.error(
+                "No se pudo eliminar la solicitud pendiente del ticket %s: %s",
+                channel.id,
+                exc,
+            )
+
+        try:
+            await channel.delete(reason="No se pudo publicar el mensaje del ticket de rol")
+        except Exception as exc:
+            logger.warning("No se pudo eliminar el canal huérfano %s: %s", channel.id, exc)
+
+    async def _resolve_team_role(
+        self,
+        session: AsyncSession,
+        guild: discord.Guild,
+        equipo: str,
+    ) -> tuple[Team, discord.Role]:
+        """
+        Resuelve el equipo registrado y su rol de Discord a partir del nombre pedido.
+
+        Solo se acepta el rol cuyo ID es el discord_role_id del equipo registrado: un rol
+        del servidor que se llame igual no basta. Lanza TeamRoleNotResolvedError con un
+        mensaje para el staff si el equipo no está registrado o si su rol no existe.
+        """
+        team = await TeamRepository(session).get_by_name(equipo)
+        if team is None:
+            logger.warning(
+                "El equipo '%s' no está registrado en base de datos (servidor %s).",
+                equipo,
+                guild.name,
+            )
+            raise TeamRoleNotResolvedError(
+                f"El equipo '{equipo}' no está registrado en la base de datos. "
+                "Regístralo (por ejemplo, con `liga-cli seed-teams`) y vuelve a intentarlo."
+            )
+
+        role = guild.get_role(team.discord_role_id)
+        if role is None:
+            logger.warning(
+                "El rol del equipo '%s' (discord_role_id=%s) no se encontró en el "
+                "servidor %s: revisa el ID sembrado con seed-teams.",
+                team.name,
+                team.discord_role_id,
+                guild.name,
+            )
+            raise TeamRoleNotResolvedError(
+                f"El rol del equipo '{team.name}' (discord_role_id {team.discord_role_id}) "
+                "no existe en el servidor. Corrige el ID registrado y vuelve a intentarlo."
+            )
+
+        return team, role
+
+    async def _apply_team_role_in_discord(
+        self,
+        guild: discord.Guild,
+        member: discord.Member,
+        role: discord.Role,
+        nombre_lol: str,
+        team_tag: str,
+        known_tags: list[str],
+    ) -> list[str]:
+        """
+        Aplica en Discord el alta en un equipo, una vez confirmada la base de datos:
+        - Asigna el rol del equipo.
+        - Remueve el rol 'Sin Verificar' si el miembro lo tiene.
+        - Pone el apodo '<TAG> <NombreLoL>' (máximo 32 caracteres).
+        Ningún fallo interrumpe los pasos siguientes. Retorna los avisos para el staff
+        de lo que no se pudo aplicar.
+        """
+        warnings: list[str] = []
+        member_display = member.display_name
+
+        try:
+            await member.add_roles(role)
+        except (discord.Forbidden, discord.HTTPException) as exc:
+            logger.warning(
+                "No se pudo asignar el rol '%s' a %s: %s",
+                role.name,
+                member_display,
+                exc,
+            )
+            warnings.append(
+                f"No se pudo asignar el rol '{role.name}' en Discord ({exc}); asígnalo a mano."
+            )
+
+        if self.settings.sin_verificar_role_id > 0:
+            sin_verificar = discord.utils.get(guild.roles, id=self.settings.sin_verificar_role_id)
+            if sin_verificar is None:
+                sin_verificar = guild.get_role(self.settings.sin_verificar_role_id)
+            if sin_verificar is not None and sin_verificar in member.roles:
+                try:
+                    await member.remove_roles(sin_verificar)
+                except (discord.Forbidden, discord.HTTPException) as exc:
+                    logger.warning(
+                        "No se pudo remover rol sin verificar de %s: %s",
+                        member_display,
+                        exc,
+                    )
+
+        nick = apply_team_tag(nombre_lol, team_tag, known_tags)[:32]
+        try:
+            await member.edit(nick=nick)
+        except discord.Forbidden:
+            logger.warning(
+                "Sin permisos para cambiar el apodo de %s a '%s': el bot necesita "
+                "'Gestionar apodos' y un rol por encima del miembro (los dueños del "
+                "servidor nunca pueden ser renombrados).",
+                member_display,
+                nick,
+            )
+        except discord.HTTPException as exc:
+            logger.warning(
+                "No se pudo actualizar el apodo de %s a '%s': %s",
+                member_display,
+                nick,
+                exc,
+            )
+
+        return warnings
+
     async def confirm_role_request(
         self,
         guild: discord.Guild,
@@ -471,11 +614,16 @@ class RoleService:
         Confirma y aprueba una solicitud de rol pendiente asociada a un canal de ticket:
         - Localiza la solicitud en estado PENDING correspondiente al channel_id.
         - Resuelve el miembro solicitante en el servidor (caché o API).
-        - Fase 1: Registra en transacción atómica de BD la cuenta de juego (players),
-          la membresía con su posición y el estado APPROVED; la transacción se confirma (COMMIT).
+        - Resuelve el equipo registrado y su rol por discord_role_id. Si el equipo no está
+          registrado o su rol no existe en el servidor, devuelve la causa al staff y la
+          solicitud sigue PENDING (se puede volver a confirmar tras corregir el registro).
+        - Fase 1: Registra en transacción atómica de BD la membresía con su posición y el
+          estado APPROVED; la transacción se confirma (COMMIT). Un RosterSyncError revierte
+          la transacción y su mensaje llega al staff.
         - Si la transacción en BD falla o se revierte, nunca se invoca add_roles ni Discord.
-        - Fase 2: Tras el commit exitoso en BD, asigna el rol del equipo si existe,
-          remueve 'Sin Verificar' y actualiza el apodo del miembro ('<TAG> <NombreLoL>').
+        - Fase 2: Tras el commit exitoso en BD, asigna el rol del equipo, remueve
+          'Sin Verificar' y actualiza el apodo del miembro ('<TAG> <NombreLoL>'). Si Discord
+          rechaza el rol, el mensaje de retorno lo avisa.
         - Retorna (True, f"Rol {req.equipo} confirmado para {member.display_name}.") o error.
         """
         try:
@@ -499,32 +647,16 @@ class RoleService:
                 if member is None:
                     return False, "El usuario solicitante no se encuentra en el servidor."
 
-                # Resolver el equipo en base de datos: su discord_role_id manda sobre el
-                # nombre, que puede no coincidir literalmente con el rol de Discord.
-                team_repo = TeamRepository(session)
-                team = await team_repo.get_by_name(req.equipo)
-
-                role = None
-                if team is not None:
-                    role = guild.get_role(team.discord_role_id)
-                if role is None:
-                    role = discord.utils.get(guild.roles, name=req.equipo)
-
-                if role is None:
-                    logger.warning(
-                        "El rol del equipo '%s' (discord_role_id=%s) no se encontró en el "
-                        "servidor %s: revisa el ID sembrado con seed-teams.",
-                        req.equipo,
-                        team.discord_role_id if team is not None else "desconocido",
-                        guild.name,
-                    )
+                # Resolver el equipo registrado y su rol por discord_role_id. Si falla,
+                # la solicitud sigue pendiente y el staff ve la causa.
+                team, role = await self._resolve_team_role(session, guild, req.equipo)
 
                 # Persistencia atómica: plantilla y estado de la solicitud comparten la
                 # sesión, así que un fallo en cualquiera revierte todo el bloque. La cuenta
                 # de juego ya quedó registrada al abrirse el ticket.
                 roster_service = getattr(self.bot, "roster_sync_service", None)
                 if roster_service is not None:
-                    if req.posicion and role is not None:
+                    if req.posicion:
                         await roster_service.transfer_player(
                             member=member,
                             team_role=role,
@@ -545,18 +677,21 @@ class RoleService:
                 )
 
                 # Obtener tags conocidos antes del commit para formateo de apodo
-                known_tags: list[str] = []
-                team_tag = team.tag if team is not None else None
-                if team is not None:
-                    known_tags = [t.tag for t in await team_repo.list_all()]
+                known_tags = [t.tag for t in await TeamRepository(session).list_all()]
 
                 # Capturar variables de estado antes de salir de la sesión transaccional
-                target_member = member
-                target_role = role
+                team_tag = team.tag
                 nombre_lol = req.nombre_lol
                 equipo_nombre = req.equipo
                 member_display = member.display_name
 
+        except (TeamRoleNotResolvedError, RosterSyncError) as exc:
+            logger.warning(
+                "No se confirma la solicitud del canal %s; transacción revertida: %s",
+                channel_id,
+                exc,
+            )
+            return False, f"{exc} La solicitud sigue pendiente."
         except Exception as exc:
             logger.error(
                 "Error al confirmar la solicitud del canal %s; transacción revertida: %s",
@@ -571,62 +706,136 @@ class RoleService:
             )
 
         # A partir de aquí, cambios en Discord: la base de datos YA se ha confirmado (COMMIT).
-        # Si las llamadas de Discord fallan, se registran, pero la BD ya es consistente y segura.
-        if target_role is not None:
-            try:
-                await target_member.add_roles(target_role)
-            except (discord.Forbidden, discord.HTTPException) as exc:
-                logger.warning(
-                    "No se pudo asignar el rol '%s' a %s: %s",
-                    equipo_nombre,
-                    member_display,
-                    exc,
+        warnings = await self._apply_team_role_in_discord(
+            guild=guild,
+            member=member,
+            role=role,
+            nombre_lol=nombre_lol,
+            team_tag=team_tag,
+            known_tags=known_tags,
+        )
+
+        message = f"Rol {equipo_nombre} confirmado para {member_display}."
+        if warnings:
+            message = " ".join([message, *warnings])
+        return True, message
+
+    async def assign_team_role(
+        self,
+        guild: discord.Guild,
+        member: discord.Member,
+        staff_member: discord.Member,
+        equipo: str,
+        nombre_lol: str,
+        riot_tag: str,
+        posicion: str | None,
+    ) -> tuple[bool, str]:
+        """
+        Asigna directamente a un jugador a un equipo registrado (comando /asignar-rol),
+        dejando lo mismo que confirmar un ticket con ese equipo y posición:
+        - Rechaza que el staff se asigne un rol a sí mismo.
+        - Exige una posición de plantilla válida (RosterRole).
+        - Resuelve el equipo registrado y su rol por discord_role_id; cualquier otro valor
+          se rechaza sin tocar Discord.
+        - Fase 1 (una transacción): registra la cuenta de juego, la membresía con la
+          posición y la solicitud APPROVED con el staff_id. Si falla, no se toca Discord.
+        - Fase 2: asigna el rol, remueve 'Sin Verificar' y pone el apodo '<TAG> <NombreLoL>'.
+        - Retorna (True, mensaje) o (False, causa).
+        """
+        if staff_member.id == member.id:
+            return False, "No puedes asignarte un rol a ti mismo."
+
+        if not posicion:
+            return False, "Indica la posición del jugador en el equipo."
+        try:
+            position = RosterRole(posicion)
+        except ValueError:
+            return False, f"La posición '{posicion}' no es válida."
+
+        roster_service = getattr(self.bot, "roster_sync_service", None)
+        if roster_service is None:
+            logger.warning(
+                "RosterSyncService no disponible: no se asigna el equipo '%s' a %s.",
+                equipo,
+                member.display_name,
+            )
+            return (
+                False,
+                "El servicio de plantillas no está disponible. No se ha aplicado ningún cambio.",
+            )
+
+        try:
+            async with transactional_session(self.session_factory) as session:
+                team, role = await self._resolve_team_role(session, guild, equipo)
+
+                await self._ensure_player(
+                    member=member,
+                    nombre_lol=nombre_lol,
+                    riot_tag=riot_tag,
+                    session=session,
+                )
+                await roster_service.transfer_player(
+                    member=member,
+                    team_role=role,
+                    new_position=position,
+                    actor_id=staff_member.id,
+                    session=session,
                 )
 
-        # Remover rol 'Sin Verificar' si está presente
-        if self.settings.sin_verificar_role_id > 0:
-            sin_verificar = discord.utils.get(guild.roles, id=self.settings.sin_verificar_role_id)
-            if sin_verificar is None:
-                sin_verificar = guild.get_role(self.settings.sin_verificar_role_id)
-            if sin_verificar is not None and sin_verificar in target_member.roles:
-                try:
-                    await target_member.remove_roles(sin_verificar)
-                except (discord.Forbidden, discord.HTTPException) as exc:
-                    logger.warning(
-                        "No se pudo remover rol sin verificar de %s: %s",
-                        member_display,
-                        exc,
-                    )
+                repo = RoleRequestRepository(session)
+                req = await repo.create_request(
+                    user_id=member.id,
+                    nombre_lol=nombre_lol,
+                    riot_tag=riot_tag,
+                    equipo=team.name,
+                    canal_id=None,
+                    posicion=position.value,
+                )
+                await repo.update_status(
+                    request_id=req.id,
+                    estado=RoleRequestStatus.APPROVED,
+                    staff_id=staff_member.id,
+                )
 
-        # Actualizar apodo: "<TAG> <NombreLoL>", sin el Riot Tag
-        nick = nombre_lol
-        if team_tag is not None:
-            nick = apply_team_tag(nick, team_tag, known_tags)
-        else:
+                known_tags = [t.tag for t in await TeamRepository(session).list_all()]
+                team_name = team.name
+                team_tag = team.tag
+
+        except (TeamRoleNotResolvedError, RosterSyncError) as exc:
             logger.warning(
-                "El equipo '%s' no existe en base de datos: no se aplica tag al apodo.",
-                equipo_nombre,
-            )
-        nick = nick[:32]
-        try:
-            await target_member.edit(nick=nick)
-        except discord.Forbidden:
-            logger.warning(
-                "Sin permisos para cambiar el apodo de %s a '%s': el bot necesita "
-                "'Gestionar apodos' y un rol por encima del miembro (los dueños del "
-                "servidor nunca pueden ser renombrados).",
-                member_display,
-                nick,
-            )
-        except discord.HTTPException as exc:
-            logger.warning(
-                "No se pudo actualizar el apodo de %s a '%s': %s",
-                member_display,
-                nick,
+                "No se asigna el equipo '%s' a %s; transacción revertida: %s",
+                equipo,
+                member.display_name,
                 exc,
             )
+            return False, str(exc)
+        except Exception as exc:
+            logger.error(
+                "Error al registrar la asignación directa de '%s' a %s; transacción revertida: %s",
+                equipo,
+                member.display_name,
+                exc,
+                exc_info=True,
+            )
+            return (
+                False,
+                "No se pudo registrar la asignación en base de datos. "
+                "No se ha aplicado ningún cambio.",
+            )
 
-        return True, f"Rol {equipo_nombre} confirmado para {member_display}."
+        warnings = await self._apply_team_role_in_discord(
+            guild=guild,
+            member=member,
+            role=role,
+            nombre_lol=nombre_lol,
+            team_tag=team_tag,
+            known_tags=known_tags,
+        )
+
+        message = f"Rol {team_name} asignado a {member.display_name} ({position.value})."
+        if warnings:
+            message = " ".join([message, *warnings])
+        return True, message
 
     async def deny_role_request(
         self,
