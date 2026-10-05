@@ -21,8 +21,15 @@ Group=rcl
 # El bot lee .env desde este directorio (pydantic-settings), no hace falta EnvironmentFile.
 WorkingDirectory=/opt/rcl/discord-bots
 
-# --frozen: usa uv.lock tal cual, sin resolver dependencias al arrancar.
-ExecStart=/usr/local/bin/uv run --frozen liga-bot
+# --no-sync: ejecuta liga-bot con el .venv tal como está, sin crearlo ni actualizarlo.
+# Sin esta opción, uv run sincroniza el entorno antes de arrancar y, si .venv no
+# coincide con uv.lock, descarga e instala paquetes en cada arranque (con
+# Restart=always, cada 5 s si falla la red). --frozen solo evita volver a resolver
+# uv.lock, no impide esa sincronización; --no-sync ya la implica.
+# Las dependencias se instalan solo con `uv sync --frozen` (deploy/README.md).
+# Si el entorno está incompleto, el arranque falla y el error queda en el journal.
+# Alternativa equivalente: ExecStart=<WorkingDirectory>/.venv/bin/liga-bot
+ExecStart=/usr/local/bin/uv run --no-sync liga-bot
 
 # uv necesita HOME para su caché; systemd no siempre lo define.
 Environment=HOME=/home/rcl
