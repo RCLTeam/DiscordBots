@@ -20,7 +20,12 @@ from discord.ext import commands, tasks
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from liga_bot.config import Settings, get_settings
-from liga_bot.database import close_engine, get_engine, get_session_factory
+from liga_bot.database import (
+    close_engine,
+    describe_database_url,
+    get_engine,
+    get_session_factory,
+)
 from liga_bot.services.caster_service import CasterService
 from liga_bot.services.role_service import RoleService
 from liga_bot.services.roster_sync_service import RosterSyncService
@@ -132,7 +137,10 @@ class LigaBot(commands.Bot):
 
         # 1. Base de datos
         if self.engine is None:
-            logger.info("Inicializando motor de base de datos (%s)...", self.settings.database_url)
+            logger.info(
+                "Inicializando motor de base de datos: %s...",
+                describe_database_url(self.settings.database_url),
+            )
             self.engine = await get_engine(self.settings)
 
         if self.session_factory is None:

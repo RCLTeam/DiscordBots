@@ -17,6 +17,8 @@ from pathlib import Path
 
 from py_pglite.config import PGliteConfig
 from py_pglite.sqlalchemy.manager_async import SQLAlchemyAsyncPGliteManager
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError
 from sqlalchemy.ext.asyncio import (
     AsyncConnection,
     AsyncEngine,
@@ -79,6 +81,37 @@ def _parse_pglite_path(database_url: str) -> str | None:
     return None
 
 
+def describe_database_url(database_url: str) -> str:
+    """
+    Describe la URL de conexión sin credenciales, apta para logs y mensajes de error.
+
+    Para PGlite indica el modo (memoria o ruta local). Para el resto solo muestra
+    dialecto, host, puerto y base de datos: nunca usuario, contraseña ni parámetros
+    de consulta, que también pueden llevar credenciales. Si la URL no se puede
+    interpretar, no se reproduce ningún fragmento de ella.
+    """
+    if database_url.startswith("pglite"):
+        path = _parse_pglite_path(database_url)
+        if not path or path == ":memory:":
+            return "PGlite (memoria)"
+        return f"PGlite (ruta local: {path})"
+
+    try:
+        url = make_url(database_url)
+    except (ArgumentError, ValueError):
+        return "<URL no interpretable>"
+
+    host = url.host or ""
+    # Una contraseña con '@' sin codificar acaba repartida en el host.
+    if "@" in host:
+        host = "***"
+    location = f"{host}:{url.port}" if url.port else host
+    described = f"{url.drivername}://{location}/{url.database or ''}"
+    if url.drivername.startswith("postgres"):
+        return f"PostgreSQL ({described})"
+    return described
+
+
 def _prepare_pglite_config(raw_path: str | None) -> PGliteConfig | None:
     """Prepara la configuración de PGlite asegurando la existencia del directorio de trabajo."""
     if not raw_path or raw_path == ":memory:":
@@ -105,11 +138,18 @@ async def get_engine(settings: Settings | None = None) -> AsyncEngine:
         settings = get_settings()
 
     if settings.is_postgres:
-        engine = create_async_engine(
-            settings.async_database_url,
-            pool_pre_ping=True,
-            echo=(settings.log_level == "DEBUG"),
-        )
+        try:
+            engine = create_async_engine(
+                settings.async_database_url,
+                pool_pre_ping=True,
+                echo=(settings.log_level == "DEBUG"),
+            )
+        except (ArgumentError, ValueError) as exc:
+            # `from None`: la excepción original podría incluir la URL con la contraseña.
+            raise ValueError(
+                "URL de base de datos no válida "
+                f"({describe_database_url(settings.database_url)}): {type(exc).__name__}."
+            ) from None
     elif settings.is_pglite:
         raw_path = _parse_pglite_path(settings.database_url)
         cfg = _prepare_pglite_config(raw_path)
@@ -122,7 +162,8 @@ async def get_engine(settings: Settings | None = None) -> AsyncEngine:
         _pglite_managers[engine] = manager
     else:
         raise ValueError(
-            f"Esquema de base de datos no soportado en URL: '{settings.database_url}'. "
+            "Esquema de base de datos no soportado en URL: "
+            f"'{describe_database_url(settings.database_url)}'. "
             "Se requiere prefijo 'postgresql://', 'postgres://' o 'pglite://'."
         )
 
