@@ -5,6 +5,7 @@ Define la subclase LigaBot(commands.Bot) con:
 - Intents privilegiados obligatorios (members, message_content).
 - Inyección de dependencias (settings, engine, session_factory, schedule_service, ticket_service).
 - Carga asíncrona de extensiones en setup_hook().
+- Árbol de slash commands LigaCommandTree con manejador global de errores.
 - Parada ordenada y liberación de recursos en close().
 - Desacoplamiento de sincronización de comandos en on_ready() para prevenir rate limits.
 """
@@ -20,6 +21,7 @@ from discord.ext import commands, tasks
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from liga_bot import background_tasks
+from liga_bot.command_tree import LigaCommandTree
 from liga_bot.config import Settings, get_settings
 from liga_bot.database import (
     close_engine,
@@ -79,6 +81,9 @@ class LigaBot(commands.Bot):
         # Intents privilegiados obligatorios para la operativa de la liga
         intents.members = True
         intents.message_content = True
+
+        # Árbol de slash commands con manejador global de errores (command_tree.py)
+        kwargs.setdefault("tree_cls", LigaCommandTree)
 
         super().__init__(
             command_prefix=command_prefix,
