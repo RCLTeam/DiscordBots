@@ -22,7 +22,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from liga_bot.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from liga_bot.models.base import Base, TimestampMixin, UpdatedAtMixin, UUIDPrimaryKeyMixin
 from liga_bot.models.enums import (
     Division,
     MatchStatus,
@@ -39,7 +39,7 @@ DEFAULT_PREMIER_SEASON_DIVISION_ID = uuid.UUID("20000000-0000-4000-8000-00000000
 DEFAULT_ASCEND_SEASON_DIVISION_ID = uuid.UUID("20000000-0000-4000-8000-000000000002")
 
 
-class Match(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+class Match(Base, UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin):
     """Representa un enfrentamiento programado entre dos equipos en una jornada."""
 
     __tablename__ = "matches"

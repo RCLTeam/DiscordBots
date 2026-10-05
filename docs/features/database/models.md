@@ -52,6 +52,16 @@ class Base(DeclarativeBase):
 - **`TimestampMixin`:**
   - `created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)`
   - Registra la fecha y hora de inserción en zona horaria UTC delegada al servidor PostgreSQL (`func.now()`).
+  - Solo define `created_at`: lo usan también tablas propias del bot (`ticket_notices`) que no tienen `updated_at`.
+- **`UpdatedAtMixin`:**
+  - `updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)`
+  - Utilizado en `Team` y `Match`, cuyas tablas compartidas tienen `updated_at`. En producción la columna la mantiene el trigger `set_updated_at` de RCL-Next (`BEFORE UPDATE`), que sobrescribe el valor que envíe el bot; `onupdate` cubre las bases de datos locales y de tests, que no tienen ese trigger.
+
+### 1.4 Alineación con las tablas compartidas
+
+Las tablas compartidas las crea la migración `alembic/versions/0000_initial_shared_tables.py` en las bases de datos locales y de tests (en producción ya existen y la migración no hace nada), reproduciendo el esquema de RCL-Next. Los modelos describen esas tablas con las mismas columnas, tipos y nulabilidad: `tests/test_shared_schema_alignment.py` lo comprueba tabla a tabla por reflexión sobre la base de datos migrada. No compara valores por defecto ni nombres de índices o restricciones.
+
+`Season` (`seasons`, en `src/liga_bot/models/roster.py`) declara `starts_on` y `ends_on` como `Date` (`Mapped[date | None]`), igual que la tabla.
 
 ---
 
@@ -117,16 +127,18 @@ Representa un club o equipo participante en las competiciones de la liga.
 | Columna | Tipo SQLAlchemy | Tipo PostgreSQL | Nulo | Default / Server Default | Descripción |
 |---|---|---|:---:|---|---|
 | `id` | `Uuid` | `uuid` | No | `uuid.uuid4` (PK Mixin) | Clave primaria universal v4. |
-| `name` | `String(100)` | `varchar(100)` | No | — (Unique) | Nombre completo oficial del equipo. |
-| `tag` | `String(4)` | `varchar(4)` | No | — | Siglas o acrónimo del club (máximo 4 caracteres). |
-| `slug` | `String(100)` | `varchar(100)` | No | — | Identificador alfanumérico amigable para URLs. |
+| `name` | `String(120)` | `varchar(120)` | No | — (Unique) | Nombre completo oficial del equipo. |
+| `tag` (columna `short_name`) | `String(16)` | `varchar(16)` | No | — | Siglas o acrónimo del club. `slug` es una propiedad Python derivada de `tag`, no una columna. |
 | `season_division_id` | `Uuid` | `uuid` | No | — | FK a `seasons_divisions.id` (`ON DELETE CASCADE`). La propiedad `Team.division` deduce de ella la división (`PREMIER` o `ASCEND`); ver [conversión del nombre](./enums.md#11-division). |
 | `discord_role_id` | `BigInteger` | `bigint` | No | — (Unique) | Snowflake del rol de Discord representativo del equipo. |
+| `logo_url` | `Text` | `text` | Sí | `None` | Logo del equipo. Lo gestiona la web; el bot no lo usa. |
+| `color` | `String(7)` | `varchar(7)` | Sí | `None` | Color del equipo. Lo gestiona la web; el bot no lo usa. |
+| `is_active` | `Boolean` | `boolean` | No | `True` / `true` | Equipo activo. Lo gestiona la web; el bot no lo usa. |
 | `created_at` | `DateTime(timezone=True)` | `timestamptz` | No | `func.now()` (Timestamp Mixin) | Fecha de registro del club. |
+| `updated_at` | `DateTime(timezone=True)` | `timestamptz` | No | `func.now()` (`onupdate=func.now()`, UpdatedAt Mixin) | Fecha de última modificación. |
 
 **Restricciones e Índices:**
-- `CheckConstraint("char_length(tag) <= 4", name="ck_teams_tag_length")`: Validación DDL estricta de longitud del tag.
-- `Index("ix_teams_slug", "slug")`: Búsqueda indexada por slug.
+- `UniqueConstraint` sobre `name` y sobre `discord_role_id`.
 - `Index("ix_teams_season_division_id", "season_division_id")`: Filtrado indexado por división de temporada.
 
 **Relaciones ORM:**
@@ -244,7 +256,7 @@ Monitorea la actividad de los canales de soporte (tickets) para disparar avisos 
 
 ### 2.8 `Match` (`matches`)
 *Archivo fuente:* `src/liga_bot/models/match.py`  
-*Gobernanza:* Propietaria de DiscordBots (Migraciones Alembic `001_initial_schema.py` y `003_add_stream_urls.py`).
+*Gobernanza:* Compartida con RCL-Next (creada en local y en tests por `0000_initial_shared_tables.py`; `0002_match_round.py` solo añade `id_round` cuando falta).
 
 Representa un enfrentamiento competitivo programado entre dos clubes dentro de una jornada.
 
@@ -261,7 +273,7 @@ Representa un enfrentamiento competitivo programado entre dos clubes dentro de u
 | `stream_url` | `Text` | `text` | Sí | `None` | URL de la retransmisión grabada o VOD del partido. |
 | `stream_url_live` | `String(255)` | `varchar(255)` | Sí | `None` | URL del directo o retransmisión en vivo del partido (Twitch, YouTube Live, etc.). |
 | `created_at` | `DateTime(timezone=True)` | `timestamptz` | No | `func.now()` (Timestamp Mixin) | Fecha de creación del emparejamiento. |
-| `updated_at` | `DateTime(timezone=True)` | `timestamptz` | No | `func.now()` (`onupdate=func.now()`) | Fecha de última modificación. |
+| `updated_at` | `DateTime(timezone=True)` | `timestamptz` | No | `func.now()` (`onupdate=func.now()`, UpdatedAt Mixin) | Fecha de última modificación; en producción la actualiza el trigger `set_updated_at` de RCL-Next. |
 
 **Restricciones DDL e Índices:**
 - `UniqueConstraint("jornada", "team1_id", "team2_id", name="uq_matches_jornada_teams")`: Impide duplicar el mismo enfrentamiento en una misma jornada.
@@ -308,7 +320,7 @@ Registro de auditoría transaccional para operaciones críticas y cambios de est
 |---|---|---|---|---|
 | `DiscordUser` | `discord_users` | `String(32)` (`discord_id`) | Ninguna | Snowflake canónico |
 | `Player` | `players` | `Uuid` | `discord_users.discord_id` (SET NULL) | Unique (`game_name`, `riot_tag`) |
-| `Team` | `teams` | `Uuid` | Ninguna | Unique `name`, Unique `discord_role_id`, Check `tag <= 4` |
+| `Team` | `teams` | `Uuid` | `seasons_divisions.id` (CASCADE) | Unique `name`, Unique `discord_role_id` |
 | `TeamMembership` | `team_memberships` | Compuesta `(team_id, discord_user_id)` | `teams.id` (CASCADE), `discord_users.discord_id` (CASCADE) | Check capitanía para 5 titulares, Unique parcial (`is_captain = true`) |
 | `RosterMovement` | `roster_movements` | `Uuid` | `teams.id` (CASCADE), `discord_users.discord_id` (CASCADE), `actor_id` (SET NULL) | Ledger append-only |
 | `RoleRequest` | `role_requests` | `Integer` (Autoincrement) | Ninguna | Snowflakes en `user_id`, `canal_id`, `staff_id` |

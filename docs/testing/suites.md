@@ -72,6 +72,8 @@ Pruebas sobre el motor real PostgreSQL (PGlite) migrado con Alembic o integraci�
 | `tests/test_bot_bridge_lifecycle.py` | 7 | 288 | Arranque conjunto de `LigaBot` y `WebsocketBridgeService`, inyección de dependencias y apagado coordinado. |
 | `tests/test_role_verification_e2e.py` | 16 | 1.152 | Flujo E2E completo: comando `/pedir-rol` -> mensaje embed a canal staff -> botón de aprobación -> asignación de rol y base de datos. |
 | `tests/test_roster_sync_e2e.py` | 9 | 1.307 | Flujo E2E de sincronización: evento Discord `on_member_update` -> sincronización de plantilla -> registro de movimiento y auditoría. |
+| `tests/test_shared_schema_alignment.py` | 14 | 90 | Modelos frente a las tablas compartidas migradas (`0000_initial_shared_tables`): columnas, tipos y nulabilidad por reflexión, `Date` en `seasons`, `updated_at` en `matches` y `teams`, y `teams.name` de 120 caracteres. |
+| `tests/test_alembic_logging.py` | 1 | 30 | Aplicar las migraciones (`migrated_db`) no desactiva `liga_bot.bot` y `caplog` sigue recibiendo sus registros. |
 | **Subtotal Integration** | **171** | **5.853** | |
 
 ---

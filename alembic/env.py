@@ -20,9 +20,11 @@ sys.path.insert(0, SRC_PATH)
 # Importar configuración de Alembic
 config = context.config
 
-# Configurar logging si existe archivo ini
+# Configurar logging si existe archivo ini. disable_existing_loggers=False evita que
+# fileConfig desactive los loggers ya creados (p. ej. liga_bot.*) cuando las migraciones
+# se aplican dentro de otro proceso, como la sesión de pytest.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # Enlace dinámico y seguro a los metadatos de los modelos
 target_metadata = None

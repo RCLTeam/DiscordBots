@@ -52,3 +52,18 @@ class TimestampMixin:
         server_default=func.now(),
         nullable=False,
     )
+
+
+class UpdatedAtMixin:
+    """Mixin que añade updated_at a las tablas compartidas que la tienen (teams, matches).
+
+    En producción la columna la mantiene el trigger ``set_updated_at`` de RCL-Next;
+    ``onupdate`` cubre las bases de datos locales y de tests, que no tienen ese trigger.
+    """
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
