@@ -62,6 +62,27 @@ sudo systemctl stop liga-bot       # parar
 Tras arrancar por primera vez, registra los slash commands escribiendo `!sync`
 en cualquier canal del servidor de Discord.
 
+### Credenciales y logs
+
+Al arrancar, el bot registra qué motor de base de datos inicializa con la URL
+saneada (motor, host, puerto y base de datos, por ejemplo
+`PostgreSQL (postgresql+asyncpg://localhost:5432/rcl)`); nunca el usuario, la
+contraseña ni los parámetros de `DATABASE_URL`. Tampoco aparecen en los errores
+de una `DATABASE_URL` mal escrita.
+
+Las versiones anteriores escribían `DATABASE_URL` completa en el journal en cada
+arranque. Si el servidor ejecutó alguna de ellas, la contraseña sigue en los logs
+antiguos: cámbiala y actualiza `.env`.
+
+```bash
+sudo -u postgres psql -c '\password rcl_user'      # pide la contraseña sin mostrarla
+sudoedit /opt/rcl/discord-bots/.env      # actualiza DATABASE_URL
+sudo systemctl restart liga-bot
+```
+
+Revisa también quién puede leer el journal (`root` y los grupos `adm` y
+`systemd-journal`): `getent group adm systemd-journal`.
+
 ## 5. Actualizar a una versión nueva
 
 ```bash

@@ -96,7 +96,7 @@ La instancia de `LigaBot` actúa como el contenedor central de servicios para to
 El método `setup_hook()` (`src/liga_bot/bot.py:91-175`) es invocado automáticamente por `discord.py` tras autenticarse pero antes de abrir el Gateway. Se ejecuta en 4 fases secuenciales estrictas:
 
 ### Fase 1: Infraestructura de Base de Datos (`src/liga_bot/bot.py:105-110`)
-Verifica si `self.engine` es `None`. Si no ha sido pre-inyectado (típico en producción), inicializa el motor mediante `await get_engine(self.settings)` y crea la factoría con `self.session_factory = get_session_factory(self.engine)`.
+Verifica si `self.engine` es `None`. Si no ha sido pre-inyectado (típico en producción), registra a nivel `INFO` el motor que se va a inicializar con la URL saneada por `describe_database_url` (motor, host, puerto y base de datos, nunca credenciales; ver [Motor de base de datos](database-engine.md)), inicializa el motor mediante `await get_engine(self.settings)` y crea la factoría con `self.session_factory = get_session_factory(self.engine)`.
 
 ### Fase 2: Instanciación de Servicios de Dominio (`src/liga_bot/bot.py:113-153`)
 Inicializa de forma perezosa (*lazy*) cada uno de los 6 servicios de dominio, preservando cualquier instancia inyectada previamente (estrategia utilizada en pruebas de integración):
