@@ -49,14 +49,14 @@ Pruebas en memoria con mocks puros, tiempo submilisegundo por test, sin interacc
 | `tests/test_bridge_protocol.py` | 46 | 238 | Validación de tramas JSON, formato UUID v4 RFC 4122 y discriminadores polimórficos de comandos entrantes. |
 | `tests/test_rate_limiter.py` | 7 | 141 | Algoritmo de limitación de tasa por ventana deslizante en memoria (`SlidingWindowRateLimiter`). |
 | `tests/test_websocket_bridge_service.py` | 19 | 590 | Autenticación bifásica, silencio pre-autenticación, código de cierre por timeout 4001 y despacho de sugerencias. |
-| `tests/test_cogs.py` | 35 | 1.053 | Comandos slash base y captura global de excepciones en extensiones de Discord. |
+| `tests/test_cogs.py` | 44 | 1.256 | Comandos slash base y captura global de excepciones en extensiones de Discord. |
 | `tests/test_roles_cog.py` | 27 | 789 | Comandos slash de verificación (`/pedir-rol`, `/asignar-rol`) y flujo de solicitud de roles. |
 | `tests/test_roster_cog.py` | 23 | 642 | Comando slash `/gestionar-posicion` y escucha de eventos `on_member_update`. |
 | `tests/test_role_config_permissions.py` | 18 | 294 | Verificación de permisos de staff (`staff_role_id`, `ceo_role_id`) para aprobación de roles. |
 | `tests/test_staff_permissions_policy.py` | 91 | 327 | Matriz de la política de autorización del staff: cada tipo de acción y cada función pública contra todas las combinaciones de rol y permiso nativo, `resolve_member` , la comprobación de `!sync` y el tipo de acción que comprueba cada comando slash con efectos. |
 | `tests/test_roles_ui.py` | 25 | 614 | Vistas interactivas de Discord (`RoleVerificationView`) y modales de entrada de datos. |
 | `tests/test_roster_ui.py` | 30 | 870 | Vistas interactivas de plantillas (`GestionarPosicionView`) y menús de selección de roles competitivos. |
-| **Subtotal Unit** | **647** | **12.487** | |
+| **Subtotal Unit** | **656** | **12.690** | |
 
 ---
 
@@ -111,12 +111,12 @@ Pruebas destructivas diseñadas para vulnerar restricciones de base de datos, co
 | `tests/test_roster_ui_adversarial.py` | 11 | 602 | Respuestas efímeras, clics simultáneos por múltiples usuarios. |
 | `tests/test_adversarial_roster_audit_and_history.py` | 10 | 690 | Inmutabilidad de `AuditLog`, paginación profunda de historial y no-orfandad. |
 | `tests/test_adversarial_bot_lifecycle.py` | 17 | 469 | Fallos forzados en `setup_hook`, inyección de dependencias corruptas y paradas abruptas. |
-| `tests/test_adversarial_schedule.py` | 31 | 866 | Formatos de fecha maliciosos, solapamiento de partidos y zonas horarias desfasadas. |
+| `tests/test_adversarial_schedule.py` | 33 | 937 | Formatos de fecha maliciosos, solapamiento de partidos y zonas horarias desfasadas. |
 | `tests/test_adversarial_ticket_and_cli.py` | 16 | 972 | Excepciones deliberadas en semillas CLI y desbordamientos en avisos de tickets. |
 | `tests/test_adversarial_cog_boundaries.py` | 20 | 830 | Límites perimetrales de cogs (`TeamsCog` y `TicketsCog`). |
 | `tests/test_adversarial_cogs.py` | 14 | 878 | Comportamientos ante fallos de permisos perimetrales y guild desincronizado. |
 | `tests/conftest.py` | - | 80 | Módulo raíz de fixtures globales: sesión PGlite, mocks de Discord, factory de sesiones y limpieza de tablas. |
-| **Subtotal Adversarial** | **333** | **12.758** | |
+| **Subtotal Adversarial** | **335** | **12.829** | |
 | **TOTAL GENERAL** | **1.138** | **33.982** | **49 archivos de test (33.902 LoC) + conftest.py (80 LoC) = 50 archivos** |
 
 ---
