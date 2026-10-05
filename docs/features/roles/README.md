@@ -16,7 +16,7 @@ El diseño sigue una arquitectura desacoplada en tres capas que asegura aislamie
 |---|---|
 | [Comandos (`commands.md`)](./commands.md) | Especificación de comandos slash (`/pedir-rol`, `/publicar-panel-rol`, `/asignar-rol`), permisos por defecto, controles en runtime (`is_staff`) y oyente `on_member_join`. |
 | [Servicios de Dominio (`services.md`)](./services.md) | Lógica de negocio en `RoleService`: creación de canales privados, jerarquía de permisos, prevención de tickets duplicados, rollback atómico anti-canales huérfanos, confirmación de tickets y asignación directa de equipo. |
-| [Componentes de Interfaz (`ui.md`)](./ui.md) | Componentes visuales interactivos: modales (`SolicitudRolModal`), selector de 21 opciones (`EquipoSelect`), vistas persistentes y botones dinámicos (`ConfirmarRolButton`). |
+| [Componentes de Interfaz (`ui.md`)](./ui.md) | Componentes visuales interactivos: modales (`SolicitudRolModal`), selector de equipos con límites de longitud de Discord (`EquipoSelect`), selector de posición con rollback del ticket (`PosicionSelect`), vistas persistentes y botones dinámicos (`ConfirmarRolButton`). |
 | [Persistencia Relacional (`persistence.md`)](./persistence.md) | Esquema relacional de la tabla `role_requests`, tipos BigInteger para Snowflakes, ciclo de vida con enum nativo `RoleRequestStatus` e índice B-Tree. |
 
 ---
@@ -59,8 +59,8 @@ El diseño sigue una arquitectura desacoplada en tres capas que asegura aislamie
 
 ## Garantías Operativas Principales
 
-1. **Rollback Atómico de Canales**: Si la inserción en la base de datos falla al abrir un ticket, el canal creado en Discord se destruye de inmediato vía `channel.delete()`, evitando canales huérfanos desvinculados de la persistencia.
-2. **Resiliencia ante Reinicios (`DynamicItem`)**: El botón de confirmación de rol (`ConfirmarRolButton`) almacena los identificadores en su `custom_id` mediante expresiones regulares, permitiendo que cualquier botón creado antes de un reinicio del bot continúe operando sin recarga de memoria.
+1. **Rollback Atómico de Canales**: Si la inserción en la base de datos falla al abrir un ticket, o no se puede publicar el mensaje con los botones, el canal creado en Discord se destruye vía `channel.delete()` (y, en el segundo caso, se elimina la solicitud pendiente), evitando canales huérfanos y jugadores bloqueados.
+2. **Resiliencia ante Reinicios (`DynamicItem`)**: El botón de confirmación de rol (`ConfirmarRolButton`) almacena el ID del solicitante en su `custom_id` (`confirmar_rol:{user_id}`, sin el nombre del equipo para no superar los 100 caracteres de Discord), permitiendo que cualquier botón creado antes de un reinicio del bot continúe operando sin recarga de memoria.
 3. **Control Estricto de Apodos**: El apodo es `<TAG> <NombreLoL>` al entrar en un equipo (ticket confirmado o `/asignar-rol`) y el nombre de invocador para Libre, truncado a 32 caracteres (`[:32]`) por el límite de la API de Discord.
 4. **Ciclo de Vida Determinista**: Las solicitudes transicionan únicamente entre `PENDING`, `APPROVED` y `DENIED`, evitando inconsistencias con el motor relacional.
 5. **Solo Equipos Registrados**: Tanto la confirmación de tickets como `/asignar-rol` resuelven el rol por el `discord_role_id` del equipo registrado; nunca se asigna un rol del servidor por coincidencia de nombre.

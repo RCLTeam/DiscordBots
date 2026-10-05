@@ -37,7 +37,7 @@ def __init__(
 Se invoca automáticamente cuando un nuevo usuario ingresa al servidor de Discord de la liga.
 
 - **Firma**: `async def handle_member_join(self, member: discord.Member) -> bool`
-- **Ubicación**: `src/liga_bot/services/role_service.py:49-108`.
+- **Ubicación**: `src/liga_bot/services/role_service.py:64-105`.
 
 ### Pasos de Ejecución
 
@@ -60,7 +60,7 @@ Se invoca automáticamente cuando un nuevo usuario ingresa al servidor de Discor
 Permite la vinculación directa de un usuario como agente libre sin abrir un canal de ticket de soporte.
 
 - **Firma**: `async def assign_free_role(self, member: discord.Member, nombre_lol: str, riot_tag: str) -> tuple[bool, str]`
-- **Ubicación**: `src/liga_bot/services/role_service.py:110-189`.
+- **Ubicación**: `src/liga_bot/services/role_service.py:264-349`.
 
 ### Pasos de Ejecución
 
@@ -110,7 +110,7 @@ Crea un canal privado de texto exclusivo para tramitar la solicitud de incorpora
       equipo: str,
   ) -> tuple[bool, str, discord.TextChannel | None]
   ```
-- **Ubicación**: `src/liga_bot/services/role_service.py:191-297`.
+- **Ubicación**: `src/liga_bot/services/role_service.py:351-469`.
 
 ### 4.1 Prevención de Solicitudes Duplicadas
 
@@ -175,6 +175,13 @@ except Exception as exc:
     return False, "Error al registrar la solicitud en base de datos.", None
 ```
 
+### 4.5 Rollback si no se publica el mensaje del ticket: `discard_role_request_ticket`
+
+- **Firma**: `async def discard_role_request_ticket(self, channel: discord.abc.GuildChannel) -> None`
+- **Ubicación**: `src/liga_bot/services/role_service.py:471-496`.
+- La invoca `PosicionSelect.callback` cuando `channel.send` falla al publicar el mensaje con los botones del ticket.
+- Elimina la solicitud `PENDING` asociada al canal (para que `get_active_by_user` deje de bloquear una nueva solicitud) y después el canal. Es defensiva: registra los fallos en el log sin propagarlos. La cuenta de juego registrada al abrir el ticket se conserva.
+
 ---
 
 ## 5. Resolución de Solicitudes
@@ -182,7 +189,7 @@ except Exception as exc:
 ### 5.1 Aprobación y Confirmación: `confirm_role_request`
 
 - **Firma**: `async def confirm_role_request(self, guild: discord.Guild, channel_id: int, staff_member: discord.Member) -> tuple[bool, str]`
-- **Ubicación**: `src/liga_bot/services/role_service.py:580-694` (resolución del equipo en `_resolve_team_role`, `:471-510`; cambios en Discord en `_apply_team_role_in_discord`, `:512-578`).
+- **Ubicación**: `src/liga_bot/services/role_service.py:607-721` (resolución del equipo en `_resolve_team_role`, `:498-537`; cambios en Discord en `_apply_team_role_in_discord`, `:539-605`).
 
 #### Flujo Operativo:
 1. **Validación de Estado**: Consulta en la base de datos `req = await repo.get_by_channel_id(channel_id)`. Si no existe o su estado es distinto de `RoleRequestStatus.PENDING`, aborta indicando que no hay solicitud pendiente asociada.
@@ -221,7 +228,7 @@ Usado por `/asignar-rol` cuando el destino es un equipo. Deja lo mismo que confi
       posicion: str | None,
   ) -> tuple[bool, str]
   ```
-- **Ubicación**: `src/liga_bot/services/role_service.py:696-811`.
+- **Ubicación**: `src/liga_bot/services/role_service.py:723-838`.
 
 #### Flujo Operativo:
 1. **No autoasignación**: si `staff_member.id == member.id`, retorna `(False, "No puedes asignarte un rol a ti mismo.")`.
@@ -241,7 +248,7 @@ Usado por `/asignar-rol` cuando el destino es un equipo. Deja lo mismo que confi
 ### 5.2 Denegación de Solicitud: `deny_role_request`
 
 - **Firma**: `async def deny_role_request(self, guild: discord.Guild, channel_id: int, staff_member: discord.Member) -> tuple[bool, str]`
-- **Ubicación**: `src/liga_bot/services/role_service.py:813-848`.
+- **Ubicación**: `src/liga_bot/services/role_service.py:840-875`.
 
 #### Flujo Operativo:
 1. Registra en el sistema de auditoría la acción del staff: `logger.info("Denegando solicitud de rol en canal %s... por staff %s", channel_id, staff_member.id)`.

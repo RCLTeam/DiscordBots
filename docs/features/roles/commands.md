@@ -23,7 +23,7 @@ async def cog_load(self) -> None:
 
 1. **`PanelPedirRolView`**: Registra el callback persistente para el botón del panel público (`custom_id="solicitud_rol:panel_pedir_rol"`).
 2. **`TicketView`**: Registra la vista estática con el botón de denegación (`custom_id="solicitud_rol:ticket_view:denegar"`).
-3. **`ConfirmarRolButton`**: Registra el manejador dinámico basado en expresiones regulares (`DynamicItem`) para reconstruir botones de confirmación específicos por usuario y equipo (`confirmar_rol:{user_id}:{equipo}`).
+3. **`ConfirmarRolButton`**: Registra el manejador dinámico basado en expresiones regulares (`DynamicItem`) para reconstruir botones de confirmación específicos por usuario (`confirmar_rol:{user_id}`; también acepta el formato anterior `confirmar_rol:{user_id}:{equipo}`).
 
 ---
 
@@ -31,7 +31,7 @@ async def cog_load(self) -> None:
 
 `RolesCog` escucha el evento `on_member_join` para iniciar el protocolo de bienvenida y control de acceso inicial.
 
-- **Ubicación**: `src/liga_bot/cogs/roles.py:64-70`.
+- **Ubicación**: `src/liga_bot/cogs/roles.py:74-79`.
 - **Firma**: `async def on_member_join(self, member: discord.Member) -> None`
 - **Flujo de Ejecución**:
   1. Resuelve la instancia inyectada de `RoleService` desde `self.bot.role_service`.
@@ -46,7 +46,7 @@ async def cog_load(self) -> None:
 
 Abre directamente el modal interactivo nativo de Discord para que un miembro inicie su solicitud de vinculación deportiva.
 
-- **Ubicación**: `src/liga_bot/cogs/roles.py:71-78`.
+- **Ubicación**: `src/liga_bot/cogs/roles.py:81-87`.
 - **Ámbito y Restricciones**:
   - Comando público ejecutable por cualquier miembro de la guild.
   - Sin anotación `@app_commands.default_permissions` (acceso universal).
@@ -61,7 +61,7 @@ Abre directamente el modal interactivo nativo de Discord para que un miembro ini
 
 Publica el mensaje visual incrustado (*embed*) con el botón interactivo persistente que permite a los usuarios abrir el modal de solicitud de rol.
 
-- **Ubicación**: `src/liga_bot/cogs/roles.py:211-252`.
+- **Ubicación**: `src/liga_bot/cogs/roles.py:181-216`.
 - **Permisos por Defecto**: `@app_commands.default_permissions(manage_guild=True)`.
 - **Control de Acceso en Runtime**:
   - Valida la autorización ejecutando `is_staff(interaction.user, self.settings)`.
@@ -85,7 +85,7 @@ Publica el mensaje visual incrustado (*embed*) con el botón interactivo persist
 
 Comando administrativo para asignar directamente un equipo registrado o el rol de agente libre, sin abrir un ticket. Para un equipo deja en Discord y en base de datos lo mismo que confirmar un ticket con ese equipo y posición.
 
-- **Ubicación**: `src/liga_bot/cogs/roles.py:89-178`.
+- **Ubicación**: `src/liga_bot/cogs/roles.py:89-179`.
 - **Permisos por Defecto**: `@app_commands.default_permissions(manage_guild=True)`.
 - **Control de Acceso en Runtime**:
   - Comprobación obligatoria vía `is_staff(interaction.user, self.settings)`.
