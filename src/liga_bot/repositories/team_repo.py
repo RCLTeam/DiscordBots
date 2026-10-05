@@ -30,15 +30,41 @@ class TeamRepository(BaseRepository[Team]):
         return team
 
     async def update(self, entity: Team, **kwargs: Any) -> Team:
-        """Actualiza los campos de un equipo existente.
+        """Actualiza un equipo; ``division`` lo mueve a otra fila de ``seasons_divisions``.
 
-        Permite invocar con o sin slug para compatibilidad.
+        El bot no modifica ``seasons_divisions`` (la gestiona la web): para cambiar la
+        división se reasigna el equipo a la fila de la misma temporada cuyo nombre
+        corresponde a la división pedida. Acepta ``slug`` por compatibilidad.
         """
         slug = kwargs.pop("slug", None)
+        division = kwargs.pop("division", None)
+        if division is not None:
+            await self._assign_division(entity, _require_division(division))
         team = await super().update(entity, **kwargs)
         if slug is not None and hasattr(team, "slug"):
             team.slug = slug
         return team
+
+    async def _assign_division(self, team: Team, division: Division) -> None:
+        current = team.season_division
+        if current is not None and Division.from_name(current.division_name) == division:
+            return
+
+        stmt = select(SeasonDivision).where(
+            func.upper(func.trim(SeasonDivision.division_name)) == division.value
+        )
+        if current is not None:
+            stmt = stmt.where(SeasonDivision.season_name == current.season_name)
+        else:
+            stmt = stmt.order_by(SeasonDivision.created_at.desc())
+        target = (await self._session.execute(stmt)).scalars().first()
+        if target is None:
+            season = current.season_name if current is not None else "?"
+            raise ValueError(
+                f"No hay ninguna división {division.value} en la temporada {season!r} "
+                "de seasons_divisions."
+            )
+        team.season_division = target
 
     async def get_by_name(self, name: str, case_sensitive: bool = False) -> Team | None:
         """
@@ -67,12 +93,16 @@ class TeamRepository(BaseRepository[Team]):
         return result.scalars().first()
 
     async def list_by_division(self, division: Division | str) -> Sequence[Team]:
-        """Lista los equipos de una división ordenados alfabéticamente por nombre."""
-        div_val = division.value if hasattr(division, "value") else division
+        """Lista los equipos de una división ordenados alfabéticamente por nombre.
+
+        Compara el nombre de ``seasons_divisions`` sin distinguir mayúsculas ni espacios,
+        porque la web lo guarda con su propio formato (por ejemplo ``Ascend``).
+        """
+        div = _require_division(division)
         stmt = (
             select(Team)
             .join(Team.season_division)
-            .where(SeasonDivision.division_name == div_val)
+            .where(func.upper(func.trim(SeasonDivision.division_name)) == div.value)
             .order_by(Team.name.asc())
         )
         result = await self._session.execute(stmt)
@@ -83,3 +113,11 @@ class TeamRepository(BaseRepository[Team]):
         stmt = select(Team).order_by(Team.name.asc())
         result = await self._session.execute(stmt)
         return result.scalars().all()
+
+
+def _require_division(division: Division | str) -> Division:
+    """Convierte el filtro en ``Division`` o lanza ``ValueError`` si no es válido."""
+    parsed = Division.from_name(division)
+    if parsed is None:
+        raise ValueError(f"{division!r} no es una división válida")
+    return parsed

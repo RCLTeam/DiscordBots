@@ -23,7 +23,12 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from liga_bot.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
-from liga_bot.models.enums import Division, MatchStatus
+from liga_bot.models.enums import (
+    Division,
+    MatchStatus,
+    ensure_division_assignable,
+    resolve_entity_division,
+)
 
 if TYPE_CHECKING:
     from liga_bot.models.caster import MatchCaster, MatchCasterCard
@@ -145,9 +150,7 @@ class Match(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         """Inicializador con soporte para argumento 'division' legacy."""
         kwargs.pop("division", None)
         if "id_season_division" not in kwargs:
-            if division is not None and (
-                division == Division.ASCEND or str(division).upper() == "ASCEND"
-            ):
+            if Division.from_name(division) == Division.ASCEND:
                 kwargs["id_season_division"] = DEFAULT_ASCEND_SEASON_DIVISION_ID
             else:
                 kwargs["id_season_division"] = DEFAULT_PREMIER_SEASON_DIVISION_ID
@@ -159,26 +162,14 @@ class Match(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     @property
     def division(self) -> Division:
-        """Resuelve dinámicamente la división competitiva mediante season_division."""
-        sd = self.season_division
-        if sd is not None and getattr(sd, "division_name", None):
-            try:
-                return Division(sd.division_name)
-            except ValueError:
-                pass
-        if hasattr(self, "_division_override") and self._division_override is not None:
-            return self._division_override
-        return Division.PREMIER
+        """Resuelve la división a partir de season_division (sin distinguir mayúsculas)."""
+        return resolve_entity_division(
+            self.season_division,
+            getattr(self, "_division_override", None),
+            self,
+        )
 
     @division.setter
     def division(self, value: Division | str | None) -> None:
-        div_val: Division | None
-        if value is None:
-            div_val = None
-        elif isinstance(value, Division):
-            div_val = value
-        else:
-            div_val = Division(str(value))
-        self._division_override = div_val
-        if self.season_division is not None and div_val is not None:
-            self.season_division.division_name = div_val.value
+        # Nunca escribe en seasons_divisions: es una tabla compartida que gestiona la web.
+        self._division_override = ensure_division_assignable(self.season_division, value)

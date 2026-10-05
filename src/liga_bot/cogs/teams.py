@@ -115,15 +115,19 @@ class TeamsCog(commands.Cog, name="Teams"):
         # Normalización de división
         div_value = division.value if isinstance(division, app_commands.Choice) else str(division)
         div_upper = div_value.strip().upper()
+        division_enum: Division | None
         if div_upper in ("PREMIER", "PREM"):
             division_enum = Division.PREMIER
         elif div_upper in ("ASCEND", "ASCENSO", "ASC"):
             division_enum = Division.ASCEND
         else:
-            try:
-                division_enum = Division(div_upper)
-            except ValueError:
-                division_enum = Division.PREMIER
+            division_enum = Division.from_name(div_upper)
+        if division_enum is None:
+            await interaction.response.send_message(
+                f"❌ División no reconocida: '{div_value}'. Usa Premier o Ascenso.",
+                ephemeral=True,
+            )
+            return
 
         tag_normalized = normalize_tag(cleaned_tag)
 

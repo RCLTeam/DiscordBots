@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -146,8 +146,13 @@ class MatchRepository(BaseRepository[Match]):
         """Lista partidos de una jornada con filtrado opcional por división."""
         stmt = select(Match).where(Match.jornada == jornada)
         if division is not None:
-            div_val = division.value if hasattr(division, "value") else division
-            stmt = stmt.join(Match.season_division).where(SeasonDivision.division_name == div_val)
+            # La web guarda el nombre con su propio formato (por ejemplo ``Ascend``).
+            div = Division.from_name(division)
+            if div is None:
+                raise ValueError(f"{division!r} no es una división válida")
+            stmt = stmt.join(Match.season_division).where(
+                func.upper(func.trim(SeasonDivision.division_name)) == div.value
+            )
         stmt = self._apply_eager_teams(stmt, with_teams)
         stmt = stmt.order_by(Match.scheduled_at.asc().nulls_last(), Match.created_at.asc())
         result = await self._session.execute(stmt)

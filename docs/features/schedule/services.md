@@ -105,7 +105,7 @@ sequenceDiagram
     Svc->>Disc: guild.get_role(team1_role_id), guild.get_role(team2_role_id)
     
     Note over Svc,Disc: Fase 3: Resolución de Categoría
-    Svc->>Disc: Buscar / Crear "PREMIER/ASCENSO - JORNADA X"
+    Svc->>Disc: Buscar / Crear "PREMIER/ASCEND - JORNADA X"
     
     Note over Svc,Disc: Fase 4: Overwrites y Canal
     Svc->>Disc: guild.create_text_channel(overwrites)
@@ -142,7 +142,7 @@ Obtiene `role1 = guild.get_role(team1_role_id)` y `role2 = guild.get_role(team2_
 #### Fase 3: Resolución de Categoría (`src/liga_bot/services/schedule_service.py:229-251`)
 Determina el nombre canónico de la categoría según la división deportiva:
 - `PREMIER`: `"PREMIER - JORNADA {jornada}"`
-- `ASCEND`: `"ASCENSO - JORNADA {jornada}"` (acepta alternativamente `"ASCEND - JORNADA {jornada}"`)
+- `ASCEND`: `"ASCEND - JORNADA {jornada}"` (reutiliza una categoría existente `"ASCENSO - JORNADA {jornada}"` como alias, pero nunca la crea)
 
 Busca la categoría en memoria sobre `guild.categories`. Si no existe, la crea mediante `await guild.create_category(category_name)`.
 
