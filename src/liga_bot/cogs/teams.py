@@ -12,7 +12,7 @@ from discord import app_commands
 from discord.ext import commands
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from liga_bot.cogs.permissions import is_staff_or_admin
+from liga_bot.cogs.permissions import is_staff
 from liga_bot.config import Settings, get_settings
 from liga_bot.database import get_session_factory, transactional_session
 from liga_bot.models.enums import Division
@@ -80,10 +80,10 @@ class TeamsCog(commands.Cog, name="Teams"):
             )
             return
 
-        if not await is_staff_or_admin(interaction, self.settings):
+        if not await is_staff(interaction, self.settings):
             await interaction.response.send_message(
                 "❌ No tienes permisos para registrar equipos "
-                "(se requiere rol de Staff o Administrador).",
+                "(se requiere rol de Staff, Admin o CEO).",
                 ephemeral=True,
             )
             return

@@ -243,7 +243,7 @@ async def test_permission_checks_matrix():
     # 3. Admin
     member_admin = create_mock_member(3, roles=[create_mock_role(102)])
     inter = create_mock_interaction(user=member_admin)
-    assert not await is_staff(inter, settings)
+    assert await is_staff(inter, settings)
     assert await is_admin(inter, settings)
     assert await is_staff_or_admin(inter, settings)
     assert await is_authorized_scheduler(inter, settings)
