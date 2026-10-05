@@ -33,6 +33,13 @@ BRIDGE_HOST=127.0.0.1             # 0.0.0.0 solo si la web corre en otra máquin
 
 El fichero contiene credenciales: `sudo chown rcl:rcl .env && sudo chmod 600 .env`.
 
+Si la contraseña de PostgreSQL contiene `@ / ? # % :`, codifícalos en
+`DATABASE_URL` (`%40 %2F %3F %23 %25 %3A`). Por ejemplo, `pa@ss/1` se escribe
+`pa%40ss%2F1`. Sin codificar, la URL se interpreta mal y el bot no puede describirla
+en el log (solo muestra `*** [credenciales sin codificar]`).
+Para obtener el valor codificado:
+`python3 -c "import urllib.parse, getpass; print(urllib.parse.quote(getpass.getpass(), safe=''))"`.
+
 Instala dependencias y aplica migraciones **antes** de arrancar el servicio:
 
 ```bash
