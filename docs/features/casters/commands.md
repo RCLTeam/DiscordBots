@@ -189,7 +189,7 @@ sequenceDiagram
         alt card existe
             Cog->>Chan: fetch_message(card.message_id)
             alt Mensaje encontrado
-                Cog->>Chan: msg.edit(embed=embed) [Sincronización In-Place]
+                Cog->>Chan: msg.edit(embed=embed, view=view) [Sincronización In-Place]
             else Mensaje eliminado (NotFound / HTTPException)
                 Cog->>Svc: delete_card(match.id, target_channel.id)
                 Cog->>Chan: send(embed=embed, view=view)
@@ -219,7 +219,10 @@ sequenceDiagram
 5. **Bifurcación de Sincronización vs Publicación**:
    - **Caso A (Tarjeta previamente registrada)**:
      - Realiza `await target_channel.fetch_message(card.message_id)`.
-     - Si el mensaje responde con éxito en Discord: ejecuta `await msg.edit(embed=embed)`. Esto actualiza cualquier cambio en la base de datos (por ejemplo, si el horario `scheduled_at` fue modificado o reprogramado) sin alterar la vista ni los casters asignados. Incrementa el contador `synced_count`.
+     - Si el mensaje responde con éxito en Discord: ejecuta `await msg.edit(embed=embed, view=view)`. Se actualizan a la vez el embed y los botones, sin tocar los casters asignados en la base de datos:
+       - El embed refleja cualquier cambio en la base de datos (por ejemplo, si el horario `scheduled_at` fue modificado o reprogramado).
+       - Los botones se regeneran a partir del estado actual: con streamer asignado, «Retransmitir» y «Ambas mezcladas» quedan deshabilitados; sin streamer, habilitados. Así se corrigen las tarjetas cuyo estado cambió sin pulsar un botón (por ejemplo, si falló la edición del mensaje tras una asignación o se modificó `match_casters` directamente) y las publicadas antes de un cambio en las etiquetas, emojis o estilos de los botones.
+       - Incrementa el contador `synced_count`.
      - Si el mensaje lanza `discord.NotFound` o `discord.HTTPException`: el mensaje fue purgado manualmente de Discord. El sistema entra en modo de **autorreparación (*self-healing*)**: elimina la tarjeta huérfana de la base de datos (`delete_card`), publica un nuevo mensaje en el canal (`target_channel.send`) y registra el nuevo identificador (`record_card`). Incrementa `published_count`.
    - **Caso B (Partido sin tarjeta previa)**:
      - Publica un mensaje nuevo con `await target_channel.send(embed=embed, view=view)`.
