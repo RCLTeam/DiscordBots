@@ -182,6 +182,16 @@ Envía una sugerencia comunitaria para ser procesada y publicada en Discord.
 - `avatar_url`: URL opcional para el avatar en el embed de Discord.
 - `created_at`: marca temporal ISO 8601 opcional.
 
+*Textos largos (límites de los embeds de Discord):* `SuggestionService.post_suggestion` (`src/liga_bot/services/suggestion_service.py:106-116`) recorta los campos del embed antes de enviarlo, en lugar de rechazar la sugerencia:
+
+| Campo del embed | Origen | Límite | Recorte |
+|---|---|---|---|
+| Descripción | `suggestion` | 4096 | Se corta y termina en `… [texto recortado]` |
+| Nombre del autor | `author_username` | 256 | Se corta y termina en `…` |
+| Campo «Autor» | `<@author_id> (author_username)` | 1024 | Se corta y termina en `…` |
+
+Con estos recortes el embed completo queda por debajo del límite total de 6000 caracteres. La sugerencia se publica y la web recibe `SUGGESTION_CONFIRMED` como con cualquier otra; el texto que supera el límite no se publica en Discord. Cada recorte de la descripción deja una línea `INFO` en el log del bot con la longitud original.
+
 ---
 
 ### 3.2 Servidor ➡️ Cliente
