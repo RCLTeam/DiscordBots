@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from liga_bot.config import (
     DEFAULT_TICKET_AVISO_MARCADOR,
+    DEFAULT_TICKETS_CATEGORY_NAMES,
     Settings,
 )
 from liga_bot.models.enums import Division, MatchStatus
@@ -1466,6 +1467,153 @@ async def test_ticket_audit_tickets_alias(
     result = await service.audit_tickets(guild)
     assert isinstance(result, TicketAuditResult)
     assert "Revisión completada" in result.summary()
+
+
+# ---------------------------------------------------------------------------
+# TicketService: ajustes de Settings y selección de categorías
+# ---------------------------------------------------------------------------
+
+
+def _ticket_with_last_message(
+    settings: Settings,
+    *,
+    category_name: str,
+    hours_ago: float,
+    author_roles: list[MagicMock] | None = None,
+) -> tuple[MagicMock, AsyncMock]:
+    """Crea un servidor con una categoría y un canal cuyo último mensaje es de un usuario."""
+    guild = create_mock_guild(settings)
+    category = create_mock_category(5201, category_name)
+    channel = create_mock_channel(5301, "ticket-301", category, guild=guild)
+    category.channels.append(channel)
+    guild.categories.append(category)
+
+    author = MagicMock(spec=discord.Member)
+    author.id = 7201
+    author.roles = list(author_roles or [])
+    guild.get_member.return_value = author
+
+    msg = MagicMock(spec=discord.Message)
+    msg.created_at = datetime.now(timezone.utc) - timedelta(hours=hours_ago)
+    msg.author = author
+    msg.content = "Mensaje del ticket"
+    channel.history = MagicMock(return_value=AsyncMessageHistory([msg]))
+    return guild, channel
+
+
+@pytest.mark.asyncio
+async def test_ticket_organizador_role_counts_as_staff(
+    session_factory: async_sessionmaker[AsyncSession],
+    test_settings: Settings,
+):
+    settings = Settings(**{**test_settings.model_dump(), "organizador_role_id": 1005})
+    organizador_role = create_mock_role(1005, "Organizador")
+    guild, channel = _ticket_with_last_message(
+        settings,
+        category_name="TICKETS-GENERAL-PREMIER",
+        hours_ago=40,
+        author_roles=[organizador_role],
+    )
+
+    service = TicketService(session_factory=session_factory, settings=settings, throttle_delay=0.0)
+    result = await service.check_tickets(guild)
+
+    assert result.skipped_staff == 1
+    assert result.alerts_sent == 0
+    channel.send.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_ticket_revision_hours_setting_raises_threshold(
+    session_factory: async_sessionmaker[AsyncSession],
+    test_settings: Settings,
+):
+    settings = Settings(**{**test_settings.model_dump(), "ticket_revision_hours": 48})
+    guild, channel = _ticket_with_last_message(
+        settings, category_name="TICKETS-GENERAL-PREMIER", hours_ago=30
+    )
+
+    service = TicketService(session_factory=session_factory, settings=settings, throttle_delay=0.0)
+    result = await service.check_tickets(guild)
+
+    assert result.skipped_recent == 1
+    assert result.alerts_sent == 0
+    channel.send.assert_not_called()
+    assert "<48h" in result.summary()
+
+
+@pytest.mark.asyncio
+async def test_ticket_revision_hours_setting_in_alert_text(
+    session_factory: async_sessionmaker[AsyncSession],
+    db_session: AsyncSession,
+    test_settings: Settings,
+):
+    settings = Settings(**{**test_settings.model_dump(), "ticket_revision_hours": 48})
+    guild, channel = _ticket_with_last_message(
+        settings, category_name="TICKETS-GENERAL-PREMIER", hours_ago=50
+    )
+
+    service = TicketService(session_factory=session_factory, settings=settings, throttle_delay=0.0)
+    result = await service.check_tickets(guild)
+
+    assert result.alerts_sent == 1
+    assert "más de 48h" in channel.send.call_args[0][0]
+
+
+@pytest.mark.asyncio
+async def test_ticket_custom_category_setting_is_audited(
+    session_factory: async_sessionmaker[AsyncSession],
+    test_settings: Settings,
+):
+    settings = Settings(**{**test_settings.model_dump(), "tickets_category_name": "SOPORTE-EXTRA"})
+    guild, _ = _ticket_with_last_message(settings, category_name="SOPORTE-EXTRA", hours_ago=2)
+
+    service = TicketService(session_factory=session_factory, settings=settings, throttle_delay=0.0)
+    result = await service.check_tickets(guild)
+
+    assert result.categories_scanned == 1
+    assert result.channels_scanned == 1
+
+
+@pytest.mark.asyncio
+async def test_ticket_category_containing_tickets_not_audited(
+    session_factory: async_sessionmaker[AsyncSession],
+    test_settings: Settings,
+):
+    guild, channel = _ticket_with_last_message(
+        test_settings, category_name="TICKETS-ARCHIVADOS", hours_ago=72
+    )
+
+    service = TicketService(
+        session_factory=session_factory, settings=test_settings, throttle_delay=0.0
+    )
+    result = await service.check_tickets(guild)
+
+    assert result.categories_scanned == 0
+    assert result.channels_scanned == 0
+    channel.send.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_ticket_all_default_categories_audited(
+    session_factory: async_sessionmaker[AsyncSession],
+    test_settings: Settings,
+):
+    guild = create_mock_guild(test_settings)
+    for offset, name in enumerate(DEFAULT_TICKETS_CATEGORY_NAMES):
+        category = create_mock_category(5400 + offset, name)
+        channel = create_mock_channel(5500 + offset, f"ticket-{offset}", category, guild=guild)
+        channel.history = MagicMock(return_value=AsyncMessageHistory([]))
+        category.channels.append(channel)
+        guild.categories.append(category)
+
+    service = TicketService(
+        session_factory=session_factory, settings=test_settings, throttle_delay=0.0
+    )
+    result = await service.check_tickets(guild)
+
+    assert result.categories_scanned == len(DEFAULT_TICKETS_CATEGORY_NAMES)
+    assert result.channels_scanned == len(DEFAULT_TICKETS_CATEGORY_NAMES)
 
 
 # ---------------------------------------------------------------------------

@@ -250,7 +250,7 @@ async def test_ticket_exact_24h_delta_boundaries(
 
     # 3.A: 23h 59m ago
     guild_a = create_mock_guild(test_settings)
-    cat_a = create_mock_category(6003, "TICKETS-PREMIER")
+    cat_a = create_mock_category(6003, "TICKETS-GENERAL-PREMIER")
     chan_a = create_mock_channel(6103, "ticket-23h59m", cat_a, guild=guild_a)
     cat_a.channels.append(chan_a)
     guild_a.categories.append(cat_a)
@@ -274,7 +274,7 @@ async def test_ticket_exact_24h_delta_boundaries(
 
     # 3.B: 24h 00m 00s ago (exact boundary)
     guild_b = create_mock_guild(test_settings)
-    cat_b = create_mock_category(6004, "TICKETS-PREMIER")
+    cat_b = create_mock_category(6004, "TICKETS-GENERAL-PREMIER")
     chan_b = create_mock_channel(6104, "ticket-24h00m", cat_b, guild=guild_b)
     cat_b.channels.append(chan_b)
     guild_b.categories.append(cat_b)
@@ -297,7 +297,7 @@ async def test_ticket_exact_24h_delta_boundaries(
 
     # 3.C: 24h 01m ago (> 24h)
     guild_c = create_mock_guild(test_settings)
-    cat_c = create_mock_category(6005, "TICKETS-PREMIER")
+    cat_c = create_mock_category(6005, "TICKETS-GENERAL-PREMIER")
     chan_c = create_mock_channel(6105, "ticket-24h01m", cat_c, guild=guild_c)
     cat_c.channels.append(chan_c)
     guild_c.categories.append(cat_c)
@@ -341,7 +341,7 @@ async def test_ticket_author_webhook_bot_or_uncached_deleted_user(
 
     # 4.A: Autor Webhook (discord.User con id inexistente en el guild, fetch_member da NotFound)
     guild_wh = create_mock_guild(test_settings)
-    cat_wh = create_mock_category(6006, "TICKETS-PREMIER")
+    cat_wh = create_mock_category(6006, "TICKETS-GENERAL-PREMIER")
     chan_wh = create_mock_channel(6106, "ticket-webhook", cat_wh, guild=guild_wh)
     cat_wh.channels.append(chan_wh)
     guild_wh.categories.append(cat_wh)
@@ -368,7 +368,7 @@ async def test_ticket_author_webhook_bot_or_uncached_deleted_user(
 
     # 4.B: Autor es el bot propio con el marcador de aviso previo
     guild_bot_alert = create_mock_guild(test_settings)
-    cat_bot_alert = create_mock_category(6007, "TICKETS-PREMIER")
+    cat_bot_alert = create_mock_category(6007, "TICKETS-GENERAL-PREMIER")
     chan_bot_alert = create_mock_channel(
         6107, "ticket-bot-alert", cat_bot_alert, guild=guild_bot_alert
     )
@@ -390,7 +390,7 @@ async def test_ticket_author_webhook_bot_or_uncached_deleted_user(
 
     # 4.C: Autor es usuario no cacheado borrado de Discord (fetch_member da NotFound)
     guild_del = create_mock_guild(test_settings)
-    cat_del = create_mock_category(6008, "TICKETS-ASCEND")
+    cat_del = create_mock_category(6008, "TICKETS-GENERAL-ASCEND")
     chan_del = create_mock_channel(6108, "ticket-deleted-user", cat_del, guild=guild_del)
     cat_del.channels.append(chan_del)
     guild_del.categories.append(cat_del)
@@ -431,7 +431,7 @@ async def test_ticket_author_multiple_roles_including_and_excluding_staff(
 
     # 5.A: Miembro con roles comunes + Rol Staff -> Debe tratarse como Staff
     guild_staff = create_mock_guild(test_settings)
-    cat_staff = create_mock_category(6009, "TICKETS-PREMIER")
+    cat_staff = create_mock_category(6009, "TICKETS-GENERAL-PREMIER")
     chan_staff = create_mock_channel(6109, "ticket-multi-staff", cat_staff, guild=guild_staff)
     cat_staff.channels.append(chan_staff)
     guild_staff.categories.append(cat_staff)
@@ -459,7 +459,7 @@ async def test_ticket_author_multiple_roles_including_and_excluding_staff(
 
     # 5.B: Miembro con roles comunes únicamente -> NO es staff -> Alerta disparada
     guild_user = create_mock_guild(test_settings)
-    cat_user = create_mock_category(6010, "TICKETS-PREMIER")
+    cat_user = create_mock_category(6010, "TICKETS-GENERAL-PREMIER")
     chan_user = create_mock_channel(6110, "ticket-multi-non-staff", cat_user, guild=guild_user)
     cat_user.channels.append(chan_user)
     guild_user.categories.append(cat_user)
@@ -493,7 +493,7 @@ async def test_ticket_suppression_when_last_alert_less_than_24h_ago(
     """
     now = datetime.now(timezone.utc)
     guild = create_mock_guild(test_settings)
-    cat = create_mock_category(6011, "TICKETS-PREMIER")
+    cat = create_mock_category(6011, "TICKETS-GENERAL-PREMIER")
     chan = create_mock_channel(6111, "ticket-suppressed", cat, guild=guild)
     cat.channels.append(chan)
     guild.categories.append(cat)
@@ -539,7 +539,7 @@ async def test_ticket_staff_message_resets_alert_cycle(
     """
     now = datetime.now(timezone.utc)
     guild = create_mock_guild(test_settings)
-    cat = create_mock_category(6012, "TICKETS-PREMIER")
+    cat = create_mock_category(6012, "TICKETS-GENERAL-PREMIER")
     chan = create_mock_channel(6112, "ticket-cycle-reset", cat, guild=guild)
     cat.channels.append(chan)
     guild.categories.append(cat)
@@ -600,7 +600,7 @@ async def test_ticket_throttling_executes_asyncio_sleep(
     exactamente una vez por cada canal procesado.
     """
     guild = create_mock_guild(test_settings)
-    cat = create_mock_category(6013, "TICKETS-PREMIER")
+    cat = create_mock_category(6013, "TICKETS-GENERAL-PREMIER")
     # 4 canales en la categoría
     channels = [
         create_mock_channel(6113 + i, f"ticket-throttle-{i}", cat, guild=guild) for i in range(4)
@@ -798,7 +798,7 @@ async def test_ticket_http_exception_on_history(
 ):
     """Prueba 11: Error HTTP de Discord al leer historial produce SKIPPED_ERROR."""
     guild = create_mock_guild(test_settings)
-    cat = create_mock_category(6014, "TICKETS-PREMIER")
+    cat = create_mock_category(6014, "TICKETS-GENERAL-PREMIER")
     chan = create_mock_channel(6114, "ticket-http-error", cat, guild=guild)
     cat.channels.append(chan)
     guild.categories.append(cat)
@@ -832,7 +832,7 @@ async def test_ticket_clock_skew_future_message(
     """Prueba 12: Mensaje con timestamp futuro por reloj desfasado se trata como activo."""
     now = datetime.now(timezone.utc)
     guild = create_mock_guild(test_settings)
-    cat = create_mock_category(6015, "TICKETS-PREMIER")
+    cat = create_mock_category(6015, "TICKETS-GENERAL-PREMIER")
     chan = create_mock_channel(6115, "ticket-future-time", cat, guild=guild)
     cat.channels.append(chan)
     guild.categories.append(cat)
@@ -891,7 +891,7 @@ async def test_ticket_staff_response_without_prior_notice(
 ):
     """Prueba 14: Staff responde en ticket donde nunca se registró aviso previo."""
     guild = create_mock_guild(test_settings)
-    cat = create_mock_category(6017, "TICKETS-PREMIER")
+    cat = create_mock_category(6017, "TICKETS-GENERAL-PREMIER")
     chan = create_mock_channel(6117, "ticket-no-prior-notice", cat, guild=guild)
     cat.channels.append(chan)
     guild.categories.append(cat)
