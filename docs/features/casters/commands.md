@@ -83,7 +83,7 @@ Los comandos de cartelera aplican un doble anillo de seguridad antes de ejecutar
        )
        return
    ```
-3. **Verificación Programática de Roles Staff/Scheduler**: Invoca `is_authorized_scheduler(interaction, self.settings)` (`src/liga_bot/cogs/permissions.py:181-189`, acción `CALENDARIO_Y_CASTERS` de la [política de autorización](../../architecture/permissions.md)). Para ser admitido, el usuario invocador debe contar con al menos uno de los siguientes privilegios:
+3. **Verificación Programática de Roles Staff/Scheduler**: Invoca `is_authorized_scheduler(interaction, self.settings)` (`src/liga_bot/cogs/permissions.py:133-141`, acción `CALENDARIO_Y_CASTERS` de la [política de autorización](../../architecture/permissions.md)). Para ser admitido, el usuario invocador debe contar con al menos uno de los siguientes privilegios:
    - Permiso nativo de Administrador de Discord (`guild_permissions.administrator`).
    - Rol de Staff (`settings.staff_role_id`).
    - Rol de Administrador (`settings.admin_role_id`).

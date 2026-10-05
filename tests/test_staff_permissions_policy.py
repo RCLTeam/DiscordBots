@@ -141,6 +141,20 @@ async def test_funciones_publicas_matriz(fn_name, combinacion, esperado):
     assert await fn(member, settings) is esperado
 
 
+def test_las_unicas_funciones_is_son_las_de_la_matriz():
+    """Cada comprobación de staff pública tiene un único nombre y está en la matriz."""
+    import inspect
+
+    from liga_bot.cogs import permissions
+
+    publicas = {
+        nombre
+        for nombre, valor in vars(permissions).items()
+        if nombre.startswith("is_") and inspect.iscoroutinefunction(valor)
+    }
+    assert publicas == set(FUNCIONES)
+
+
 def test_allowed_role_ids_no_incluye_ceo_general_sin_configurar():
     assert 0 not in allowed_role_ids(StaffAction.ROLES_Y_PLANTILLAS, _settings(0))
     assert allowed_role_ids(StaffAction.ROLES_Y_PLANTILLAS, _settings()) == {

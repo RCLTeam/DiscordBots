@@ -41,7 +41,7 @@ La sincronización de comandos de aplicación (*Application Commands*) registra 
 
 ### 1.2 Restricciones de Seguridad y Permisos
 
-La ejecución está protegida por la función `is_staff_or_admin` (`src/liga_bot/cogs/permissions.py:141-146`, acción `SINCRONIZACION` de la [política de autorización](../../architecture/permissions.md)):
+La ejecución está protegida por la función `is_staff_or_admin` (`src/liga_bot/cogs/permissions.py:125-130`, acción `SINCRONIZACION` de la [política de autorización](../../architecture/permissions.md)):
 
 1. **Resolución de Miembro (`src/liga_bot/cogs/permissions.py:53-88`):**
    Obtiene el objeto `discord.Member` mediante la caché local de Discord (`guild.get_member`) o mediante una consulta asíncrona al Gateway (`await guild.fetch_member`).
