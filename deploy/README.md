@@ -47,7 +47,10 @@ en el log (solo muestra `*** [credenciales sin codificar]`).
 Para obtener el valor codificado:
 `python3 -c "import urllib.parse, getpass; print(urllib.parse.quote(getpass.getpass(), safe=''))"`.
 
-Instala dependencias y aplica migraciones **antes** de arrancar el servicio:
+Instala dependencias y aplica migraciones **antes** de arrancar el servicio. El
+servicio arranca con `uv run --no-sync` y nunca instala, actualiza ni descarga
+paquetes: las dependencias solo se instalan con `uv sync --frozen`. Si el entorno
+está incompleto, el bot no arranca y el error queda en `journalctl -u liga-bot`.
 
 ```bash
 cd /opt/rcl/discord-bots
@@ -62,6 +65,9 @@ sudo cp deploy/liga-bot.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now liga-bot
 ```
+
+Si adaptas `User`, `WorkingDirectory` o la ruta de uv, conserva las opciones de
+`ExecStart` (`run --no-sync liga-bot`).
 
 ## 4. Operación
 
@@ -105,4 +111,15 @@ sudo -u rcl git pull
 sudo -u rcl uv sync --frozen
 sudo -u rcl uv run alembic upgrade head
 sudo systemctl restart liga-bot
+```
+
+`git pull` no actualiza la unidad instalada en `/etc/systemd/system/`. Si la
+versión nueva cambia `deploy/liga-bot.service`, vuelve a instalarla (o aplica el
+cambio sobre tu copia adaptada) y recarga systemd antes de reiniciar:
+
+```bash
+sudo cp deploy/liga-bot.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl restart liga-bot
+systemctl cat liga-bot | grep ExecStart   # comprueba la orden en uso
 ```

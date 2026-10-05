@@ -37,6 +37,7 @@ Pruebas en memoria con mocks puros, tiempo submilisegundo por test, sin interacc
 | `tests/test_formatting.py` | 19 | 205 | Formateo de cadenas, cálculo de marcas de tiempo relativas, tablas monoespaciadas y escape de caracteres Markdown. |
 | `tests/test_database.py` | 14 | 345 | Helpers de base de datos, resolución dinámica de motores (`get_engine`, `close_engine`) y factoría de sesiones. |
 | `tests/test_database_url_redaction.py` | 32 | 174 | Saneado de `DATABASE_URL` (`describe_database_url`): el log de arranque de `setup_hook` y los `ValueError` de `get_engine` no exponen usuario, contraseña ni parámetros de consulta. |
+| `tests/test_deploy_unit.py` | 3 | 66 | Unidad systemd `deploy/liga-bot.service`: `ExecStart` arranca `liga-bot` con `uv run --no-sync` (sin sincronizar `.venv` al arrancar) y `deploy/README.md` instala dependencias con `uv sync --frozen` antes de reiniciar. |
 | `tests/test_models.py` | 16 | 444 | Modelos declarativos base de SQLAlchemy (`User`, `Player`, `Team`, `Match`, `TicketNotice`). |
 | `tests/test_role_request_model.py` | 16 | 382 | Modelo relacional `RoleRequest`, estados enum (`PENDING`, `APPROVED`, `DENIED`) e integridad de campos. |
 | `tests/test_roster_models.py` | 55 | 677 | Modelos de gestión de plantillas: `DiscordUser`, `TeamMembership`, `RosterMovement`, `AuditLog`. |
