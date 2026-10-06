@@ -122,60 +122,12 @@ async def is_staff(
     return await has_staff_access(target, StaffAction.ROLES_Y_PLANTILLAS, settings)
 
 
-async def is_admin(
-    interaction: discord.Interaction,
-    settings: Settings | None = None,
-) -> bool:
-    """Verifica si el usuario posee rol de Administrador o permisos de Administrador nativo."""
-    member = await resolve_member(interaction)
-    if member is None:
-        return False
-    if getattr(getattr(member, "guild_permissions", None), "administrator", False):
-        return True
-
-    app_settings = settings or get_settings()
-    user_roles = {r.id for r in getattr(member, "roles", [])}
-    return app_settings.admin_role_id in user_roles
-
-
 async def is_staff_or_admin(
     interaction: discord.Interaction | discord.Member,
     settings: Settings | None = None,
 ) -> bool:
     """Autorización para la sincronización de comandos: /sync, /sincronizar y !sync."""
     return await has_staff_access(interaction, StaffAction.SINCRONIZACION, settings)
-
-
-async def is_ceo_premier(
-    interaction: discord.Interaction,
-    settings: Settings | None = None,
-) -> bool:
-    """Verifica si el usuario posee el rol de CEO Premier o es Administrador."""
-    member = await resolve_member(interaction)
-    if member is None:
-        return False
-    if getattr(getattr(member, "guild_permissions", None), "administrator", False):
-        return True
-
-    app_settings = settings or get_settings()
-    user_roles = {r.id for r in getattr(member, "roles", [])}
-    return app_settings.ceo_premier_role_id in user_roles
-
-
-async def is_ceo_ascend(
-    interaction: discord.Interaction,
-    settings: Settings | None = None,
-) -> bool:
-    """Verifica si el usuario posee el rol de CEO Ascend o es Administrador."""
-    member = await resolve_member(interaction)
-    if member is None:
-        return False
-    if getattr(getattr(member, "guild_permissions", None), "administrator", False):
-        return True
-
-    app_settings = settings or get_settings()
-    user_roles = {r.id for r in getattr(member, "roles", [])}
-    return app_settings.ceo_ascend_role_id in user_roles
 
 
 async def is_authorized_scheduler(
@@ -187,7 +139,3 @@ async def is_authorized_scheduler(
     /crear-jornada, /stream_url, /stream_url_live, /panel-casters y /cartelera-casters.
     """
     return await has_staff_access(interaction, StaffAction.CALENDARIO_Y_CASTERS, settings)
-
-
-# Alias sinónimo para compatibilidad
-is_staff_admin_or_ceo = is_authorized_scheduler

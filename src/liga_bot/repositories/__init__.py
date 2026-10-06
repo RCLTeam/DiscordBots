@@ -12,7 +12,7 @@ from liga_bot.repositories.roster_repo import (
     TeamMembershipRepository,
 )
 from liga_bot.repositories.team_repo import TeamRepository
-from liga_bot.repositories.ticket_repo import TicketNoticeRepository, TicketRepository
+from liga_bot.repositories.ticket_repo import TicketNoticeRepository
 
 __all__ = [
     "AuditLogRepository",
@@ -24,5 +24,4 @@ __all__ = [
     "TeamMembershipRepository",
     "TeamRepository",
     "TicketNoticeRepository",
-    "TicketRepository",
 ]

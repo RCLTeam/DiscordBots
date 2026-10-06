@@ -15,40 +15,7 @@ from sqlalchemy.orm import joinedload, selectinload
 from liga_bot.models.caster import CasterRole, MatchCaster, MatchCasterCard
 from liga_bot.models.match import Match
 from liga_bot.repositories.base import BaseRepository
-
-
-def _clean_uuid(val: UUID | str | None) -> UUID | None:
-    """Parsea defensivamente un identificador a UUID o retorna None si es inválido."""
-    if val is None:
-        return None
-    if isinstance(val, UUID):
-        return val
-    try:
-        return UUID(str(val))
-    except (ValueError, AttributeError, TypeError):
-        return None
-
-
-def _clean_user_id(val: Any) -> int | None:
-    """Parsea defensivamente un ID de usuario Discord a entero positivo o retorna None."""
-    if val is None or isinstance(val, bool):
-        return None
-    if isinstance(val, int):
-        return val if val > 0 else None
-    if isinstance(val, str):
-        cleaned = val.strip()
-        if not cleaned:
-            return None
-        try:
-            val_int = int(cleaned)
-            return val_int if val_int > 0 else None
-        except ValueError:
-            return None
-    try:
-        val_int = int(val)
-        return val_int if val_int > 0 else None
-    except (ValueError, TypeError):
-        return None
+from liga_bot.utils.ids import clean_user_id_int, clean_uuid
 
 
 class CasterRepository(BaseRepository[MatchCaster]):
@@ -59,7 +26,7 @@ class CasterRepository(BaseRepository[MatchCaster]):
 
     async def get_match_assignments(self, match_id: UUID | str) -> Sequence[MatchCaster]:
         """Recupera todas las asignaciones de un partido ordenadas cronológicamente."""
-        clean_id = _clean_uuid(match_id)
+        clean_id = clean_uuid(match_id)
         if clean_id is None:
             return []
         stmt = (
@@ -73,8 +40,8 @@ class CasterRepository(BaseRepository[MatchCaster]):
 
     async def get_user_assignment(self, match_id: UUID | str, user_id: Any) -> MatchCaster | None:
         """Recupera la asignación específica de un usuario en un partido."""
-        clean_id = _clean_uuid(match_id)
-        clean_uid = _clean_user_id(user_id)
+        clean_id = clean_uuid(match_id)
+        clean_uid = clean_user_id_int(user_id)
         if clean_id is None or clean_uid is None:
             return None
         stmt = (
@@ -90,7 +57,7 @@ class CasterRepository(BaseRepository[MatchCaster]):
 
     async def get_streamer_assignment(self, match_id: UUID | str) -> MatchCaster | None:
         """Recupera la asignación activa que retransmite el partido (rol STREAMER o BOTH)."""
-        clean_id = _clean_uuid(match_id)
+        clean_id = clean_uuid(match_id)
         if clean_id is None:
             return None
         stmt = (
@@ -108,10 +75,10 @@ class CasterRepository(BaseRepository[MatchCaster]):
         self, match_id: UUID | str, user_id: Any, role: CasterRole | str
     ) -> MatchCaster | None:
         """Inserta o actualiza la asignación de rol de un usuario en un partido (upsert)."""
-        clean_id = _clean_uuid(match_id)
+        clean_id = clean_uuid(match_id)
         if clean_id is None:
             raise ValueError(f"Identificador de partido inválido: {match_id!r}")
-        clean_uid = _clean_user_id(user_id)
+        clean_uid = clean_user_id_int(user_id)
         if clean_uid is None:
             return None
 
@@ -149,10 +116,10 @@ class CasterRepository(BaseRepository[MatchCaster]):
 
     async def remove(self, match_id: UUID | str, user_id: Any) -> bool:
         """Elimina la asignación de un usuario en un partido. Retorna True si existía."""
-        clean_id = _clean_uuid(match_id)
+        clean_id = clean_uuid(match_id)
         if clean_id is None:
             return False
-        clean_uid = _clean_user_id(user_id)
+        clean_uid = clean_user_id_int(user_id)
         if clean_uid is None:
             return False
         existing = await self.get_user_assignment(clean_id, clean_uid)
@@ -168,7 +135,7 @@ class CasterRepository(BaseRepository[MatchCaster]):
         self, match_id: UUID | str, channel_id: int, message_id: int
     ) -> MatchCasterCard:
         """Registra o actualiza la tarjeta publicada para un partido en un canal (upsert)."""
-        clean_id = _clean_uuid(match_id)
+        clean_id = clean_uuid(match_id)
         if clean_id is None:
             raise ValueError(f"Identificador de partido inválido: {match_id!r}")
 
@@ -204,7 +171,7 @@ class CasterRepository(BaseRepository[MatchCaster]):
 
     async def get_card(self, match_id: UUID | str, channel_id: int) -> MatchCasterCard | None:
         """Obtiene el registro de tarjeta publicada para un partido y canal."""
-        clean_id = _clean_uuid(match_id)
+        clean_id = clean_uuid(match_id)
         if clean_id is None:
             return None
         stmt = (
@@ -220,7 +187,7 @@ class CasterRepository(BaseRepository[MatchCaster]):
 
     async def delete_card(self, match_id: UUID | str, channel_id: int) -> bool:
         """Elimina el registro de tarjeta si el mensaje fue borrado en Discord."""
-        clean_id = _clean_uuid(match_id)
+        clean_id = clean_uuid(match_id)
         if clean_id is None:
             return False
         card = await self.get_card(clean_id, channel_id)

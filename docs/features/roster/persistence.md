@@ -117,15 +117,15 @@ Registra las operaciones administrativas y cambios de estado con snapshots de da
 
 ## 2. Utilidades de Serialización y Saneamiento
 
-Para asegurar la interoperabilidad estricta entre Python y los motores de base de datos relacionales (PostgreSQL / PGlite), `src/liga_bot/repositories/roster_repo.py` implementa funciones de normalización:
+Para asegurar la interoperabilidad estricta entre Python y los motores de base de datos relacionales (PostgreSQL / PGlite), los repositorios de plantillas normalizan los identificadores con las funciones comunes de `src/liga_bot/utils/ids.py` y serializan los datos de auditoría con `_to_json_safe` (`src/liga_bot/repositories/roster_repo.py`):
 
-### 2.1 Conversión Segura de UUID: `_clean_uuid` (`L28–L39`)
-Convierte de forma defensiva argumentos a instancias `UUID`. Si el valor es inválido o malformado, devuelve `None` en lugar de dejar propagar un `ValueError` que abortaría la transacción activa.
+### 2.1 Conversión Segura de UUID: `clean_uuid`
+Convierte de forma defensiva argumentos a instancias `UUID`: acepta instancias de `UUID`, cadenas (recortando espacios) y objetos cuya representación `str` sea un UUID. Si el valor es inválido o malformado, devuelve `None` en lugar de dejar propagar un `ValueError` que abortaría la transacción activa.
 
-### 2.2 Normalización de Snowflakes: `_clean_user_id` (`L42–L47`)
-Normaliza identificadores de usuario de Discord eliminando espacios en blanco y forzando tipo `str`.
+### 2.2 Normalización de Snowflakes: `clean_user_id_str`
+Normaliza identificadores de usuario de Discord a `str` eliminando espacios en blanco; devuelve `None` si el valor es `None` o queda vacío. No valida que el texto sea numérico. Las columnas `discord_user_id` de plantillas y auditoría son de texto; los casters usan `clean_user_id_int`, que devuelve un entero positivo.
 
-### 2.3 Serialización Recursiva JSONB: `_to_json_safe` (`L50–L82`)
+### 2.3 Serialización Recursiva JSONB: `_to_json_safe` (`L30–L61`)
 Normaliza estructuras de datos complejas para su almacenamiento seguro en columnas `JSONB`:
 - `UUID` → `str(value)` (36 caracteres canónicos).
 - `datetime` / `date` → formato ISO 8601 (`value.isoformat()`).
@@ -138,7 +138,7 @@ Normaliza estructuras de datos complejas para su almacenamiento seguro en column
 
 ## 3. Repositorios de Acceso a Datos
 
-### 3.1 `TeamMembershipRepository` (`src/liga_bot/repositories/roster_repo.py:84-295`)
+### 3.1 `TeamMembershipRepository` (`src/liga_bot/repositories/roster_repo.py:64-356`)
 
 Hereda de `BaseRepository[TeamMembership]`:
 
@@ -166,7 +166,7 @@ Hereda de `BaseRepository[TeamMembership]`:
 
 ---
 
-### 3.2 `RosterMovementRepository` (`src/liga_bot/repositories/roster_repo.py:297-414`)
+### 3.2 `RosterMovementRepository` (`src/liga_bot/repositories/roster_repo.py:359-475`)
 
 - **`record_movement(team_id, discord_user_id, action, role, actor_id=None) -> RosterMovement`:**
   Normaliza identificadores y enums, persiste el registro de movimiento con `flush()` y retorna la entidad creada.
@@ -177,7 +177,7 @@ Hereda de `BaseRepository[TeamMembership]`:
 
 ---
 
-### 3.3 `AuditLogRepository` (`src/liga_bot/repositories/roster_repo.py:416-536`)
+### 3.3 `AuditLogRepository` (`src/liga_bot/repositories/roster_repo.py:478-604`)
 
 - **`log(action, entity_type, entity_id, actor_discord_user_id=None, before=None, after=None) -> AuditLog`:**
   Aplica `_to_json_safe` sobre los payloads `before` y `after`, crea el registro y lo persiste mediante `flush()`.

@@ -233,7 +233,7 @@ async def test_create_match_happy_path_premier(
     assert res.success is True
     assert res.error is None
     assert res.match is not None
-    assert res.match.status == MatchStatus.CANAL_CREADO
+    assert res.match.status == MatchStatus.SCHEDULED
     assert res.match.jornada == 1
     assert res.channel is not None
     assert res.channel.name == "j1-psp-vs-fnx"
@@ -504,7 +504,7 @@ async def test_create_match_duplicate_idempotency(
         division=Division.PREMIER,
         team1_id=t1.id,
         team2_id=t2.id,
-        status=MatchStatus.CANAL_CREADO,
+        status=MatchStatus.SCHEDULED,
     )
     await db_session.commit()
 
@@ -625,45 +625,6 @@ async def test_create_match_rollback_orphan_channel_on_db_error(
 
     assert res.success is False
     assert "Database connection lost!" in res.error
-
-
-@pytest.mark.asyncio
-async def test_create_single_match_alias(
-    session_factory: async_sessionmaker[AsyncSession],
-    db_session: AsyncSession,
-    test_settings: Settings,
-):
-    team_repo = TeamRepository(db_session)
-    await team_repo.create(
-        name="Team Alias1",
-        tag="TA1",
-        slug="team-alias1",
-        division=Division.PREMIER,
-        discord_role_id=2001,
-    )
-    await team_repo.create(
-        name="Team Alias2",
-        tag="TA2",
-        slug="team-alias2",
-        division=Division.PREMIER,
-        discord_role_id=2002,
-    )
-    await db_session.commit()
-
-    guild = create_mock_guild(
-        test_settings,
-        roles=[create_mock_role(2001, "Team Alias1"), create_mock_role(2002, "Team Alias2")],
-    )
-
-    service = ScheduleService(session_factory=session_factory, settings=test_settings)
-    res = await service.create_single_match(
-        jornada=1,
-        team1_name="Team Alias1",
-        team2_name="Team Alias2",
-        scheduled_at=None,
-        guild=guild,
-    )
-    assert res.success is True
 
 
 @pytest.mark.asyncio
@@ -805,43 +766,6 @@ async def test_create_jornada_from_csv_partial_errors_and_duplicates(
     assert j_res.error_count == 2
     assert "Fila 3" in j_res.errors[0]
     assert "Fila 4: enfrentamiento duplicado" in j_res.errors[1]
-
-
-@pytest.mark.asyncio
-async def test_process_schedule_csv_alias(
-    session_factory: async_sessionmaker[AsyncSession],
-    db_session: AsyncSession,
-    test_settings: Settings,
-):
-    team_repo = TeamRepository(db_session)
-    await team_repo.create(
-        name="Equipo P1",
-        tag="P1",
-        slug="equipo-p1",
-        division=Division.PREMIER,
-        discord_role_id=2401,
-    )
-    await team_repo.create(
-        name="Equipo P2",
-        tag="P2",
-        slug="equipo-p2",
-        division=Division.PREMIER,
-        discord_role_id=2402,
-    )
-    await db_session.commit()
-
-    guild = create_mock_guild(
-        test_settings,
-        roles=[create_mock_role(2401, "Equipo P1"), create_mock_role(2402, "Equipo P2")],
-    )
-
-    csv_text = "equipo1,equipo2,fecha,hora\nEquipo P1,Equipo P2,13/09/2026,21:00\n"
-
-    service = ScheduleService(session_factory=session_factory, settings=test_settings)
-    matches = await service.process_schedule_csv(jornada=1, csv_content=csv_text, guild=guild)
-
-    assert len(matches) == 1
-    assert matches[0].success is True
 
 
 # ---------------------------------------------------------------------------
@@ -1498,7 +1422,7 @@ async def test_ticket_bot_alert_message_ignored(
 
 
 @pytest.mark.asyncio
-async def test_ticket_audit_tickets_alias(
+async def test_ticket_check_tickets_sin_canales_devuelve_resumen(
     session_factory: async_sessionmaker[AsyncSession],
     test_settings: Settings,
 ):
@@ -1508,7 +1432,7 @@ async def test_ticket_audit_tickets_alias(
         settings=test_settings,
         throttle_delay=0.0,
     )
-    result = await service.audit_tickets(guild)
+    result = await service.check_tickets(guild)
     assert isinstance(result, TicketAuditResult)
     assert "Revisión completada" in result.summary()
 

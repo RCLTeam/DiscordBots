@@ -7,15 +7,6 @@ import time
 from collections import defaultdict, deque
 
 
-class _AwaitableNone:
-    """Objeto auxiliar que permite que reset() funcione de forma síncrona o con await."""
-
-    def __await__(self):
-        if False:
-            yield
-        return None
-
-
 class SlidingWindowRateLimiter:
     """Limitador de tasa coroutine-safe basado en ventana deslizante.
 
@@ -63,14 +54,12 @@ class SlidingWindowRateLimiter:
             retry_after = max(0.0, (oldest + self.window_seconds) - now)
             return False, retry_after
 
-    def reset(self, key: str | None = None) -> _AwaitableNone:
+    def reset(self, key: str | None = None) -> None:
         """Limpia el historial de cuotas en memoria.
 
         Si se especifica key, reinicia solo esa clave; si es None, limpia todas las claves.
-        Puede invocarse de forma síncrona o asíncrona (awaitable).
         """
         if key is None:
             self._history.clear()
         elif key in self._history:
             self._history[key].clear()
-        return _AwaitableNone()

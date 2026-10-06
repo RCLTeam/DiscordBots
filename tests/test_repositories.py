@@ -517,7 +517,7 @@ async def test_team_repo_delete_surviving_entity_attributes_accessible_no_missin
 async def test_match_repo_create_pending_match(
     match_repo: MatchRepository, team_repo: TeamRepository
 ):
-    """Verifica la creación de un partido en estado PENDIENTE."""
+    """Verifica la creación de un partido en estado SCHEDULED."""
     t1 = await team_repo.create(
         name="T1",
         tag="T1",
@@ -539,7 +539,7 @@ async def test_match_repo_create_pending_match(
         team1_id=t1.id,
         team2_id=t2.id,
     )
-    assert match.status == MatchStatus.PENDIENTE
+    assert match.status == MatchStatus.SCHEDULED
     assert match.jornada == 1
     assert match.discord_channel_id is None
 
@@ -678,11 +678,11 @@ async def test_match_repo_list_by_status(match_repo: MatchRepository, team_repo:
     m = await match_repo.create(
         jornada=2, division=Division.PREMIER, team1_id=t1.id, team2_id=t2.id
     )
-    pending = await match_repo.list_by_status(MatchStatus.PENDIENTE)
+    pending = await match_repo.list_by_status(MatchStatus.SCHEDULED)
     assert len(pending) == 1
 
     await match_repo.update_status(m, MatchStatus.LIVE)
-    pending_after = await match_repo.list_by_status(MatchStatus.PENDIENTE)
+    pending_after = await match_repo.list_by_status(MatchStatus.SCHEDULED)
     assert len(pending_after) == 0
 
     live = await match_repo.list_by_status(MatchStatus.LIVE)
@@ -725,7 +725,7 @@ async def test_match_repo_get_by_channel_id(match_repo: MatchRepository, team_re
 async def test_match_repo_update_status_lifecycle(
     match_repo: MatchRepository, team_repo: TeamRepository
 ):
-    """Verifica transición de estado de PENDIENTE a JUGADO."""
+    """Verifica transición de estado de SCHEDULED a COMPLETED."""
     t1 = await team_repo.create(
         name="DRX",
         tag="DRX",
@@ -744,11 +744,11 @@ async def test_match_repo_update_status_lifecycle(
     match = await match_repo.create(
         jornada=6, division=Division.PREMIER, team1_id=t1.id, team2_id=t2.id
     )
-    updated = await match_repo.update_status(match.id, MatchStatus.JUGADO)
+    updated = await match_repo.update_status(match.id, MatchStatus.COMPLETED)
     assert updated is not None
-    assert updated.status == MatchStatus.JUGADO
+    assert updated.status == MatchStatus.COMPLETED
 
-    none_res = await match_repo.update_status(uuid.uuid4(), MatchStatus.CANCELADO)
+    none_res = await match_repo.update_status(uuid.uuid4(), MatchStatus.CANCELLED)
     assert none_res is None
 
 
@@ -1204,3 +1204,26 @@ async def test_repository_atomic_multi_operation_commit(
     # Nueva sesión para confirmar persistencia real
     assert await team_repo.get_by_id(t1.id) is not None
     assert await match_repo.get_by_id(match.id) is not None
+
+
+def test_cada_clase_de_repositorios_tiene_un_unico_nombre():
+    """Ningún módulo de repositorios expone una clase con un nombre distinto del suyo."""
+    import importlib
+    import inspect
+    import pkgutil
+
+    import liga_bot.repositories as paquete
+
+    modulos = [paquete] + [
+        importlib.import_module(f"{paquete.__name__}.{info.name}")
+        for info in pkgutil.iter_modules(paquete.__path__)
+    ]
+    alias = [
+        f"{modulo.__name__}.{nombre}"
+        for modulo in modulos
+        for nombre, valor in vars(modulo).items()
+        if inspect.isclass(valor)
+        and valor.__module__.startswith(paquete.__name__)
+        and nombre != valor.__name__
+    ]
+    assert alias == []

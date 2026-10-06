@@ -53,9 +53,14 @@ class Match(Base, UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin):
         nullable=True,
     )
     status: Mapped[MatchStatus] = mapped_column(
-        Enum(MatchStatus, name="matchstatus", native_enum=True),
-        default=MatchStatus.PENDIENTE,
-        server_default="PENDIENTE",
+        Enum(
+            MatchStatus,
+            name="match_status",
+            values_callable=lambda obj: [e.value for e in obj],
+            native_enum=True,
+        ),
+        default=MatchStatus.SCHEDULED,
+        server_default="scheduled",
         nullable=False,
     )
     stream_url: Mapped[str | None] = mapped_column(
@@ -77,7 +82,7 @@ class Match(Base, UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin):
 | `team2_id` | `Uuid` (FK `teams.id`) | `uuid.UUID` | No | — | Identificador del equipo visitante. Borrado en cascada (`CASCADE`). |
 | `discord_channel_id` | `BigInteger` | `int \| None` | Sí | `None` | Snowflake de 64 bits del canal de Discord creado. Unicidad estricta para valores no nulos. |
 | `scheduled_at` | `DateTime(timezone=True)` | `datetime \| None` | Sí | `None` | Fecha y hora oficial programada en UTC. |
-| `status` | `Enum(MatchStatus, native_enum=True)` | `MatchStatus` | No | `PENDIENTE` | Estado del ciclo de vida operativo del enfrentamiento. |
+| `status` | `Enum(MatchStatus, native_enum=True)` | `MatchStatus` | No | `SCHEDULED` | Estado del ciclo de vida operativo del enfrentamiento. |
 | `stream_url` | `Text` | `str \| None` | Sí | `None` | URL de la retransmisión grabada o VOD del partido. |
 | `stream_url_live` | `String(255)` | `str \| None` | Sí | `None` | URL del directo o emisión en vivo del partido. |
 | `created_at` | `DateTime(timezone=True)` | `datetime` | No | `now(UTC)` | Fecha de creación del registro. |
@@ -93,13 +98,14 @@ Definidos en `src/liga_bot/models/enums.py`:
       PREMIER = "PREMIER"
       ASCEND = "ASCEND"
   ```
-- **`MatchStatus`** (`src/liga_bot/models/enums.py:13-19`):
+- **`MatchStatus`** (`src/liga_bot/models/enums.py:93-100`):
   ```python
   class MatchStatus(str, enum.Enum):
-      PENDIENTE = "PENDIENTE"
-      CANAL_CREADO = "CANAL_CREADO"
-      JUGADO = "JUGADO"
-      CANCELADO = "CANCELADO"
+      SCHEDULED = "scheduled"
+      LIVE = "live"
+      COMPLETED = "completed"
+      CANCELLED = "cancelled"
+      FORFEIT = "forfeit"
   ```
 
 ### 1.3 Relaciones y Carga Eager Asíncrona
@@ -191,7 +197,7 @@ Obtiene todos los enfrentamientos de una jornada específica con ordenamiento de
   Sitúa primero los partidos con horario confirmado en orden cronológico ascendente, seguidos de los partidos sin horario definido (`nulls_last`), ordenados secundariamente por fecha de creación.
 
 #### `list_by_status(status: MatchStatus | str, with_teams: bool = False) -> Sequence[Match]`
-Obtiene todos los partidos filtrados por su estado operativo (`PENDIENTE`, `CANAL_CREADO`, `JUGADO`, `CANCELADO`), ordenados por jornada y fecha de creación:
+Obtiene todos los partidos filtrados por su estado operativo (`SCHEDULED`, `LIVE`, `COMPLETED`, `CANCELLED`, `FORFEIT`), ordenados por jornada y fecha de creación:
 ```python
 order_by(Match.jornada.asc(), Match.created_at.asc())
 ```

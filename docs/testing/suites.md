@@ -31,17 +31,18 @@ Pruebas en memoria con mocks puros, tiempo submilisegundo por test, sin interacc
 
 | Archivo | Tests | LoC | Dominio y Cobertura Funcional |
 |---|---:|---:|---|
-| `tests/test_bot.py` | 13 | 241 | Inicialización del bot `LigaBot`, carga de extensiones, manejo de argumentos CLI en `__main__.py`. |
+| `tests/test_bot.py` | 16 | 299 | Inicialización del bot `LigaBot`, carga de extensiones, manejo de argumentos CLI en `__main__.py`. |
 | `tests/test_shutdown_lifecycle.py` | 11 | 245 | Registro de tareas en segundo plano (`background_tasks`), borrado diferido de canales de ticket, orden de cierre de `LigaBot.close()` (Discord antes que la base de datos) y salida forzada con una segunda señal. |
 | `tests/test_config.py` | 11 | 218 | Validación de esquema Pydantic `Settings`, URLs de base de datos (`postgresql+asyncpg://`, `pglite:///`), valores por defecto y cachés. |
 | `tests/test_cli.py` | 24 | 351 | Interfaz de línea de comandos (`run`, `seed`, `check`), códigos de retorno de proceso y argumentos. |
-| `tests/test_formatting.py` | 19 | 205 | Formateo de cadenas, cálculo de marcas de tiempo relativas, tablas monoespaciadas y escape de caracteres Markdown. |
+| `tests/test_formatting.py` | 39 | 340 | Formateo de cadenas, cálculo de marcas de tiempo relativas, tablas monoespaciadas y escape de caracteres Markdown. |
+| `tests/test_ids.py` | 38 | 102 | Limpieza de identificadores de `utils/ids.py`: `clean_uuid`, `clean_user_id_int` (casters) y `clean_user_id_str` (plantillas y auditoría). |
 | `tests/test_database.py` | 14 | 345 | Helpers de base de datos, resolución dinámica de motores (`get_engine`, `close_engine`) y factoría de sesiones. |
 | `tests/test_database_url_redaction.py` | 32 | 174 | Saneado de `DATABASE_URL` (`describe_database_url`): el log de arranque de `setup_hook` y los `ValueError` de `get_engine` no exponen usuario, contraseña ni parámetros de consulta. |
 | `tests/test_models.py` | 16 | 444 | Modelos declarativos base de SQLAlchemy (`User`, `Player`, `Team`, `Match`, `TicketNotice`). |
 | `tests/test_role_request_model.py` | 16 | 382 | Modelo relacional `RoleRequest`, estados enum (`PENDING`, `APPROVED`, `DENIED`) e integridad de campos. |
 | `tests/test_roster_models.py` | 55 | 677 | Modelos de gestión de plantillas: `DiscordUser`, `TeamMembership`, `RosterMovement`, `AuditLog`. |
-| `tests/test_services.py` | 28 | 1.214 | Servicios de dominio `ScheduleService` y `TicketService` con repositorios mockeados. |
+| `tests/test_services.py` | 41 | 1.632 | Servicios de dominio `ScheduleService` y `TicketService` con repositorios mockeados. |
 | `tests/test_suggestion_service.py` | 14 | 306 | Generación de embeds para sugerencias y despacho de reacciones de votación (`✅`, `❌`). |
 | `tests/test_role_service.py` | 37 | 1.212 | Creación, aprobación y rechazo de solicitudes de rol, asignación de apodos y cálculo de diferencias de roles. |
 | `tests/test_roster_sync_service.py` | 29 | 1.013 | Sincronización lógica de eventos de Discord con altas, bajas y transferencias en plantillas deportivas. |
@@ -51,9 +52,9 @@ Pruebas en memoria con mocks puros, tiempo submilisegundo por test, sin interacc
 | `tests/test_websocket_bridge_service.py` | 19 | 590 | Autenticación bifásica, silencio pre-autenticación, código de cierre por timeout 4001 y despacho de sugerencias. |
 | `tests/test_cogs.py` | 35 | 1.053 | Comandos slash base y captura global de excepciones en extensiones de Discord. |
 | `tests/test_roles_cog.py` | 27 | 789 | Comandos slash de verificación (`/pedir-rol`, `/asignar-rol`) y flujo de solicitud de roles. |
-| `tests/test_roster_cog.py` | 23 | 642 | Comando slash `/gestionar-posicion` y escucha de eventos `on_member_update`. |
+| `tests/test_roster_cog.py` | 27 | 728 | Comando slash `/gestionar-posicion` y escucha de eventos `on_member_update`. |
 | `tests/test_role_config_permissions.py` | 18 | 294 | Verificación de permisos de staff (`staff_role_id`, `ceo_role_id`) para aprobación de roles. |
-| `tests/test_staff_permissions_policy.py` | 91 | 327 | Matriz de la política de autorización del staff: cada tipo de acción y cada función pública contra todas las combinaciones de rol y permiso nativo, `resolve_member` , la comprobación de `!sync` y el tipo de acción que comprueba cada comando slash con efectos. |
+| `tests/test_staff_permissions_policy.py` | 92 | 341 | Matriz de la política de autorización del staff: cada tipo de acción y cada función pública contra todas las combinaciones de rol y permiso nativo, `resolve_member` , la comprobación de `!sync`, el tipo de acción que comprueba cada comando slash con efectos y que no haya más comprobaciones `is_*` públicas que las de la matriz. |
 | `tests/test_roles_ui.py` | 25 | 614 | Vistas interactivas de Discord (`RoleVerificationView`) y modales de entrada de datos. |
 | `tests/test_roster_ui.py` | 30 | 870 | Vistas interactivas de plantillas (`GestionarPosicionView`) y menús de selección de roles competitivos. |
 | **Subtotal Unit** | **647** | **12.487** | |
@@ -66,7 +67,7 @@ Pruebas sobre el motor real PostgreSQL (PGlite) migrado con Alembic o integraci�
 
 | Archivo | Tests | LoC | Dominio y Cobertura Funcional |
 |---|---:|---:|---|
-| `tests/test_repositories.py` | 39 | 1.061 | Repositorios asíncronos base (`BaseRepository`), paginación, filtros relacionales y ordenación sobre PGlite. |
+| `tests/test_repositories.py` | 44 | 1.229 | Repositorios asíncronos base (`BaseRepository`), paginación, filtros relacionales y ordenación sobre PGlite. |
 | `tests/test_role_request_repo.py` | 25 | 605 | `RoleRequestRepository` sobre PGlite: transiciones atómicas de estado y queries relacionales. |
 | `tests/test_roster_repositories.py` | 75 | 1.440 | Repositorios de miembros, movimientos de plantilla y logs de auditoría sobre esquema relacional real. |
 | `tests/test_bot_bridge_lifecycle.py` | 7 | 288 | Arranque conjunto de `LigaBot` y `WebsocketBridgeService`, inyección de dependencias y apagado coordinado. |

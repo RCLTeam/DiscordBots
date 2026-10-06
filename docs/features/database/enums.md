@@ -39,18 +39,22 @@ Gestiona el ciclo de vida operativo de un enfrentamiento entre dos clubes.
 
 ```python
 class MatchStatus(str, enum.Enum):
-    PENDIENTE = "PENDIENTE"
-    CANAL_CREADO = "CANAL_CREADO"
-    JUGADO = "JUGADO"
-    CANCELADO = "CANCELADO"
+    SCHEDULED = "scheduled"
+    LIVE = "live"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+    FORFEIT = "forfeit"
 ```
 
-- **Tipo PostgreSQL Subyacente:** `matchstatus`.
-- **Transición de Estados:**
-  1. `PENDIENTE`: Estado inicial al programar la jornada (`default=MatchStatus.PENDIENTE`, `server_default="PENDIENTE"`).
-  2. `CANAL_CREADO`: Se ha generado el canal de texto privado en Discord para la coordinación arbitral y de capitanes.
-  3. `JUGADO`: El partido se ha disputado y el resultado ha sido registrado formalmente.
-  4. `CANCELADO`: El partido ha sido anulado por causas reglamentarias o incomparecencia.
+- **Tipo PostgreSQL Subyacente:** `match_status` (tabla compartida `matches`).
+- **Un nombre por valor:** el enum no tiene alias; cada miembro corresponde a un valor de `match_status`.
+- **Estados:**
+  1. `SCHEDULED`: estado inicial (`default=MatchStatus.SCHEDULED`, `server_default="scheduled"`). `ScheduleService.create_match` registra el partido con este estado tras crear su canal privado.
+  2. `LIVE`: el partido se está disputando.
+  3. `COMPLETED`: el partido se ha disputado.
+  4. `CANCELLED`: el partido se ha anulado.
+  5. `FORFEIT`: el partido se ha resuelto por incomparecencia.
+- El bot solo escribe `SCHEDULED`; `MatchRepository.update_status` admite cualquier estado, pero ningún comando lo invoca.
 - **Modelos que lo utilizan:** `Match.status`.
 
 ---

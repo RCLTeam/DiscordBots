@@ -27,10 +27,9 @@ from liga_bot.repositories.roster_repo import (
     AuditLogRepository,
     RosterMovementRepository,
     TeamMembershipRepository,
-    _clean_user_id,
-    _clean_uuid,
 )
 from liga_bot.repositories.team_repo import TeamRepository
+from liga_bot.utils.ids import clean_user_id_str, clean_uuid
 
 if TYPE_CHECKING:
     from discord.ext import commands
@@ -221,11 +220,11 @@ class RosterSyncService:
             if team is None:
                 return None
 
-            user_id_str = _clean_user_id(member.id)
+            user_id_str = clean_user_id_str(member.id)
             if user_id_str is None:
                 return None
 
-            clean_actor_id = _clean_user_id(actor_id)
+            clean_actor_id = clean_user_id_str(actor_id)
 
             avatar_key: str | None = None
             if getattr(member, "avatar", None) is not None and hasattr(member.avatar, "key"):
@@ -323,11 +322,11 @@ class RosterSyncService:
             if team is None:
                 return False
 
-            user_id_str = _clean_user_id(member.id)
+            user_id_str = clean_user_id_str(member.id)
             if user_id_str is None:
                 return False
 
-            clean_actor_id = _clean_user_id(actor_id)
+            clean_actor_id = clean_user_id_str(actor_id)
 
             membership_repo = TeamMembershipRepository(s)
             membership = await membership_repo.get(team.id, user_id_str)
@@ -401,7 +400,7 @@ class RosterSyncService:
         """
 
         async def _do_ensure(s: AsyncSession) -> Player:
-            user_id_str = _clean_user_id(member.id)
+            user_id_str = clean_user_id_str(member.id)
             if user_id_str is None:
                 raise RosterSyncError("Identificador de usuario de Discord inválido.")
 
@@ -493,11 +492,11 @@ class RosterSyncService:
                     f"El rol '{team_role.name}' no corresponde a ningún equipo registrado."
                 )
 
-            user_id_str = _clean_user_id(member.id)
+            user_id_str = clean_user_id_str(member.id)
             if user_id_str is None:
                 raise RosterSyncError("Identificador de usuario de Discord inválido.")
 
-            clean_actor_id = _clean_user_id(actor_id)
+            clean_actor_id = clean_user_id_str(actor_id)
 
             await self._ensure_discord_user(
                 session=s,
@@ -608,15 +607,15 @@ class RosterSyncService:
         - Actualiza la membresía, registra el movimiento correspondiente en roster_movements
           y almacena la trazabilidad en audit_logs con snapshots before/after.
         """
-        clean_user_id = _clean_user_id(discord_user_id)
+        clean_user_id = clean_user_id_str(discord_user_id)
         if clean_user_id is None:
             raise ValueError("El discord_user_id no puede ser nulo ni vacío.")
 
-        clean_actor_id = _clean_user_id(actor_id)
+        clean_actor_id = clean_user_id_str(actor_id)
         if clean_actor_id is None:
             raise ValueError("El actor_id no puede ser nulo ni vacío.")
 
-        clean_team_id = _clean_uuid(team_id)
+        clean_team_id = clean_uuid(team_id)
         if clean_team_id is None:
             raise ValueError(f"Identificador de equipo inválido: {team_id!r}")
 
@@ -737,7 +736,7 @@ class RosterSyncService:
         Recupera todos los equipos a los que pertenece un usuario con sus membresías asociadas,
         cargando de forma ansiosa la relación Team para prevenir errores fuera de sesión.
         """
-        clean_user_id = _clean_user_id(discord_user_id)
+        clean_user_id = clean_user_id_str(discord_user_id)
         if clean_user_id is None:
             return []
 

@@ -868,7 +868,7 @@ class TestEmpiricalAuditTrailSchemaAndOrphanVerification:
     ) -> None:
         """
         Prueba de frontera: actor_id provisto como entero int o cadena con espacios en blanco.
-        Verifica que _clean_user_id normalice el valor, asegurando la existencia de
+        Verifica que clean_user_id_str normalice el valor, asegurando la existencia de
         DiscordUser sin duplicados ni errores de clave foránea.
         """
         team_a, _ = seed_two_teams

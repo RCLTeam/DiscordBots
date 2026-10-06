@@ -23,12 +23,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from liga_bot.cogs.admin import AdminCog
 from liga_bot.cogs.admin import setup as admin_setup
 from liga_bot.cogs.permissions import (
-    is_admin,
     is_authorized_scheduler,
-    is_ceo_ascend,
-    is_ceo_premier,
     is_staff,
-    is_staff_admin_or_ceo,
     is_staff_or_admin,
     resolve_member,
 )
@@ -226,18 +222,13 @@ async def test_permission_checks_matrix():
     member_none = create_mock_member(1, roles=[])
     inter = create_mock_interaction(user=member_none)
     assert not await is_staff(inter, settings)
-    assert not await is_admin(inter, settings)
     assert not await is_staff_or_admin(inter, settings)
-    assert not await is_ceo_premier(inter, settings)
-    assert not await is_ceo_ascend(inter, settings)
     assert not await is_authorized_scheduler(inter, settings)
-    assert not await is_staff_admin_or_ceo(inter, settings)
 
     # 2. Staff
     member_staff = create_mock_member(2, roles=[create_mock_role(101)])
     inter = create_mock_interaction(user=member_staff)
     assert await is_staff(inter, settings)
-    assert not await is_admin(inter, settings)
     assert await is_staff_or_admin(inter, settings)
     assert await is_authorized_scheduler(inter, settings)
 
@@ -245,21 +236,18 @@ async def test_permission_checks_matrix():
     member_admin = create_mock_member(3, roles=[create_mock_role(102)])
     inter = create_mock_interaction(user=member_admin)
     assert await is_staff(inter, settings)
-    assert await is_admin(inter, settings)
     assert await is_staff_or_admin(inter, settings)
     assert await is_authorized_scheduler(inter, settings)
 
     # 4. CEO Premier
     member_ceo_p = create_mock_member(4, roles=[create_mock_role(103)])
     inter = create_mock_interaction(user=member_ceo_p)
-    assert await is_ceo_premier(inter, settings)
     assert not await is_staff_or_admin(inter, settings)
     assert await is_authorized_scheduler(inter, settings)
 
     # 5. CEO Ascend
     member_ceo_a = create_mock_member(5, roles=[create_mock_role(104)])
     inter = create_mock_interaction(user=member_ceo_a)
-    assert await is_ceo_ascend(inter, settings)
     assert not await is_staff_or_admin(inter, settings)
     assert await is_authorized_scheduler(inter, settings)
 
@@ -267,10 +255,7 @@ async def test_permission_checks_matrix():
     member_nat_admin = create_mock_member(6, roles=[], is_admin=True)
     inter = create_mock_interaction(user=member_nat_admin)
     assert await is_staff(inter, settings)
-    assert await is_admin(inter, settings)
     assert await is_staff_or_admin(inter, settings)
-    assert await is_ceo_premier(inter, settings)
-    assert await is_ceo_ascend(inter, settings)
     assert await is_authorized_scheduler(inter, settings)
 
 

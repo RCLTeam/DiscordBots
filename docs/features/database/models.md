@@ -269,7 +269,7 @@ Representa un enfrentamiento competitivo programado entre dos clubes dentro de u
 | `team2_id` | `Uuid` | `uuid` | No | — | FK a `teams.id` (`ON DELETE CASCADE`) del visitante. |
 | `discord_channel_id` | `BigInteger` | `bigint` | Sí | `None` (Unique) | Canal de texto privado asignado al partido. |
 | `scheduled_at` | `DateTime(timezone=True)` | `timestamptz` | Sí | `None` | Fecha y hora programada de la partida. |
-| `status` | `Enum(MatchStatus)` | `matchstatus` | No | `PENDIENTE` / `'PENDIENTE'` | Estado operativo (`PENDIENTE`, `CANAL_CREADO`, `JUGADO`, `CANCELADO`). |
+| `status` | `Enum(MatchStatus)` | `match_status` | No | `SCHEDULED` / `'scheduled'` | Estado operativo (`SCHEDULED`, `LIVE`, `COMPLETED`, `CANCELLED`, `FORFEIT`). |
 | `stream_url` | `Text` | `text` | Sí | `None` | URL de la retransmisión grabada o VOD del partido. |
 | `stream_url_live` | `String(255)` | `varchar(255)` | Sí | `None` | URL del directo o retransmisión en vivo del partido (Twitch, YouTube Live, etc.). |
 | `created_at` | `DateTime(timezone=True)` | `timestamptz` | No | `func.now()` (Timestamp Mixin) | Fecha de creación del emparejamiento. |

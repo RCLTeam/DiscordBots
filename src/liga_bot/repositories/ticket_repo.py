@@ -92,7 +92,3 @@ class TicketNoticeRepository(BaseRepository[TicketNotice]):
             return False
         await self.delete(notice)
         return True
-
-
-# Alias defensivo para compatibilidad con servicios y pruebas
-TicketRepository = TicketNoticeRepository

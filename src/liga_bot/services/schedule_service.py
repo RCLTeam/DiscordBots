@@ -376,7 +376,7 @@ class ScheduleService:
                     team2_id=team2_id,
                     scheduled_at=scheduled_at,
                     discord_channel_id=created_channel.id,
-                    status=MatchStatus.CANAL_CREADO,
+                    status=MatchStatus.SCHEDULED,
                 )
 
             return MatchResult(
@@ -410,23 +410,6 @@ class ScheduleService:
                 team2_name=t2_name,
                 error=f"Error durante el aprovisionamiento: {exc}",
             )
-
-    async def create_single_match(
-        self,
-        jornada: int,
-        team1_name: str,
-        team2_name: str,
-        scheduled_at: datetime | None,
-        guild: discord.Guild,
-    ) -> MatchResult:
-        """Alias para compatibilidad con PROJECT.md."""
-        return await self.create_match(
-            guild=guild,
-            jornada=jornada,
-            team1_name=team1_name,
-            team2_name=team2_name,
-            scheduled_at=scheduled_at,
-        )
 
     async def create_jornada_from_csv(
         self,
@@ -527,18 +510,6 @@ class ScheduleService:
             errors=errors,
             warnings=warnings,
         )
-
-    async def process_schedule_csv(
-        self,
-        jornada: int,
-        csv_content: str,
-        guild: discord.Guild,
-    ) -> list[MatchResult]:
-        """Alias para compatibilidad con PROJECT.md."""
-        j_res = await self.create_jornada_from_csv(
-            guild=guild, jornada=jornada, csv_content=csv_content
-        )
-        return j_res.matches
 
     async def set_stream_url(
         self,

@@ -211,19 +211,14 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │   └── liga_bot/                             # Paquete principal de LigaBot
 │       ├── cogs/                             # Controladores de presentación y comandos slash (discord.ext.commands.Cog)
 │       │   ├── __init__.py                   # Exportación de cogs principales del sistema
-│       │   ├── admin.py                      # Comandos administrativos de bajo nivel y utilidades
-│       │   ├── admin_cog.py                  # Cog de sincronización de comandos slash (/sync, /sincronizar)
+│       │   ├── admin.py                      # Cog de sincronización de comandos slash (/sync, /sincronizar)
 │       │   ├── casters.py                    # Cog de cartelera interactiva de casters y retransmisiones
 │       │   ├── permissions.py                # Política de autorización del staff por tipo de acción
 │       │   ├── roles.py                      # Cog y listeners para el flujo de verificación de roles
-│       │   ├── roster.py                     # Implementación interna de comandos de gestión de plantillas
-│       │   ├── roster_cog.py                 # Cog de registro de plantillas, capitanías y agentes libres
-│       │   ├── schedule.py                   # Implementación interna de gestión de partidos
-│       │   ├── schedule_cog.py               # Cog de calendario, creación de partidos y procesado CSV de jornadas
-│       │   ├── teams.py                      # Implementación interna de registro y consulta de equipos
-│       │   ├── teams_cog.py                  # Cog para listar y registrar clubes de la liga
-│       │   ├── tickets.py                    # Implementación interna de lógica de canales de soporte
-│       │   └── tickets_cog.py                # Cog de auditoría de inactividad de tickets y bucle en segundo plano
+│       │   ├── roster.py                     # Cog de registro de plantillas, capitanías y agentes libres
+│       │   ├── schedule.py                   # Cog de calendario, creación de partidos y procesado CSV de jornadas
+│       │   ├── teams.py                      # Cog para listar y registrar clubes de la liga
+│       │   └── tickets.py                    # Cog de auditoría de inactividad de tickets y bucle en segundo plano
 │       ├── models/                           # Modelos declarativos SQLAlchemy 2.0 (esquemas relacionales)
 │       │   ├── __init__.py                   # Exportación de modelos para registro en metadata
 │       │   ├── base.py                       # Clase base declarativa (AsyncAttrs, DeclarativeBase, UUIDPrimaryKey)
@@ -261,7 +256,8 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │       │   └── roster.py                     # Vistas interactivas de confirmación y selección de plantillas
 │       ├── utils/                            # Utilidades auxiliares y funciones de formateo
 │       │   ├── __init__.py                   # Inicialización del módulo de utilidades
-│       │   └── formatting.py                 # Normalización de textos, formato de fechas y constructores de embeds
+│       │   ├── formatting.py                 # Normalización de textos, formato de fechas y constructores de embeds
+│       │   └── ids.py                        # Limpieza de UUID e IDs de usuario de Discord (int o str) antes de consultar la BD
 │       ├── __init__.py                       # Metadatos del paquete liga_bot y versión oficial
 │       ├── __main__.py                       # Punto de entrada de ejecución directa (python -m liga_bot)
 │       ├── background_tasks.py               # Registro de tareas en segundo plano (referencia fuerte y espera en el apagado)
@@ -296,6 +292,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │   ├── test_config.py                        # Validación estricta de las 25 variables con Pydantic Settings
 │   ├── test_database.py                      # Conexión, pooling y sesiones asíncronas con PGlite y PostgreSQL
 │   ├── test_formatting.py                    # Formateo de plantillas oficiales de coordinación y embeds
+│   ├── test_ids.py                           # Limpieza de UUID e IDs de usuario de Discord (utils/ids.py)
 │   ├── test_models.py                        # Instanciación y restricciones de modelos relacionales
 │   ├── test_rate_limiter.py                  # Pruebas de consumo de tokens y tasa de reposición en el limitador
 │   ├── test_repositories.py                  # Operaciones CRUD en repositorios de persistencia

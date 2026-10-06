@@ -99,12 +99,6 @@ class MatchStatus(str, enum.Enum):
     CANCELLED = "cancelled"
     FORFEIT = "forfeit"
 
-    # Aliases de compatibilidad con código existente
-    PENDIENTE = "scheduled"
-    CANAL_CREADO = "scheduled"
-    JUGADO = "completed"
-    CANCELADO = "cancelled"
-
 
 class RoleRequestStatus(str, enum.Enum):
     """Ciclo de vida y estado operativo de una solicitud de rol de equipo."""
