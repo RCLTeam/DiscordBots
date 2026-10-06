@@ -33,6 +33,7 @@ Pruebas en memoria con mocks puros, tiempo submilisegundo por test, sin interacc
 |---|---:|---:|---|
 | `tests/test_bot.py` | 16 | 299 | Inicialización del bot `LigaBot`, carga de extensiones, manejo de argumentos CLI en `__main__.py`. |
 | `tests/test_shutdown_lifecycle.py` | 11 | 245 | Registro de tareas en segundo plano (`background_tasks`), borrado diferido de canales de ticket, orden de cierre de `LigaBot.close()` (Discord antes que la base de datos) y salida forzada con una segunda señal. |
+| `tests/test_command_tree_errors.py` | 15 | 288 | Manejador global de errores de los slash commands (`LigaCommandTree.on_error`): aviso efímero antes y después de `defer()`, registro `ERROR` con traza, mensajes de checks fallidos, opciones no válidas y comandos desincronizados, y comandos que ya gestionan sus errores. |
 | `tests/test_config.py` | 11 | 218 | Validación de esquema Pydantic `Settings`, URLs de base de datos (`postgresql+asyncpg://`, `pglite:///`), valores por defecto y cachés. |
 | `tests/test_cli.py` | 24 | 351 | Interfaz de línea de comandos (`run`, `seed`, `check`), códigos de retorno de proceso y argumentos. |
 | `tests/test_formatting.py` | 39 | 340 | Formateo de cadenas, cálculo de marcas de tiempo relativas, tablas monoespaciadas y escape de caracteres Markdown. |

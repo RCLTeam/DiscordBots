@@ -262,6 +262,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │       ├── __main__.py                       # Punto de entrada de ejecución directa (python -m liga_bot)
 │       ├── background_tasks.py               # Registro de tareas en segundo plano (referencia fuerte y espera en el apagado)
 │       ├── bot.py                            # Definición de la clase LigaBot, ciclo de vida e inyección de servicios
+│       ├── command_tree.py                   # Árbol de slash commands con manejador global de errores (LigaCommandTree)
 │       ├── cli.py                            # Interfaz CLI para tareas administrativas y sembrado (liga-cli)
 │       ├── config.py                         # Configuración Pydantic Settings v2 y constantes canónicas de la liga
 │       └── database.py                       # Factoría de motores duales, sesiones asíncronas y context managers
@@ -289,6 +290,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │   ├── test_bridge_protocol.py               # Serialización y deserialización de tramas JSON del protocolo
 │   ├── test_cli.py                           # Validación de comandos CLI (seed-teams, esquemas JSON y CSV)
 │   ├── test_cogs.py                          # Carga y descarga dinámica de cogs en LigaBot
+│   ├── test_command_tree_errors.py           # Manejador global de errores de los slash commands (avisos efímeros y log)
 │   ├── test_config.py                        # Validación estricta de las 25 variables con Pydantic Settings
 │   ├── test_database.py                      # Conexión, pooling y sesiones asíncronas con PGlite y PostgreSQL
 │   ├── test_formatting.py                    # Formateo de plantillas oficiales de coordinación y embeds
