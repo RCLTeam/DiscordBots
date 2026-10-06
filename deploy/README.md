@@ -56,7 +56,12 @@ en el log (solo muestra `*** [credenciales sin codificar]`).
 Para obtener el valor codificado:
 `python3 -c "import urllib.parse, getpass; print(urllib.parse.quote(getpass.getpass(), safe=''))"`.
 
-Instala dependencias y aplica migraciones **antes** de arrancar el servicio:
+Instala dependencias y aplica migraciones **antes** de arrancar el servicio. El
+servicio arranca con `uv run --no-sync` y nunca instala, actualiza ni descarga
+paquetes: las dependencias solo se instalan con `uv sync --frozen`. Si el entorno
+está incompleto, el bot no arranca, el error queda en `journalctl -u liga-bot` y
+systemd lo vuelve a intentar cada 5 s (`Restart=always`), ahora sin acceder a la red,
+hasta que ejecutes `uv sync --frozen`.
 
 ```bash
 cd /opt/rcl/discord-bots
@@ -71,6 +76,9 @@ sudo cp deploy/liga-bot.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now liga-bot
 ```
+
+Si adaptas `User`, `WorkingDirectory` o la ruta de uv, conserva las opciones de
+`ExecStart` (`run --no-sync liga-bot`).
 
 ## 4. Operación
 
@@ -115,3 +123,42 @@ sudo -u rcl uv sync --frozen
 sudo -u rcl uv run alembic upgrade head
 sudo systemctl restart liga-bot
 ```
+
+`git pull` no actualiza la unidad instalada en `/etc/systemd/system/`. Si la
+versión nueva cambia `deploy/liga-bot.service`, aplica el cambio y recarga systemd
+antes de reiniciar. Primero comprueba si la unidad instalada es una copia literal:
+
+```bash
+diff deploy/liga-bot.service /etc/systemd/system/liga-bot.service
+```
+
+**Copia literal** (sin diferencias salvo el cambio nuevo): vuelve a copiarla.
+
+```bash
+sudo cp deploy/liga-bot.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl restart liga-bot
+systemctl cat liga-bot | grep ExecStart   # comprueba la orden en uso
+journalctl -u liga-bot -n 50
+```
+
+**Unidad adaptada** (`User`, `Group`, `WorkingDirectory`, `HOME` o ruta de uv
+propios): no la copies, porque `cp` sustituye esos valores por los del repositorio
+y el servicio deja de arrancar. Aplica solo el cambio sobre tu copia. Por ejemplo,
+para pasar `ExecStart` a `--no-sync`:
+
+```bash
+sudo sed -i 's|run --frozen liga-bot|run --no-sync liga-bot|' /etc/systemd/system/liga-bot.service
+# o edítala a mano: sudoedit /etc/systemd/system/liga-bot.service
+sudo systemctl daemon-reload
+sudo systemctl restart liga-bot
+systemctl cat liga-bot | grep ExecStart   # debe mostrar run --no-sync liga-bot
+journalctl -u liga-bot -n 50
+```
+
+Para que las próximas actualizaciones de la unidad puedan copiarse tal cual, puedes
+dejar en `/etc/systemd/system/` la copia literal y guardar las adaptaciones en un
+drop-in con `sudo systemctl edit liga-bot` (`User=`, `Group=`, `WorkingDirectory=`,
+`Environment=HOME=…` y, si la ruta de uv es otra, `ExecStart=` vacío seguido del
+`ExecStart=` completo). El drop-in sobrevive al `cp`, pero un `ExecStart` redefinido
+en él tapa los cambios futuros de `ExecStart` del repositorio: revísalo cuando cambie.
