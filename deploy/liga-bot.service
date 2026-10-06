@@ -38,6 +38,11 @@ Environment=PYTHONUNBUFFERED=1
 
 # __main__.py atiende SIGTERM y cierra Discord y la BD de forma ordenada.
 KillSignal=SIGTERM
+# mixed: la SIGTERM va solo al proceso principal (uv), que la reenvía una vez al bot.
+# Con el valor por defecto (control-group) el bot la recibiría también de systemd, y
+# una segunda señal fuerza la salida sin terminar el cierre. Al agotar TimeoutStopSec,
+# systemd envía SIGKILL a todos los procesos del servicio.
+KillMode=mixed
 TimeoutStopSec=30
 
 Restart=always
