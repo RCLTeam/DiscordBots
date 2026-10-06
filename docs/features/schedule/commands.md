@@ -93,8 +93,8 @@ Crea el registro de un enfrentamiento individual en la base de datos, valida la 
       jornada: int,
       equipo1: str,
       equipo2: str,
-      fecha: str | None = None,
-      hora: str | None = None,
+      fecha: app_commands.Range[str, 1, MAX_HORARIO_LENGTH] | None = None,
+      hora: app_commands.Range[str, 1, MAX_HORARIO_LENGTH] | None = None,
   ) -> None
   ```
 
@@ -105,8 +105,8 @@ Crea el registro de un enfrentamiento individual en la base de datos, valida la 
 | `jornada` | `int` | Sí | Número de la jornada competitiva. Debe ser un entero positivo (`>= 1`). |
 | `equipo1` | `str` | Sí | Nombre o tag del equipo local para resolución en base de datos. |
 | `equipo2` | `str` | Sí | Nombre o tag del equipo visitante para resolución en base de datos. |
-| `fecha` | `str \| None` | No | Fecha del partido en formato `DD/MM/YYYY`. |
-| `hora` | `str \| None` | No | Hora del partido en formato `HH:MM`. |
+| `fecha` | `app_commands.Range[str, 1, 16] \| None` | No | Fecha del partido en formato `DD/MM/YYYY`. Discord rechaza valores de más de 16 caracteres (`MAX_HORARIO_LENGTH`). |
+| `hora` | `app_commands.Range[str, 1, 16] \| None` | No | Hora del partido en formato `HH:MM`. Discord rechaza valores de más de 16 caracteres (`MAX_HORARIO_LENGTH`). |
 
 #### Validaciones Pre-Ejecución y Parseo
 

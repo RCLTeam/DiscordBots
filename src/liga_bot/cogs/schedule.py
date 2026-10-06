@@ -30,6 +30,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Longitud máxima de las opciones fecha y hora de /crear-partido: holgura sobre
+# DD/MM/YYYY (10) y HH:MM (5) que mantiene los campos del embed por debajo del
+# límite de 1024 caracteres de Discord.
+MAX_HORARIO_LENGTH = 16
+
 
 class ScheduleCog(commands.Cog, name="Schedule"):
     """Comandos de programación de calendario, alta de partidos e importación CSV."""
@@ -89,8 +94,8 @@ class ScheduleCog(commands.Cog, name="Schedule"):
         jornada: int,
         equipo1: str,
         equipo2: str,
-        fecha: str | None = None,
-        hora: str | None = None,
+        fecha: app_commands.Range[str, 1, MAX_HORARIO_LENGTH] | None = None,
+        hora: app_commands.Range[str, 1, MAX_HORARIO_LENGTH] | None = None,
     ) -> None:
         """Crea un canal de partido individual con permisos específicos de división y CEO."""
         if interaction.guild is None:
@@ -115,8 +120,9 @@ class ScheduleCog(commands.Cog, name="Schedule"):
             return
 
         scheduled_dt: datetime | None = None
-        fecha_clean = fecha.strip() if fecha else None
-        hora_clean = hora.strip() if hora else None
+        # El recorte cubre llamadas que no pasan por la validación de Discord.
+        fecha_clean = fecha.strip()[:MAX_HORARIO_LENGTH] if fecha else None
+        hora_clean = hora.strip()[:MAX_HORARIO_LENGTH] if hora else None
 
         if fecha_clean and hora_clean:
             scheduled_dt = parse_scheduled_at(fecha_clean, hora_clean)
