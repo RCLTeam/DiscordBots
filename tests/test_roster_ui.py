@@ -62,6 +62,7 @@ def make_mock_member(
     member.guild_permissions.administrator = False
     member.guild_permissions.manage_guild = False
     member.send = AsyncMock()
+    member.edit = AsyncMock()
 
     avatar = MagicMock()
     avatar.url = f"https://cdn.discordapp.com/avatars/{user_id}/avatar.png"
@@ -112,6 +113,7 @@ def make_mock_roster_sync_service() -> MagicMock:
     service.get_user_teams = AsyncMock(return_value=[])
     service.handle_role_added = AsyncMock()
     service.handle_role_removed = AsyncMock()
+    service.resolve_canonical_nick = AsyncMock(return_value="ALP TestUser")
     return service
 
 
@@ -442,6 +444,60 @@ class TestGestionarPosicionSaveButton:
         )
 
         # Los componentes deben quedar deshabilitados
+        assert all(child.disabled for child in view.children)
+        assert (
+            interaction.response.edit_message.awaited
+            or interaction.edit_original_response.awaited
+            or interaction.followup.send.awaited
+        )
+
+    @pytest.mark.asyncio
+    async def test_save_button_updates_canonical_nickname(self) -> None:
+        """Verifica que al guardar se invoque resolve_canonical_nick y se edite el apodo."""
+        target_member = make_mock_member(user_id=123, name="Ninym", display_name="Ninym")
+        actor_member = make_mock_member(user_id=999)
+        service = make_mock_roster_sync_service()
+        service.resolve_canonical_nick = AsyncMock(return_value="ALP Ninym")
+
+        t1 = make_mock_team(name="Alpha", tag="ALP")
+        updated_membership = make_mock_membership(t1, str(target_member.id), RosterRole.TOP)
+        service.change_player_position.return_value = updated_membership
+
+        user_teams = [(t1, make_mock_membership(t1, str(target_member.id)))]
+        view = GestionarPosicionView(target_member, user_teams, service, actor_member)
+        view.selected_team_id = t1.id
+        view.selected_role = RosterRole.TOP
+
+        interaction = make_mock_interaction(user=actor_member)
+        await view.save_button.callback(interaction)
+
+        service.resolve_canonical_nick.assert_awaited_once_with(
+            discord_user_id=str(target_member.id),
+            base_name=target_member.display_name,
+        )
+        target_member.edit.assert_awaited_once_with(nick="ALP Ninym")
+
+    @pytest.mark.asyncio
+    async def test_save_button_nick_edit_exception_is_handled_gracefully(self) -> None:
+        """Verifica que si la edición de apodo falla, no aborte el flujo ni rompa la respuesta."""
+        target_member = make_mock_member(user_id=123, name="Ninym", display_name="Ninym")
+        actor_member = make_mock_member(user_id=999)
+        service = make_mock_roster_sync_service()
+        service.resolve_canonical_nick = AsyncMock(side_effect=RuntimeError("Nick error"))
+
+        t1 = make_mock_team(name="Alpha", tag="ALP")
+        updated_membership = make_mock_membership(t1, str(target_member.id), RosterRole.TOP)
+        service.change_player_position.return_value = updated_membership
+
+        user_teams = [(t1, make_mock_membership(t1, str(target_member.id)))]
+        view = GestionarPosicionView(target_member, user_teams, service, actor_member)
+        view.selected_team_id = t1.id
+        view.selected_role = RosterRole.TOP
+
+        interaction = make_mock_interaction(user=actor_member)
+        await view.save_button.callback(interaction)
+
+        # La interacción debe haberse completado con éxito a pesar del fallo en apodo
         assert all(child.disabled for child in view.children)
         assert (
             interaction.response.edit_message.awaited

@@ -163,6 +163,8 @@ def make_mock_roster_sync_service() -> MagicMock:
     service.get_user_teams = AsyncMock(return_value=[])
     service.change_player_position = AsyncMock()
     service.list_team_tags = AsyncMock(return_value=["PSP", "PAN"])
+    service.transfer_player = AsyncMock()
+    service.resolve_canonical_nick = AsyncMock(return_value="PSP TestUser")
     return service
 
 
@@ -726,3 +728,120 @@ class TestLiberarJugador:
 
         service.handle_role_removed.assert_not_awaited()
         inter.response.send_message.assert_awaited_once()
+
+
+class TestTraspasaEquipo:
+    """El comando /traspasa-equipo traspasa a un jugador y sincroniza su apodo canónico."""
+
+    @staticmethod
+    def _preparar():
+        service = make_mock_roster_sync_service()
+        settings = Settings(staff_role_id=101, ceo_role_id=102, sin_verificar_role_id=202)
+        bot = make_mock_bot(settings=settings, roster_sync_service=service)
+        cog = RosterCog(bot)
+
+        team_alpha = make_mock_team(name="Planar Shock Pingus", tag="PSP", discord_role_id=1001)
+        role_alpha = make_mock_role(1001, "Planar Shock Pingus")
+
+        staff_user = make_mock_member(user_id=101, roles=[make_mock_role(101, "Staff")])
+        target = make_mock_member(user_id=555, name="Ninym", roles=[])
+
+        inter = make_mock_interaction(user=staff_user)
+        inter.guild.roles = [role_alpha]
+        inter.guild.get_role.side_effect = lambda rid: role_alpha if rid == 1001 else None
+
+        return cog, service, inter, team_alpha, role_alpha, target
+
+    @pytest.mark.asyncio
+    async def test_traspasa_equipo_delegates_to_resolve_canonical_nick(self) -> None:
+        """Verifica que el comando traspasar delegue el apodo en resolve_canonical_nick."""
+        cog, service, inter, team, role, target = self._preparar()
+        membership = make_mock_membership(team, role=RosterRole.MID)
+        service.transfer_player = AsyncMock(return_value=(membership, team, None))
+        service.resolve_canonical_nick = AsyncMock(return_value="PSP Ninym")
+
+        await cog.traspasa_equipo.callback(
+            cog,
+            inter,
+            usuario=target,
+            equipo=role,
+            posicion=RosterRole.MID,
+            nombre_lol="Ninym",
+        )
+
+        service.resolve_canonical_nick.assert_awaited_once_with(
+            discord_user_id=target.id,
+            base_name="Ninym",
+        )
+        target.edit.assert_awaited_once_with(nick="PSP Ninym")
+        inter.followup.send.assert_awaited_once()
+        msg = inter.followup.send.await_args.args[0]
+        assert "PSP Ninym" in msg
+
+    @pytest.mark.asyncio
+    async def test_traspasa_equipo_non_competitive_clean_nick(self) -> None:
+        """Si la posición es no competitiva (PARTNERS), queda limpio o con prioridad deportiva."""
+        cog, service, inter, team, role, target = self._preparar()
+        target.display_name = "PSP Ninym"
+        membership = make_mock_membership(team, role=RosterRole.PARTNERS)
+        service.transfer_player = AsyncMock(return_value=(membership, team, None))
+        service.resolve_canonical_nick = AsyncMock(return_value="Ninym")
+
+        await cog.traspasa_equipo.callback(
+            cog,
+            inter,
+            usuario=target,
+            equipo=role,
+            posicion=RosterRole.PARTNERS,
+            nombre_lol=None,
+        )
+
+        service.resolve_canonical_nick.assert_awaited_once_with(
+            discord_user_id=target.id,
+            base_name="PSP Ninym",
+        )
+        target.edit.assert_awaited_once_with(nick="Ninym")
+        msg = inter.followup.send.await_args.args[0]
+        assert "Ninym" in msg
+
+    @pytest.mark.asyncio
+    async def test_traspasa_equipo_fallback_on_resolve_canonical_nick_error(self) -> None:
+        """Si resolve_canonical_nick falla, se recurre defensivamente a apply_team_tag."""
+        cog, service, inter, team, role, target = self._preparar()
+        membership = make_mock_membership(team, role=RosterRole.TOP)
+        service.transfer_player = AsyncMock(return_value=(membership, team, None))
+        service.resolve_canonical_nick = AsyncMock(side_effect=RuntimeError("BD indisponible"))
+        service.list_team_tags = AsyncMock(return_value=["PSP"])
+
+        await cog.traspasa_equipo.callback(
+            cog,
+            inter,
+            usuario=target,
+            equipo=role,
+            posicion=RosterRole.TOP,
+            nombre_lol="Ninym",
+        )
+
+        target.edit.assert_awaited_once_with(nick="PSP Ninym")
+
+    @pytest.mark.asyncio
+    async def test_traspasa_equipo_edit_nick_forbidden_appends_aviso(self) -> None:
+        """Si Discord rechaza el cambio de apodo (Forbidden), se añade aviso al mensaje."""
+        cog, service, inter, team, role, target = self._preparar()
+        membership = make_mock_membership(team, role=RosterRole.TOP)
+        service.transfer_player = AsyncMock(return_value=(membership, team, None))
+        service.resolve_canonical_nick = AsyncMock(return_value="PSP Ninym")
+        target.edit.side_effect = discord.Forbidden(MagicMock(), "Missing Permissions")
+
+        await cog.traspasa_equipo.callback(
+            cog,
+            inter,
+            usuario=target,
+            equipo=role,
+            posicion=RosterRole.TOP,
+            nombre_lol="Ninym",
+        )
+
+        inter.followup.send.assert_awaited_once()
+        msg = inter.followup.send.await_args.args[0]
+        assert "⚠️ Plantilla actualizada, pero no se pudo renombrar a `PSP Ninym`." in msg
