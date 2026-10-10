@@ -1208,3 +1208,166 @@ class TestEnsurePlayer:
         )
 
         assert second.is_main is False
+
+
+# ===========================================================================
+# 9. Pruebas de resolución de apodo canónico (resolve_canonical_nick)
+# ===========================================================================
+
+
+class TestResolveCanonicalNick:
+    """Pruebas unitarias para resolve_canonical_nick según prioridad competitiva."""
+
+    @pytest.mark.asyncio
+    async def test_resolve_canonical_nick_competitive_member_applies_tag(
+        self,
+        roster_sync_service: RosterSyncService,
+        seed_teams: tuple[Team, Team, Team],
+        session_factory: async_sessionmaker[AsyncSession],
+    ):
+        """Un usuario con membresía competitiva recibe su apodo con el tag del equipo."""
+        team_alpha, _, _ = seed_teams
+        async with session_factory() as session:
+            user = DiscordUser(discord_id="700100", username="test_mid")
+            session.add(user)
+            await session.flush()
+            m_repo = TeamMembershipRepository(session)
+            await m_repo.create(team_alpha.id, "700100", RosterRole.MID)
+            await session.commit()
+
+        nick = await roster_sync_service.resolve_canonical_nick("700100", "Hiperxp")
+        assert nick == f"{team_alpha.tag} Hiperxp"
+
+    @pytest.mark.asyncio
+    async def test_resolve_canonical_nick_competitive_overrides_non_competitive_tag(
+        self,
+        roster_sync_service: RosterSyncService,
+        seed_teams: tuple[Team, Team, Team],
+        session_factory: async_sessionmaker[AsyncSession],
+    ):
+        """
+        Un jugador competitivo en un club con rol no competitivo en otro
+        mantiene el tag competitivo.
+        """
+        team_alpha, team_beta, _ = seed_teams
+        async with session_factory() as session:
+            user = DiscordUser(discord_id="700101", username="dual_role_user")
+            session.add(user)
+            await session.flush()
+            m_repo = TeamMembershipRepository(session)
+            # Rol competitivo en Alpha ('ALP')
+            await m_repo.create(team_alpha.id, "700101", RosterRole.TOP)
+            # Rol no competitivo en Beta ('BET')
+            await m_repo.create(team_beta.id, "700101", RosterRole.PARTNERS)
+            await session.commit()
+
+        # Incluso si el base_name trae el tag del club secundario/partner
+        nick = await roster_sync_service.resolve_canonical_nick(
+            "700101", f"{team_beta.tag} Hiperxp"
+        )
+        assert nick == f"{team_alpha.tag} Hiperxp"
+
+    @pytest.mark.asyncio
+    async def test_resolve_canonical_nick_only_non_competitive_strips_tag(
+        self,
+        roster_sync_service: RosterSyncService,
+        seed_teams: tuple[Team, Team, Team],
+        session_factory: async_sessionmaker[AsyncSession],
+    ):
+        """Un usuario que solo tiene rol no competitivo ve eliminado cualquier tag de club."""
+        team_alpha, _, _ = seed_teams
+        async with session_factory() as session:
+            user = DiscordUser(discord_id="700102", username="partner_only")
+            session.add(user)
+            await session.flush()
+            m_repo = TeamMembershipRepository(session)
+            await m_repo.create(team_alpha.id, "700102", RosterRole.PARTNERS)
+            await session.commit()
+
+        nick_with_tag = await roster_sync_service.resolve_canonical_nick(
+            "700102", f"{team_alpha.tag} Hiperxp"
+        )
+        assert nick_with_tag == "Hiperxp"
+
+        nick_clean = await roster_sync_service.resolve_canonical_nick("700102", "Hiperxp")
+        assert nick_clean == "Hiperxp"
+
+    @pytest.mark.asyncio
+    async def test_resolve_canonical_nick_invalid_user_id(
+        self,
+        roster_sync_service: RosterSyncService,
+    ):
+        """Si el discord_user_id es vacío o inválido, retorna el base_name limpio truncado a 32."""
+        assert await roster_sync_service.resolve_canonical_nick("", "  Hiperxp  ") == "Hiperxp"
+        assert await roster_sync_service.resolve_canonical_nick("   ", "Hiperxp") == "Hiperxp"
+
+    @pytest.mark.asyncio
+    async def test_resolve_canonical_nick_truncates_to_32_chars(
+        self,
+        roster_sync_service: RosterSyncService,
+        seed_teams: tuple[Team, Team, Team],
+        session_factory: async_sessionmaker[AsyncSession],
+    ):
+        """El apodo canónico se trunca a 32 caracteres (límite de apodo de Discord)."""
+        team_alpha, _, _ = seed_teams
+        async with session_factory() as session:
+            user = DiscordUser(discord_id="700103", username="long_name_user")
+            session.add(user)
+            await session.flush()
+            m_repo = TeamMembershipRepository(session)
+            await m_repo.create(team_alpha.id, "700103", RosterRole.MID)
+            await session.commit()
+
+        long_name = "SuperUltraMegaLongPlayerNickname1234567890"
+        nick = await roster_sync_service.resolve_canonical_nick("700103", long_name)
+        assert len(nick) == 32
+        assert nick.startswith(f"{team_alpha.tag} ")
+
+    @pytest.mark.asyncio
+    async def test_resolve_canonical_nick_with_explicit_session_and_int_id(
+        self,
+        roster_sync_service: RosterSyncService,
+        seed_teams: tuple[Team, Team, Team],
+        session_factory: async_sessionmaker[AsyncSession],
+    ):
+        """
+        Invocar resolve_canonical_nick con sesión abierta e ID entero
+        cubre la rama inyectada y el casteo de ID.
+        """
+        team_alpha, _, _ = seed_teams
+        async with session_factory() as session:
+            user = DiscordUser(discord_id="700104", username="int_user")
+            session.add(user)
+            await session.flush()
+            m_repo = TeamMembershipRepository(session)
+            await m_repo.create(team_alpha.id, "700104", RosterRole.SUPPORT)
+            await session.commit()
+
+        async with session_factory() as session:
+            nick = await roster_sync_service.resolve_canonical_nick(
+                700104, "Hiperxp", session=session
+            )
+            assert nick == f"{team_alpha.tag} Hiperxp"
+
+    @pytest.mark.asyncio
+    async def test_resolve_canonical_nick_strips_trailing_whitespace_on_truncation(
+        self,
+        roster_sync_service: RosterSyncService,
+        seed_teams: tuple[Team, Team, Team],
+        session_factory: async_sessionmaker[AsyncSession],
+    ):
+        """Verifica que el recorte de 32 caracteres no deja espacios en blanco al final."""
+        team_alpha, _, _ = seed_teams
+        async with session_factory() as session:
+            user = DiscordUser(discord_id="700105", username="space_cut_user")
+            session.add(user)
+            await session.flush()
+            m_repo = TeamMembershipRepository(session)
+            await m_repo.create(team_alpha.id, "700105", RosterRole.MID)
+            await session.commit()
+
+        # 'ALP ' (4) + 27 'A' + ' EXTRA' -> char 32 cae en espacio
+        base_name = ("A" * 27) + " EXTRA"
+        nick = await roster_sync_service.resolve_canonical_nick("700105", base_name)
+        assert not nick.endswith(" ")
+        assert len(nick) <= 32

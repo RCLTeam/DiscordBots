@@ -206,3 +206,39 @@ async def get_user_teams(
 - Consulta a través de `TeamMembershipRepository.list_by_user(clean_user_id, with_team=True)`.
 - **Eager Loading Estratégico:** Utiliza `selectinload(TeamMembership.team)` en la consulta SQLAlchemy, asegurando que los atributos de `Team` (`name`, `tag`, `logo_url`) permanezcan accesibles en memoria fuera del ciclo de vida de la sesión asíncrona, evitando excepciones `DetachedInstanceError`.
 - Devuelve una lista de tuplas `[(m.team, m) for m in memberships if m.team is not None]`.
+
+---
+
+### 3.6 `resolve_canonical_nick` (`L755–L789`)
+
+Resuelve el apodo canónico de un usuario para Discord aplicando la regla de prioridad competitiva.
+
+```python
+async def resolve_canonical_nick(
+    self,
+    discord_user_id: str | int,
+    base_name: str,
+    session: AsyncSession | None = None,
+) -> str:
+```
+
+- **Argumentos:**
+  - `discord_user_id` (`str | int`): Snowflake identificador de Discord del usuario.
+  - `base_name` (`str`): Nombre base o apodo actual del miembro en el servidor de Discord.
+  - `session` (`AsyncSession | None`): Sesión asíncrona transaccional opcional; si no se suministra, abre una transacción autónoma vía `transactional_session`.
+
+- **Regla Deportiva de Prioridad Competitiva:**
+  Un usuario en la competición puede poseer múltiples roles entre distintos clubes (por ejemplo, ser jugador titular en el Club A y ostentar el rol no competitivo `PARTNERS` en el Club B). El apodo canónico en Discord refleja con exclusividad la pertenencia deportiva competitiva:
+  1. Si ostenta una posición competitiva activa (`TOP`, `JUNGLE`, `MID`, `ADC`, `SUPPORT`, `SUBSTITUTE`), recibe obligatoriamente el tag del club en el que compite (`<TAG> <clean_base>`), ignorando o sobreescribiendo cualquier tag de roles secundarios o no competitivos.
+  2. Si solo posee roles no competitivos (`COACH`, `STAFF`, `PARTNERS`) o ninguna membresía en la liga, se despoja cualquier tag de club previo, dejando su nombre limpio (`clean_base`).
+
+- **Flujo de Ejecución:**
+  1. **Validación de Identificador:** Limpia `discord_user_id` mediante `clean_user_id_str`. Si es nulo o vacío, retorna de inmediato `base_name.strip()[:32].rstrip()`.
+  2. **Consulta de Tags Registrados:** Obtiene los acrónimos de todos los equipos del torneo mediante `TeamRepository(s).list_all()`.
+  3. **Consulta de Membresía Competitiva:** Invoca `TeamMembershipRepository(s).get_competitive_membership(user_id_str, with_team=True)`, precargando ansiosamente la relación `Team`.
+  4. **Limpieza de Tag Previo:** Extrae el nombre limpio invocando `strip_team_tag(base_name, known_tags)` (`src/liga_bot/utils/formatting.py`) para purgar prefijos de clubes anteriores o secundarios.
+  5. **Bifurcación y Formateo de Apodo:**
+     - Si existe membresía competitiva y el equipo posee un tag válido: aplica el tag mediante `apply_team_tag(clean_base, comp.team.tag, known_tags)`.
+     - Si no posee rol competitivo activo: utiliza `clean_base`.
+  6. **Acotación y Saneamiento de Longitud:** Aplica `.rstrip()[:32].rstrip()` garantizando el cumplimiento del límite de 32 caracteres de la API de Discord y previniendo espacios en blanco residuales al final.
+

@@ -29,6 +29,7 @@ from liga_bot.repositories.roster_repo import (
     TeamMembershipRepository,
 )
 from liga_bot.repositories.team_repo import TeamRepository
+from liga_bot.utils.formatting import apply_team_tag, strip_team_tag
 from liga_bot.utils.ids import clean_user_id_str, clean_uuid
 
 if TYPE_CHECKING:
@@ -750,6 +751,41 @@ class RosterSyncService:
 
         async with transactional_session(self.session_factory) as s:
             return await _do_get(s)
+
+    async def resolve_canonical_nick(
+        self,
+        discord_user_id: str | int,
+        base_name: str,
+        session: AsyncSession | None = None,
+    ) -> str:
+        """
+        Resuelve el apodo canónico de un usuario según la prioridad competitiva.
+
+        - Si el usuario ostenta una posición competitiva en algún equipo de la liga,
+          se antepone el tag de dicho equipo (<TAG> <clean_base>).
+        - Si solo posee roles no competitivos (coach, staff, partners) o ninguno,
+          se eliminan los tags conocidos dejando el nombre limpio.
+        - Se acota estrictamente a 32 caracteres (límite de apodo en Discord).
+        """
+        user_id_str = clean_user_id_str(discord_user_id)
+        if not user_id_str:
+            return base_name.strip()[:32].rstrip()
+
+        async def _do_resolve(s: AsyncSession) -> str:
+            known_tags = [t.tag for t in await TeamRepository(s).list_all()]
+            comp = await TeamMembershipRepository(s).get_competitive_membership(
+                user_id_str, with_team=True
+            )
+            clean_base = strip_team_tag(base_name, known_tags)
+            if comp is not None and comp.team is not None and comp.team.tag:
+                return apply_team_tag(clean_base, comp.team.tag, known_tags)[:32].rstrip()
+            return clean_base[:32].rstrip()
+
+        if session is not None:
+            return await _do_resolve(session)
+
+        async with transactional_session(self.session_factory) as s:
+            return await _do_resolve(s)
 
 
 __all__ = [

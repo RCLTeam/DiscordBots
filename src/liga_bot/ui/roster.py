@@ -285,7 +285,21 @@ class SaveButton(discord.ui.Button[Any]):
                 await interaction.response.send_message(msg, ephemeral=True)
             return
 
-        # 4. Éxito: Deshabilitar componentes y enviar embed resumen
+        # 4. Actualizar apodo canónico según prioridad deportiva competitiva
+        try:
+            nuevo_nick = await self.view.roster_sync_service.resolve_canonical_nick(
+                discord_user_id=str(self.view.member.id),
+                base_name=self.view.member.display_name,
+            )
+            await self.view.member.edit(nick=nuevo_nick)
+        except Exception as exc:
+            logger.warning(
+                "No se pudo actualizar el apodo tras cambiar posición de %s: %s",
+                self.view.member.display_name,
+                exc,
+            )
+
+        # 5. Éxito: Deshabilitar componentes y enviar embed resumen
         for child in self.view.children:
             if hasattr(child, "disabled"):
                 child.disabled = True
