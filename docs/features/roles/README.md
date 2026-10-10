@@ -14,9 +14,9 @@ El diseño sigue una arquitectura desacoplada en tres capas que asegura aislamie
 
 | Documento | Descripción Técnica |
 |---|---|
-| [Comandos (`commands.md`)](./commands.md) | Especificación de comandos slash (`/pedir-rol`, `/publicar-panel-rol`, `/asignar-rol`), permisos por defecto, controles en runtime (`is_staff`) y oyente `on_member_join`. |
-| [Servicios de Dominio (`services.md`)](./services.md) | Lógica de negocio en `RoleService`: creación de canales privados, jerarquía de permisos, prevención de tickets duplicados, rollback atómico anti-canales huérfanos, confirmación de tickets y asignación directa de equipo. |
-| [Componentes de Interfaz (`ui.md`)](./ui.md) | Componentes visuales interactivos: modales (`SolicitudRolModal`), selector de equipos con límites de longitud de Discord (`EquipoSelect`), selector de posición con rollback del ticket (`PosicionSelect`), vistas persistentes y botones dinámicos (`ConfirmarRolButton`). |
+| [Comandos (`commands.md`)](./commands.md) | Especificación de comandos slash (`/pedir-rol`, `/publicar-panel-rol`, `/asignar-rol` con saneamiento de Riot Tag), permisos por defecto, controles en runtime (`is_staff`) y oyente `on_member_join`. |
+| [Servicios de Dominio (`services.md`)](./services.md) | Lógica de negocio en `RoleService`: saneamiento defensivo de Riot Tag, creación de canales privados, jerarquía de permisos, prevención de tickets duplicados, rollback atómico anti-canales huérfanos, confirmación de tickets y asignación directa de equipo. |
+| [Componentes de Interfaz (`ui.md`)](./ui.md) | Componentes visuales interactivos: modales (`SolicitudRolModal` con normalización de Riot Tag y límites de 3 a 5 caracteres), selector de equipos con límites de longitud de Discord (`EquipoSelect`), selector de posición con rollback del ticket (`PosicionSelect`), vistas persistentes y botones dinámicos (`ConfirmarRolButton`). |
 | [Persistencia Relacional (`persistence.md`)](./persistence.md) | Esquema relacional de la tabla `role_requests`, tipos BigInteger para Snowflakes, ciclo de vida con enum nativo `RoleRequestStatus` e índice B-Tree. |
 
 ---
@@ -64,3 +64,4 @@ El diseño sigue una arquitectura desacoplada en tres capas que asegura aislamie
 3. **Control Estricto de Apodos**: El apodo es `<TAG> <NombreLoL>` al entrar en un equipo (ticket confirmado o `/asignar-rol`) y el nombre de invocador para Libre, truncado a 32 caracteres (`[:32]`) por el límite de la API de Discord.
 4. **Ciclo de Vida Determinista**: Las solicitudes transicionan únicamente entre `PENDING`, `APPROVED` y `DENIED`, evitando inconsistencias con el motor relacional.
 5. **Solo Equipos Registrados**: Tanto la confirmación de tickets como `/asignar-rol` resuelven el rol por el `discord_role_id` del equipo registrado; nunca se asigna un rol del servidor por coincidencia de nombre.
+6. **Sanitización Defensiva de Riot Tag**: Tanto en el modal `SolicitudRolModal` como en el comando administrativo `/asignar-rol` y en los métodos de servicio (`RoleService.assign_free_role`, `RoleService.create_role_request_ticket`, `RoleService.assign_team_role` y `RosterSyncService.ensure_player`), el Riot Tag se sanea mediante `normalize_riot_tag` purgando cualquier carácter `#` y espacios residuales, garantizando que tanto `RoleRequest` como `Player` almacenen únicamente tags alfanuméricos limpios de 3 a 5 caracteres según el estándar oficial de Riot Games.

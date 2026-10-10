@@ -468,6 +468,131 @@ class TestRolesCogCommands:
             "El equipo 'Administración' no está registrado.", ephemeral=True
         )
 
+    @pytest.mark.asyncio
+    async def test_asignar_rol_sanitizes_riot_tag_free_role(self) -> None:
+        """Verifica que /asignar-rol para 'Libre' sanea el Riot Tag antes de pasarlo al servicio."""
+        mock_service = MagicMock(spec=RoleService)
+        mock_service.assign_free_role = AsyncMock(
+            return_value=(True, "Rol Libre asignado correctamente.")
+        )
+        settings = Settings(staff_role_id=101, free_role_name="Libre")
+        bot = make_mock_bot(settings=settings, role_service=mock_service)
+        cog = RolesCog(bot)
+
+        staff_user = make_mock_member(user_id=111, roles=[make_mock_role(101, "Staff")])
+        inter = make_mock_interaction(user=staff_user)
+        target_user = make_mock_member(user_id=999)
+
+        await cog.asignar_rol.callback(
+            cog,
+            inter,
+            usuario=target_user,
+            equipo="Libre",
+            nombre_lol="Invocador",
+            riot_tag=" #EUW ",
+        )
+
+        mock_service.assign_free_role.assert_awaited_once_with(target_user, "Invocador", "EUW")
+        inter.response.defer.assert_awaited_once_with(ephemeral=True)
+
+    @pytest.mark.asyncio
+    async def test_asignar_rol_sanitizes_riot_tag_team_role(self) -> None:
+        """Verifica que /asignar-rol para un equipo sanea el Riot Tag antes del servicio."""
+        mock_service = MagicMock(spec=RoleService)
+        mock_service.assign_team_role = AsyncMock(
+            return_value=(True, "Rol Planar Shock Pingus asignado a TargetMember (mid).")
+        )
+        settings = Settings(staff_role_id=101, free_role_name="Libre")
+        bot = make_mock_bot(settings=settings, role_service=mock_service)
+        cog = RolesCog(bot)
+
+        staff_user = make_mock_member(user_id=111, roles=[make_mock_role(101, "Staff")])
+        inter = make_mock_interaction(user=staff_user)
+        target_user = make_mock_member(user_id=555, name="TargetMember")
+
+        await cog.asignar_rol.callback(
+            cog,
+            inter,
+            usuario=target_user,
+            equipo="Planar Shock Pingus",
+            nombre_lol="Faker",
+            riot_tag="##12345",
+            posicion="mid",
+        )
+
+        mock_service.assign_team_role.assert_awaited_once_with(
+            guild=inter.guild,
+            member=target_user,
+            staff_member=staff_user,
+            equipo="Planar Shock Pingus",
+            nombre_lol="Faker",
+            riot_tag="12345",
+            posicion="mid",
+        )
+        inter.response.defer.assert_awaited_once_with(ephemeral=True)
+
+    @pytest.mark.asyncio
+    async def test_asignar_rol_rejects_tag_shorter_than_3_chars(self) -> None:
+        """Verifica que /asignar-rol rechaza etiquetas con menos de 3 caracteres limpios."""
+        mock_service = MagicMock(spec=RoleService)
+        mock_service.assign_free_role = AsyncMock()
+        mock_service.assign_team_role = AsyncMock()
+        settings = Settings(staff_role_id=101, free_role_name="Libre")
+        bot = make_mock_bot(settings=settings, role_service=mock_service)
+        cog = RolesCog(bot)
+
+        staff_user = make_mock_member(user_id=111, roles=[make_mock_role(101, "Staff")])
+        target_user = make_mock_member(user_id=999)
+
+        for invalid_tag in ("12", "#1", " #A ", "###", "   "):
+            inter = make_mock_interaction(user=staff_user)
+            await cog.asignar_rol.callback(
+                cog,
+                inter,
+                usuario=target_user,
+                equipo="Libre",
+                nombre_lol="Player",
+                riot_tag=invalid_tag,
+            )
+            inter.response.send_message.assert_awaited_once_with(
+                "❌ El Riot Tag debe tener entre 3 y 5 caracteres alfanuméricos (ej: EUW o 12345).",
+                ephemeral=True,
+            )
+            inter.response.defer.assert_not_called()
+            mock_service.assign_free_role.assert_not_called()
+            mock_service.assign_team_role.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_asignar_rol_rejects_tag_longer_than_5_chars(self) -> None:
+        """Verifica que /asignar-rol rechaza etiquetas con más de 5 caracteres limpios."""
+        mock_service = MagicMock(spec=RoleService)
+        mock_service.assign_free_role = AsyncMock()
+        mock_service.assign_team_role = AsyncMock()
+        settings = Settings(staff_role_id=101, free_role_name="Libre")
+        bot = make_mock_bot(settings=settings, role_service=mock_service)
+        cog = RolesCog(bot)
+
+        staff_user = make_mock_member(user_id=111, roles=[make_mock_role(101, "Staff")])
+        target_user = make_mock_member(user_id=999)
+
+        for invalid_tag in ("123456", "#TOOLONG", "  #ABCDEF  "):
+            inter = make_mock_interaction(user=staff_user)
+            await cog.asignar_rol.callback(
+                cog,
+                inter,
+                usuario=target_user,
+                equipo="Libre",
+                nombre_lol="Player",
+                riot_tag=invalid_tag,
+            )
+            inter.response.send_message.assert_awaited_once_with(
+                "❌ El Riot Tag debe tener entre 3 y 5 caracteres alfanuméricos (ej: EUW o 12345).",
+                ephemeral=True,
+            )
+            inter.response.defer.assert_not_called()
+            mock_service.assign_free_role.assert_not_called()
+            mock_service.assign_team_role.assert_not_called()
+
     def test_asignar_rol_posicion_ofrece_las_opciones_del_ticket(self) -> None:
         """El parámetro posicion tiene las mismas opciones que el desplegable del ticket."""
         from liga_bot.ui.roles import POSICION_DESCRIPCIONES

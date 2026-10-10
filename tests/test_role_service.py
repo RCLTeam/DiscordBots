@@ -453,6 +453,45 @@ class TestAssignFreeRole:
         assert created.canal_id is None
 
     @pytest.mark.asyncio
+    async def test_assign_free_role_sanitizes_riot_tag(
+        self, role_service: RoleService, clean_settings: Settings, db_session: AsyncSession
+    ) -> None:
+        """Verifica que assign_free_role normalice el riot_tag eliminando '#' y espacios."""
+        bot = MagicMock()
+        bot.roster_sync_service = RosterSyncService(
+            session_factory=role_service.session_factory, settings=clean_settings
+        )
+        role_service.bot = bot
+        guild = create_mock_guild(clean_settings)
+        member = create_mock_member(
+            user_id=200099,
+            name="AgenteTag",
+            guild=guild,
+        )
+        member.global_name = None
+        member.avatar = None
+
+        ok, msg = await role_service.assign_free_role(
+            member=member,
+            nombre_lol="ShowMaker",
+            riot_tag=" #DK1 ",
+        )
+
+        assert ok is True
+        repo = RoleRequestRepository(db_session)
+        requests = await repo.list_all()
+        created = next((r for r in requests if r.user_id == 200099), None)
+        assert created is not None
+        assert created.riot_tag == "DK1"
+
+        player_res = await db_session.execute(
+            select(Player).where(Player.discord_user_id == "200099")
+        )
+        player = player_res.scalars().first()
+        assert player is not None
+        assert player.riot_tag == "DK1"
+
+    @pytest.mark.asyncio
     async def test_assign_free_role_role_not_found(
         self, role_service: RoleService, clean_settings: Settings
     ):
@@ -712,6 +751,44 @@ class TestCreateRoleRequestTicket:
         assert req.riot_tag == "KR1"
         assert req.equipo == "Vanguard Gaming"
         assert req.estado == RoleRequestStatus.PENDING
+
+    @pytest.mark.asyncio
+    async def test_create_ticket_sanitizes_riot_tag(
+        self, role_service: RoleService, clean_settings: Settings, db_session: AsyncSession
+    ) -> None:
+        """Verifica que create_role_request_ticket normalice el riot_tag sin '#' ni espacios."""
+        bot = MagicMock()
+        bot.roster_sync_service = RosterSyncService(
+            session_factory=role_service.session_factory, settings=clean_settings
+        )
+        role_service.bot = bot
+        guild = create_mock_guild(clean_settings)
+        member = create_mock_member(300099, name="TicketTag", guild=guild)
+        member.global_name = None
+        member.avatar = None
+
+        ok, msg, chan = await role_service.create_role_request_ticket(
+            guild=guild,
+            member=member,
+            nombre_lol="Chovy",
+            riot_tag=" ##12345 ",
+            equipo="Vanguard Gaming",
+        )
+
+        assert ok is True
+        assert chan is not None
+
+        repo = RoleRequestRepository(db_session)
+        req = await repo.get_by_channel_id(chan.id)
+        assert req is not None
+        assert req.riot_tag == "12345"
+
+        player_res = await db_session.execute(
+            select(Player).where(Player.discord_user_id == "300099")
+        )
+        player = player_res.scalars().first()
+        assert player is not None
+        assert player.riot_tag == "12345"
 
     @pytest.mark.asyncio
     async def test_create_ticket_without_optional_roles_or_category(
@@ -1837,3 +1914,43 @@ class TestAssignTeamRole:
         member.add_roles.assert_not_called()
         member.edit.assert_not_called()
         assert await self._solicitudes(session_factory, 700204) == []
+
+    @pytest.mark.asyncio
+    async def test_assign_team_role_sanitizes_riot_tag(
+        self,
+        service_con_roster: tuple[RoleService, RosterSyncService],
+        session_factory: async_sessionmaker[AsyncSession],
+        clean_settings: Settings,
+        db_session: AsyncSession,
+    ):
+        """Verifica que assign_team_role sanea el riot_tag en Player y RoleRequest."""
+        service, _ = service_con_roster
+        await registrar_equipo(db_session, "Tag Team FC", "TTF", 888399)
+        team_role = create_mock_role(888399, "Tag Team")
+        guild = create_mock_guild(clean_settings, roles=[team_role])
+        staff, member = self._miembros(guild, 700299)
+
+        ok, msg = await service.assign_team_role(
+            guild=guild,
+            member=member,
+            staff_member=staff,
+            equipo="Tag Team FC",
+            nombre_lol="Faker",
+            riot_tag=" #KR1 ",
+            posicion="mid",
+        )
+
+        assert ok is True, msg
+
+        async with session_factory() as session:
+            player = (
+                (await session.execute(select(Player).where(Player.discord_user_id == "700299")))
+                .scalars()
+                .first()
+            )
+            assert player is not None
+            assert player.riot_tag == "KR1"
+
+        solicitudes = await self._solicitudes(session_factory, 700299)
+        assert len(solicitudes) == 1
+        assert solicitudes[0].riot_tag == "KR1"

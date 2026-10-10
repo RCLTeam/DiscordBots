@@ -144,7 +144,7 @@ class TestSolicitudRolModal:
         riot_label = getattr(modal.riot_tag, "_underlying", modal.riot_tag).label
         assert riot_label == "Riot Tag"
         assert modal.riot_tag.min_length == 1
-        assert modal.riot_tag.max_length == 20
+        assert modal.riot_tag.max_length == 10
         assert modal.riot_tag.required is True
 
     @pytest.mark.asyncio
@@ -168,6 +168,58 @@ class TestSolicitudRolModal:
         assert isinstance(view, EquipoSelectView)
         assert view.select.nombre_lol == "Faker"
         assert view.select.riot_tag == "KR1"
+
+    @pytest.mark.asyncio
+    async def test_modal_on_submit_sanitizes_riot_tag_with_hash(self) -> None:
+        """Verifica que un Riot Tag con '#' (ej. #EUW) se limpie y pase sin almohadilla."""
+        modal = SolicitudRolModal()
+        modal.nombre_lol._value = "  Faker  "
+        modal.riot_tag._value = " #EUW "
+
+        interaction = make_mock_interaction()
+        await modal.on_submit(interaction)
+
+        interaction.response.send_message.assert_awaited_once()
+        _, call_kwargs = interaction.response.send_message.call_args
+        view = call_kwargs.get("view")
+        assert isinstance(view, EquipoSelectView)
+        assert view.select.nombre_lol == "Faker"
+        assert view.select.riot_tag == "EUW"
+
+    @pytest.mark.asyncio
+    async def test_modal_on_submit_sanitizes_riot_tag_5_chars(self) -> None:
+        """Verifica que un Riot Tag de 5 caracteres con '#' se normalice a 5 caracteres limpios."""
+        modal = SolicitudRolModal()
+        modal.nombre_lol._value = "Chovy"
+        modal.riot_tag._value = "#12345"
+
+        interaction = make_mock_interaction()
+        await modal.on_submit(interaction)
+
+        interaction.response.send_message.assert_awaited_once()
+        _, call_kwargs = interaction.response.send_message.call_args
+        view = call_kwargs.get("view")
+        assert isinstance(view, EquipoSelectView)
+        assert view.select.nombre_lol == "Chovy"
+        assert view.select.riot_tag == "12345"
+
+    @pytest.mark.asyncio
+    async def test_modal_on_submit_rejects_tag_shorter_than_3_chars(self) -> None:
+        """Verifica rechazo con mensaje efímero si el tag limpio tiene menos de 3 caracteres."""
+        for invalid_tag in ["12", "#1", " #A ", "###", "   "]:
+            modal = SolicitudRolModal()
+            modal.nombre_lol._value = "Player"
+            modal.riot_tag._value = invalid_tag
+
+            interaction = make_mock_interaction()
+            await modal.on_submit(interaction)
+
+            interaction.response.send_message.assert_awaited_once()
+            call_args, call_kwargs = interaction.response.send_message.call_args
+            assert call_kwargs.get("ephemeral") is True
+            msg = call_args[0] if call_args else call_kwargs.get("content", "")
+            assert "entre 3 y 5 caracteres" in msg
+            assert "view" not in call_kwargs or call_kwargs.get("view") is None
 
 
 # ---------------------------------------------------------------------------

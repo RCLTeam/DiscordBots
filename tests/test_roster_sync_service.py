@@ -1174,6 +1174,22 @@ class TestEnsurePlayer:
             assert await session.get(DiscordUser, "600100") is not None
 
     @pytest.mark.asyncio
+    async def test_ensure_player_sanitizes_riot_tag_with_hash(
+        self,
+        roster_sync_service: RosterSyncService,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """Verifica que ensure_player elimine '#' y espacios del riot_tag al persistir."""
+        member = create_mock_member(600199, name="HashPlayer")
+
+        player = await roster_sync_service.ensure_player(
+            member=member, game_name="HashGamer", riot_tag=" #EUW "
+        )
+
+        assert player.game_name == "HashGamer"
+        assert player.riot_tag == "EUW"
+
+    @pytest.mark.asyncio
     async def test_is_idempotent_for_same_account(
         self,
         roster_sync_service: RosterSyncService,
