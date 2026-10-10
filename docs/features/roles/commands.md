@@ -61,7 +61,7 @@ Abre directamente el modal interactivo nativo de Discord para que un miembro ini
 
 Publica el mensaje visual incrustado (*embed*) con el botón interactivo persistente que permite a los usuarios abrir el modal de solicitud de rol.
 
-- **Ubicación**: `src/liga_bot/cogs/roles.py:181-216`.
+- **Ubicación**: `src/liga_bot/cogs/roles.py:190-224`.
 - **Permisos por Defecto**: `@app_commands.default_permissions(manage_guild=True)`.
 - **Control de Acceso en Runtime**:
   - Valida la autorización ejecutando `is_staff(interaction.user, self.settings)` (acción `ROLES_Y_PLANTILLAS` de la [política de autorización](../../architecture/permissions.md)): administrador nativo o rol Staff, Admin o CEO general. «Gestionar servidor» por sí solo no basta.
@@ -85,7 +85,7 @@ Publica el mensaje visual incrustado (*embed*) con el botón interactivo persist
 
 Comando administrativo para asignar directamente un equipo registrado o el rol de agente libre, sin abrir un ticket. Para un equipo deja en Discord y en base de datos lo mismo que confirmar un ticket con ese equipo y posición.
 
-- **Ubicación**: `src/liga_bot/cogs/roles.py:89-179`.
+- **Ubicación**: `src/liga_bot/cogs/roles.py:90-188`.
 - **Permisos por Defecto**: `@app_commands.default_permissions(manage_guild=True)`.
 - **Control de Acceso en Runtime**:
   - Comprobación obligatoria vía `is_staff(interaction.user, self.settings)` (acción `ROLES_Y_PLANTILLAS` de la [política de autorización](../../architecture/permissions.md)).
@@ -98,14 +98,14 @@ Comando administrativo para asignar directamente un equipo registrado o el rol d
 | `usuario` | `discord.Member` | Sí | Miembro del servidor al que se asignará el rol y actualizará el apodo. |
 | `equipo` | `str` | Sí | Nombre de un equipo registrado en base de datos (sin distinguir mayúsculas) o el nombre de agente libre (`settings.free_role_name`, por defecto `"Libre"`). Con autocompletado de los equipos registrados y Libre (máximo 25 sugerencias; se omiten nombres de más de 100 caracteres). |
 | `nombre_lol` | `str` | Sí | Nombre del jugador en League of Legends. |
-| `riot_tag` | `str` | Sí | Riot Tag del jugador (sin incluir el carácter `#`). |
+| `riot_tag` | `str` | Sí | Riot Tag del jugador (entre 3 y 5 caracteres alfanuméricos; se sanea automáticamente eliminando cualquier carácter `#` y espacios residuales). |
 | `posicion` | `str` (opciones) | Para equipos | Posición en la plantilla, con las mismas opciones que el desplegable del ticket (`top`, `jungle`, `mid`, `adc`, `support`, `substitute`, `coach`, `staff`, `partners`). Se ignora para Libre. |
 
 - **Flujo de Operación**:
-  1. Verifica los privilegios del invocador, que se ejecute dentro de un servidor, la regla de no autoasignación y que `role_service` esté disponible. Estos rechazos se responden con `interaction.response.send_message(..., ephemeral=True)`.
+  1. Verifica los privilegios del invocador, que se ejecute dentro de un servidor, la regla de no autoasignación, la disponibilidad de `role_service` y la validez del Riot Tag saneado con `normalize_riot_tag`. Si la longitud del tag limpio no está entre 3 y 5 caracteres (`len(clean_tag) < 3 or len(clean_tag) > 5`), responde de forma efímera con `"❌ El Riot Tag debe tener entre 3 y 5 caracteres alfanuméricos (ej: EUW o 12345)."` sin diferir ni delegar.
   2. Difiere la interacción con `await interaction.response.defer(ephemeral=True)` antes de cualquier cambio en Discord o en base de datos, de modo que el comando responde aunque las llamadas tarden más de 3 segundos.
-  3. Si `equipo` es el nombre de agente libre, delega en `role_service.assign_free_role(usuario, nombre_lol, riot_tag)` (comportamiento sin cambios: rol Libre, apodo con el nombre de invocador, cuenta de juego y solicitud `APPROVED`).
-  4. En otro caso, delega en `role_service.assign_team_role(...)` (ver [`services.md`](./services.md#53-asignación-directa-de-equipo-assign_team_role)): solo acepta equipos registrados, toma el rol por `discord_role_id` y nunca busca un rol del servidor por nombre.
+  3. Si `equipo` es el nombre de agente libre, delega en `role_service.assign_free_role(usuario, nombre_lol, clean_tag)` (rol Libre, apodo con el nombre de invocador, cuenta de juego y solicitud `APPROVED`).
+  4. En otro caso, delega en `role_service.assign_team_role(..., riot_tag=clean_tag, ...)` (ver [`services.md`](./services.md#53-asignación-directa-de-equipo-assign_team_role)): solo acepta equipos registrados, toma el rol por `discord_role_id` y nunca busca un rol del servidor por nombre.
   5. Envía el mensaje del servicio con `interaction.followup.send(msg, ephemeral=True)`.
 
 ---
@@ -119,6 +119,7 @@ Comando administrativo para asignar directamente un equipo registrado o el rol d
 | `/publicar-panel-rol` | Canal no soporta `.send` | Comprobación de atributo y tipo | Mensaje efímero de error de canal |
 | `/asignar-rol` | Invocación fuera de servidor (DM) | Comprobación `interaction.guild is None` | Mensaje efímero `"❌ Este comando solo puede ser ejecutado dentro de un servidor de Discord."` |
 | `/asignar-rol` | El invocador es el destinatario | Comparación de IDs antes de diferir | Mensaje efímero `"No puedes asignarte un rol a ti mismo."` |
+| `/asignar-rol` | Riot Tag menor a 3 o mayor a 5 caracteres (tras limpiar `#` y espacios) | Validación de longitud antes de diferir | Mensaje efímero `"❌ El Riot Tag debe tener entre 3 y 5 caracteres alfanuméricos (ej: EUW o 12345)."` |
 | `/asignar-rol` | Equipo no registrado (aunque exista un rol con ese nombre) | `TeamRepository.get_by_name` en `assign_team_role` | Mensaje efímero con la causa; no se asigna ningún rol |
 | `/asignar-rol` | `discord_role_id` del equipo inexistente en el servidor | `guild.get_role` en `assign_team_role` | Mensaje efímero con el ID; no se asigna ningún rol |
 | `/asignar-rol` | Posición ausente o no válida para un equipo | Validación con `RosterRole` | Mensaje efímero; no se toca Discord ni la base de datos |

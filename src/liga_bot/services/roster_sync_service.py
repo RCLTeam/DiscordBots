@@ -29,7 +29,7 @@ from liga_bot.repositories.roster_repo import (
     TeamMembershipRepository,
 )
 from liga_bot.repositories.team_repo import TeamRepository
-from liga_bot.utils.formatting import apply_team_tag, strip_team_tag
+from liga_bot.utils.formatting import apply_team_tag, normalize_riot_tag, strip_team_tag
 from liga_bot.utils.ids import clean_user_id_str, clean_uuid
 
 if TYPE_CHECKING:
@@ -415,7 +415,7 @@ class RosterSyncService:
             clean_name = game_name.strip()
             if not clean_name:
                 raise RosterSyncError("El nombre de invocador no puede estar vacío.")
-            clean_tag = (riot_tag or "").strip() or None
+            clean_tag = normalize_riot_tag(riot_tag) or None
 
             existing = await s.execute(
                 select(Player).where(

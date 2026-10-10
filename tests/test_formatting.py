@@ -20,6 +20,7 @@ from liga_bot.utils.formatting import (
     format_mensaje_1,
     format_mensaje_2,
     normalize_name,
+    normalize_riot_tag,
     normalize_slug,
     normalize_tag,
     parse_scheduled_at,
@@ -338,3 +339,45 @@ def test_format_mensaje_2_reads_reglamento_channel_from_environment(monkeypatch)
     get_settings.cache_clear()
     msg = format_mensaje_2()
     assert "Tenéis la normativa completa en <#987654321>." in msg
+
+
+# ---------------------------------------------------------------------------
+# normalize_riot_tag
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_riot_tag_strips_single_hash():
+    """Elimina el carácter '#' inicial o intermedio y espacios en blanco."""
+    assert normalize_riot_tag(" #EUW ") == "EUW"
+
+
+def test_normalize_riot_tag_strips_multiple_hashes():
+    """Elimina múltiples apariciones consecutivas o dispersas de '#'."""
+    assert normalize_riot_tag("##EUW") == "EUW"
+    assert normalize_riot_tag("#EUW#") == "EUW"
+
+
+def test_normalize_riot_tag_preserves_clean_tag():
+    """Conserva etiquetas limpias sin caracteres especiales."""
+    assert normalize_riot_tag("EUW") == "EUW"
+    assert normalize_riot_tag("12345") == "12345"
+
+
+def test_normalize_riot_tag_handles_none_and_empty():
+    """Valores nulos, vacíos o que solo contienen '#' devuelven cadena vacía."""
+    assert normalize_riot_tag(None) == ""
+    assert normalize_riot_tag("") == ""
+    assert normalize_riot_tag("###") == ""
+    assert normalize_riot_tag("   ") == ""
+
+
+def test_normalize_riot_tag_respects_max_length_5():
+    """Trunca por defecto a un máximo de 5 caracteres."""
+    assert normalize_riot_tag("12345678") == "12345"
+    assert normalize_riot_tag("#12345678") == "12345"
+
+
+def test_normalize_riot_tag_custom_max_length():
+    """Respeta un límite máximo de caracteres personalizado si se especifica."""
+    assert normalize_riot_tag("12345678", max_length=10) == "12345678"
+    assert normalize_riot_tag("#ABCDEFGHIJK", max_length=6) == "ABCDEF"

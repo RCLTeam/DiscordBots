@@ -19,10 +19,10 @@ RosterSyncError (Base)
 └── InvalidCaptainRoleError
 ```
 
-### 1.1 `RosterSyncError` (`L45–L46`)
+### 1.1 `RosterSyncError` (`L46–L47`)
 Clase base que hereda de `Exception`. Permite a controladores e interfaces atrapar cualquier anomalía operativa generada por el subsistema de plantillas.
 
-### 1.2 `CompetitivePositionConflictError` (`L49–L85`)
+### 1.2 `CompetitivePositionConflictError` (`L50–L86`)
 Se lanza cuando se intenta asignar una posición competitiva a un jugador que ya ostenta un rol competitivo en otro equipo de la liga.
 
 - **Atributos:**
@@ -36,14 +36,14 @@ Se lanza cuando se intenta asignar una posición competitiva a un jugador que ya
   Conflicto de posición competitiva: El usuario '<id>' ya ostenta el rol competitivo '<rol_actual>' en el equipo '<equipo_actual>'. No puede ocupar la posición competitiva '<rol_intentado>' en el equipo '<equipo_nuevo>'.
   ```
 
-### 1.3 `PlayerNotTeamMemberError` (`L87–L106`)
+### 1.3 `PlayerNotTeamMemberError` (`L88–L108`)
 Se lanza cuando se intenta consultar o modificar la posición de un usuario en un club en el que no tiene membresía registrada en la tabla `team_memberships`.
 
 - **Atributos:**
   - `discord_user_id` (`str | None`): Snowflake del jugador.
   - `team_id` (`UUID | str | None`): Identificador del equipo consultado.
 
-### 1.4 `InvalidCaptainRoleError` (`L109–L132`)
+### 1.4 `InvalidCaptainRoleError` (`L110–L133`)
 Se lanza cuando se intenta designar como capitán (`is_captain=True`) a un jugador cuyo rol no corresponde a una de las 5 posiciones titulares activas de juego.
 
 - **Atributos:**
@@ -55,7 +55,7 @@ Se lanza cuando se intenta designar como capitán (`is_captain=True`) a un jugad
 
 El servicio garantiza el cumplimiento de cuatro reglas deportivas fundamentales de la competición:
 
-### Regla 1: Invariante de Rol Inicial No Competitivo (`L158–L163`)
+### Regla 1: Invariante de Rol Inicial No Competitivo (`L159–L164`)
 Al inicializar `RosterSyncService`, se comprueba el rol por defecto de ingreso (`default_join_role`, por defecto `RosterRole.STAFF`).
 - Si se configura un rol cuyo método `is_competitive()` devuelva `True` (`top`, `jungle`, `mid`, `adc`, `support`, `substitute`), el constructor aborta inmediatamente lanzando `ValueError`:
   ```python
@@ -70,14 +70,14 @@ Al inicializar `RosterSyncService`, se comprueba el rol por defecto de ingreso (
 La recepción de un rol de equipo o la adición a una plantilla en Discord **no revoca ni elimina roles de otros clubes**.
 - Un miembro puede pertenecer libremente a varios clubes con roles no competitivos (por ejemplo, ser analista/staff en el Equipo A y entrenador en el Equipo B).
 
-### Regla 3: Posición Competitiva Única a Nivel Liga (`L439–L448`)
+### Regla 3: Posición Competitiva Única a Nivel Liga (`L633–L642`)
 Un jugador solo puede ostentar una posición competitiva en **como máximo un equipo** en toda la competición.
 - Los roles competitivos corresponden a: `TOP`, `JUNGLE`, `MID`, `ADC`, `SUPPORT` y `SUBSTITUTE`.
 - Si un miembro ya posee un rol competitivo en el Equipo A, cualquier intento de asignarle un rol competitivo en el Equipo B dispara `CompetitivePositionConflictError`.
 - **Excepción interna:** El cambio de posición dentro del *mismo equipo* (por ejemplo, de `SUBSTITUTE` a `MID`) está permitido.
 - **Roles no competitivos:** Los roles `COACH`, `STAFF` y `PARTNERS` están exentos de esta restricción y permiten la multipresencia entre clubes.
 
-### Regla 4: Capitanía Exclusiva para Posiciones Titulares (`L416–L417`)
+### Regla 4: Capitanía Exclusiva para Posiciones Titulares (`L610–L611`)
 Únicamente los jugadores con rol de titular activo pueden ser designados capitanes oficiales del equipo.
 - Posiciones habilitadas para capitanía (`is_starter() == True`): `TOP`, `JUNGLE`, `MID`, `ADC`, `SUPPORT`.
 - Posiciones denegadas (`InvalidCaptainRoleError`): `SUBSTITUTE`, `COACH`, `STAFF`, `PARTNERS`.
@@ -150,7 +150,52 @@ async def handle_role_removed(
 
 ---
 
-### 3.4 `change_player_position` (`L383–L520`)
+### 3.4 `ensure_player` (`L387–L453`)
+
+Garantiza el registro y vinculación de la cuenta de juego de un miembro en la tabla `players`:
+
+```python
+async def ensure_player(
+    self,
+    member: discord.Member,
+    game_name: str,
+    riot_tag: str | None = None,
+    session: AsyncSession | None = None,
+) -> Player:
+```
+
+- **Saneamiento Defensivo de Riot Tag**: Aplica `clean_tag = normalize_riot_tag(riot_tag) or None`, eliminando cualquier carácter `#` y espacios residuales, truncando a un máximo de 5 caracteres alfanuméricos y mapeando cadenas vacías a `None` para preservar la coherencia relacional.
+- **Validación de Invocador**: Exige que `clean_name = game_name.strip()` no esté vacío; de lo contrario lanza `RosterSyncError("El nombre de invocador no puede estar vacío.")`.
+- **Integridad Referencial**: Invoca previamente `await self._ensure_discord_user(...)` para asegurar que el registro padre exista en `discord_users`.
+- **Idempotencia y Reutilización**: Consulta si ya existe un registro con la tupla `(game_name, riot_tag)` limpia. Si existe y su `discord_user_id` no coincide con el del miembro, lo reasigna al usuario actual y hace `flush`.
+- **Marcado de Cuenta Principal (`is_main`)**: Si el usuario no tiene ninguna otra cuenta vinculada en `players`, la nueva cuenta se marca automáticamente con `is_main = True`.
+
+---
+
+### 3.5 `transfer_player` (`L466–L574`)
+
+Traspasa a un jugador al equipo asociado a un rol de Discord determinado:
+
+```python
+async def transfer_player(
+    self,
+    member: discord.Member,
+    team_role: discord.Role,
+    new_position: RosterRole | str,
+    actor_id: str | int | None = None,
+    session: AsyncSession | None = None,
+) -> tuple[TeamMembership, Team, Team | None]:
+```
+
+- **Resolución de Club**: Resuelve el equipo destino por `discord_role_id` (`get_by_role_id`).
+- **Liberación en Destino**: Libera la membresía previa en el equipo destino si existía.
+- **Preservación de Invariante Competitiva (Regla 3)**: Si la nueva posición es competitiva (`is_competitive()`), libera la membresía competitiva que poseyera en cualquier otro equipo. Las posiciones no competitivas (`coach`, `staff`, `partners`) se conservan sin alteración.
+- **Trazabilidad**: Registra movimientos en `roster_movements` (acciones `LEFT` y `JOINED`) y bitácora en `audit_logs`.
+- **Retorno**: Tupla `(new_membership, destination_team, previous_team_or_none)`.
+
+---
+
+### 3.6 `change_player_position` (`L576–L714`)
 
 Actualiza la posición deportiva y/o el estado de capitanía de un miembro en un club específico.
 
@@ -191,7 +236,7 @@ async def change_player_position(
 
 ---
 
-### 3.5 `get_user_teams` (`L522–L545`)
+### 3.7 `get_user_teams` (`L716–L739`)
 
 Recupera todas las membresías activas de un usuario junto con la entidad de su equipo precargada.
 
