@@ -113,6 +113,20 @@ def normalize_tag(tag: str, max_length: int = 4) -> str:
     return upper_tag[:max_length]
 
 
+def normalize_riot_tag(riot_tag: str | None, max_length: int = 5) -> str:
+    """
+    Normaliza el Riot Tag de un jugador según las reglas oficiales de Riot Games:
+    - Tag alfanumérico de 3 a 5 caracteres.
+    - Elimina cualquier aparición del carácter '#' mediante replace('#', '').
+    - Elimina espacios en blanco iniciales y finales.
+    - Trunca al límite máximo de caracteres permitido (por defecto 5).
+    """
+    if not riot_tag:
+        return ""
+    cleaned = riot_tag.replace("#", "").strip()
+    return cleaned[:max_length]
+
+
 OPGG_DEFAULT_REGION: Final[str] = "euw"
 
 

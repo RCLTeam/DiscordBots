@@ -29,7 +29,7 @@ from liga_bot.ui.roles import (
     build_welcome_dm_blocked_embed,
     build_welcome_dm_error_embed,
 )
-from liga_bot.utils.formatting import apply_team_tag
+from liga_bot.utils.formatting import apply_team_tag, normalize_riot_tag
 
 if TYPE_CHECKING:
     from discord.ext import commands
@@ -276,6 +276,7 @@ class RoleService:
         - Registra la solicitud con estado APPROVED en BD para trazabilidad y auditoría.
         - Retorna (True, 'Rol Libre asignado correctamente.') o tupla con error descriptivo.
         """
+        riot_tag = normalize_riot_tag(riot_tag)
         free_role = discord.utils.get(member.guild.roles, name=self.settings.free_role_name)
         if free_role is None:
             return False, f"El rol '{self.settings.free_role_name}' no existe en el servidor."
@@ -372,6 +373,7 @@ class RoleService:
         - Si la persistencia en BD falla, elimina el canal recién creado para evitar huérfanos.
         - Retorna (True, 'Canal de solicitud creado correctamente.', channel) o tupla con error.
         """
+        riot_tag = normalize_riot_tag(riot_tag)
         # 1. Verificar si el usuario ya posee una solicitud pendiente activa
         async with transactional_session(self.session_factory) as session:
             repo = RoleRequestRepository(session)
@@ -742,6 +744,7 @@ class RoleService:
         - Fase 2: asigna el rol, remueve 'Sin Verificar' y pone el apodo '<TAG> <NombreLoL>'.
         - Retorna (True, mensaje) o (False, causa).
         """
+        riot_tag = normalize_riot_tag(riot_tag)
         if staff_member.id == member.id:
             return False, "No puedes asignarte un rol a ti mismo."
 
