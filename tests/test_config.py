@@ -34,6 +34,7 @@ def test_default_settings_canonical_values():
     assert settings.admin_role_id == 1548795786110967919
     assert settings.ceo_premier_role_id == 1548795782360993842
     assert settings.ceo_ascend_role_id == 1548795784655405087
+    assert settings.competition_dept_role_id == 1548795790896398448
     assert settings.database_url == "pglite:///:memory:"
     assert settings.log_level == "INFO"
     assert settings.discord_token == ""
@@ -49,6 +50,7 @@ def test_environment_overrides(monkeypatch):
     monkeypatch.setenv("ADMIN_ROLE_ID", "444555666")
     monkeypatch.setenv("CEO_PREMIER_ROLE_ID", "777888999")
     monkeypatch.setenv("CEO_ASCEND_ROLE_ID", "123123123")
+    monkeypatch.setenv("COMPETITION_DEPT_ROLE_ID", "555666777")
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost:5432/testdb")
     monkeypatch.setenv("LOG_LEVEL", "debug")
 
@@ -59,6 +61,7 @@ def test_environment_overrides(monkeypatch):
     assert settings.admin_role_id == 444555666
     assert settings.ceo_premier_role_id == 777888999
     assert settings.ceo_ascend_role_id == 123123123
+    assert settings.competition_dept_role_id == 555666777
     assert settings.database_url == "postgresql+asyncpg://user:pass@localhost:5432/testdb"
     assert settings.log_level == "DEBUG"
     assert settings.is_pglite is False
@@ -75,6 +78,22 @@ def test_async_database_url_normalization():
 
     s3 = Settings(database_url="pglite:///:memory:")
     assert s3.async_database_url == "pglite:///:memory:"
+
+
+def test_competition_dept_role_id_default():
+    """Verifica el valor por defecto del rol de Departamento de Competición."""
+    from liga_bot.config import DEFAULTED_DISCORD_ID_FIELDS
+
+    settings = Settings()
+    assert settings.competition_dept_role_id == 1548795790896398448
+    assert "competition_dept_role_id" in DEFAULTED_DISCORD_ID_FIELDS
+
+
+def test_competition_dept_role_id_env_override(monkeypatch):
+    """Verifica que la variable de entorno sobreescribe el rol por defecto."""
+    monkeypatch.setenv("COMPETITION_DEPT_ROLE_ID", "999888777")
+    settings = Settings()
+    assert settings.competition_dept_role_id == 999888777
 
 
 def test_get_settings_singleton_and_cache_clear():
@@ -235,6 +254,7 @@ _DEFAULTED_ID_VARS = (
     "ADMIN_ROLE_ID",
     "CEO_PREMIER_ROLE_ID",
     "CEO_ASCEND_ROLE_ID",
+    "COMPETITION_DEPT_ROLE_ID",
     "MODERATORS_CHANNEL_ID",
     "CASTERS_CHANNEL_ID",
     "REGLAMENTO_CHANNEL_ID",
@@ -277,12 +297,14 @@ def test_get_settings_does_not_warn_for_ids_defined_in_env(monkeypatch, caplog):
     _clear_id_env(monkeypatch)
     monkeypatch.setenv("STAFF_ROLE_ID", "1547729760384319518")
     monkeypatch.setenv("GUILD_ID", "123")
+    monkeypatch.setenv("COMPETITION_DEPT_ROLE_ID", "1548795790896398448")
     with caplog.at_level(logging.WARNING, logger="liga_bot.config"):
         get_settings()
 
     messages = [r.getMessage() for r in caplog.records]
     assert not any("STAFF_ROLE_ID" in m for m in messages)
     assert not any("GUILD_ID" in m for m in messages)
+    assert not any("COMPETITION_DEPT_ROLE_ID" in m for m in messages)
     assert any("ADMIN_ROLE_ID" in m for m in messages)
 
 
@@ -315,3 +337,15 @@ def test_docs_variable_tables_list_every_settings_field(doc_path):
     assert f"{count} variables" in text_doc
     stale = {f"{n} variables" for n in range(10, 40) if n != count}
     assert not any(s in text_doc for s in stale), f"{doc_path} conserva un recuento desfasado"
+
+
+def test_no_docs_contain_stale_variable_counts():
+    """Certifica que ningún documento técnico (.md) contiene conteos de variables desfasados."""
+    count = len(Settings.model_fields)
+    stale_patterns = [f"{n} variable" for n in range(10, 40) if n != count]
+    for md_file in REPO_ROOT.glob("docs/**/*.md"):
+        content = md_file.read_text(encoding="utf-8").lower()
+        for stale in stale_patterns:
+            assert stale not in content, (
+                f"{md_file.relative_to(REPO_ROOT)} contiene conteo desfasado: '{stale}'"
+            )
