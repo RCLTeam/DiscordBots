@@ -110,13 +110,18 @@ def create_mock_guild(
     bot_member.name = "LigaBot"
     guild.me = bot_member
 
-    # Roles de Staff, Admin y CEOs
+    # Roles de Staff, Admin, CEOs y Departamento de Competición
     staff_role = create_mock_role(settings.staff_role_id, "Staff")
     admin_role = create_mock_role(settings.admin_role_id, "Admin")
     ceo_premier_role = create_mock_role(settings.ceo_premier_role_id, "CEO Premier")
     ceo_ascend_role = create_mock_role(settings.ceo_ascend_role_id, "CEO Ascend")
 
     all_roles = [default_role, staff_role, admin_role, ceo_premier_role, ceo_ascend_role]
+    if (settings.competition_dept_role_id or 0) > 0:
+        comp_role = create_mock_role(
+            settings.competition_dept_role_id, "Departamento de Competicion"
+        )
+        all_roles.append(comp_role)
     if roles:
         all_roles.extend(roles)
 
@@ -249,6 +254,192 @@ async def test_create_match_happy_path_premier(
     db_match = await match_repo.get_by_jornada_and_teams(1, t1.id, t2.id)
     assert db_match is not None
     assert db_match.discord_channel_id == res.channel.id
+
+
+@pytest.mark.asyncio
+async def test_create_match_includes_competition_dept_role_overwrites(
+    session_factory: async_sessionmaker[AsyncSession],
+    db_session: AsyncSession,
+    test_settings: Settings,
+):
+    """
+    Verifica que el canal de partido incluye overwrites para el rol
+    del Departamento de Competición.
+    """
+    team_repo = TeamRepository(db_session)
+    await team_repo.create(
+        name="Team Alfa",
+        tag="ALF",
+        slug="team-alfa",
+        division=Division.PREMIER,
+        discord_role_id=1101,
+    )
+    await team_repo.create(
+        name="Team Beta",
+        tag="BET",
+        slug="team-beta",
+        division=Division.PREMIER,
+        discord_role_id=1102,
+    )
+    await db_session.commit()
+
+    role1 = create_mock_role(1101, "Team Alfa")
+    role2 = create_mock_role(1102, "Team Beta")
+    guild = create_mock_guild(test_settings, roles=[role1, role2])
+
+    service = ScheduleService(session_factory=session_factory, settings=test_settings)
+    res = await service.create_match(
+        guild=guild,
+        jornada=1,
+        team1_name="Team Alfa",
+        team2_name="Team Beta",
+    )
+
+    assert res.success is True
+    call_overwrites = guild.create_text_channel.call_args.kwargs["overwrites"]
+    comp_role = guild.get_role(test_settings.competition_dept_role_id)
+    assert comp_role is not None
+    assert comp_role in call_overwrites
+    overwrite = call_overwrites[comp_role]
+    assert isinstance(overwrite, discord.PermissionOverwrite)
+    assert overwrite.view_channel is True
+    assert overwrite.send_messages is True
+    assert overwrite.embed_links is None
+
+
+@pytest.mark.asyncio
+async def test_create_match_handles_missing_competition_dept_role_gracefully(
+    session_factory: async_sessionmaker[AsyncSession],
+    db_session: AsyncSession,
+    test_settings: Settings,
+):
+    """Verifica que si el rol de competición no existe en el gremio, el canal se crea sin error."""
+    team_repo = TeamRepository(db_session)
+    await team_repo.create(
+        name="Team Gamma",
+        tag="GAM",
+        slug="team-gamma",
+        division=Division.PREMIER,
+        discord_role_id=1101,
+    )
+    await team_repo.create(
+        name="Team Delta",
+        tag="DEL",
+        slug="team-delta",
+        division=Division.PREMIER,
+        discord_role_id=1102,
+    )
+    await db_session.commit()
+
+    role1 = create_mock_role(1101, "Team Gamma")
+    role2 = create_mock_role(1102, "Team Delta")
+    guild = create_mock_guild(test_settings, roles=[role1, role2])
+    # Simular que get_role devuelve None para el rol de competición
+    original_get_role = guild.get_role.side_effect
+    guild.get_role.side_effect = lambda rid: (
+        None if rid == test_settings.competition_dept_role_id else original_get_role(rid)
+    )
+
+    service = ScheduleService(session_factory=session_factory, settings=test_settings)
+    res = await service.create_match(
+        guild=guild,
+        jornada=1,
+        team1_name="Team Gamma",
+        team2_name="Team Delta",
+    )
+
+    assert res.success is True
+    call_overwrites = guild.create_text_channel.call_args.kwargs["overwrites"]
+    assert not any(
+        getattr(k, "id", None) == test_settings.competition_dept_role_id for k in call_overwrites
+    )
+
+
+@pytest.mark.asyncio
+async def test_create_match_ignores_competition_dept_role_when_id_is_zero(
+    session_factory: async_sessionmaker[AsyncSession],
+    db_session: AsyncSession,
+    test_settings: Settings,
+):
+    """Verifica que si competition_dept_role_id es 0, no se intenta asignar sobreescritura."""
+    team_repo = TeamRepository(db_session)
+    await team_repo.create(
+        name="Team Uno",
+        tag="UNO",
+        slug="team-uno",
+        division=Division.PREMIER,
+        discord_role_id=1101,
+    )
+    await team_repo.create(
+        name="Team Dos",
+        tag="DOS",
+        slug="team-dos",
+        division=Division.PREMIER,
+        discord_role_id=1102,
+    )
+    await db_session.commit()
+
+    settings_zero = test_settings.model_copy(update={"competition_dept_role_id": 0})
+    role1 = create_mock_role(1101, "Team Uno")
+    role2 = create_mock_role(1102, "Team Dos")
+    guild = create_mock_guild(settings_zero, roles=[role1, role2])
+
+    service = ScheduleService(session_factory=session_factory, settings=settings_zero)
+    res = await service.create_match(
+        guild=guild,
+        jornada=1,
+        team1_name="Team Uno",
+        team2_name="Team Dos",
+    )
+
+    assert res.success is True
+    call_overwrites = guild.create_text_channel.call_args.kwargs["overwrites"]
+    assert not any(getattr(k, "id", None) == 0 for k in call_overwrites)
+    # Certificar que guild.get_role nunca se llamó con ID 0
+    assert not any(call.args == (0,) for call in guild.get_role.call_args_list)
+
+
+@pytest.mark.asyncio
+async def test_create_match_ignores_competition_dept_role_when_id_is_negative(
+    session_factory: async_sessionmaker[AsyncSession],
+    db_session: AsyncSession,
+    test_settings: Settings,
+):
+    """Verifica que si competition_dept_role_id es negativo, se ignora de forma segura."""
+    team_repo = TeamRepository(db_session)
+    await team_repo.create(
+        name="Team Neg1",
+        tag="NG1",
+        slug="team-neg1",
+        division=Division.PREMIER,
+        discord_role_id=1101,
+    )
+    await team_repo.create(
+        name="Team Neg2",
+        tag="NG2",
+        slug="team-neg2",
+        division=Division.PREMIER,
+        discord_role_id=1102,
+    )
+    await db_session.commit()
+
+    settings_neg = test_settings.model_copy(update={"competition_dept_role_id": -1})
+    role1 = create_mock_role(1101, "Team Neg1")
+    role2 = create_mock_role(1102, "Team Neg2")
+    guild = create_mock_guild(settings_neg, roles=[role1, role2])
+
+    service = ScheduleService(session_factory=session_factory, settings=settings_neg)
+    res = await service.create_match(
+        guild=guild,
+        jornada=1,
+        team1_name="Team Neg1",
+        team2_name="Team Neg2",
+    )
+
+    assert res.success is True
+    call_overwrites = guild.create_text_channel.call_args.kwargs["overwrites"]
+    assert not any(getattr(k, "id", None) == -1 for k in call_overwrites)
+    assert not any(call.args == (-1,) for call in guild.get_role.call_args_list)
 
 
 @pytest.mark.asyncio

@@ -138,17 +138,17 @@ Se abre una sesión corta mediante `async with transactional_session(self.sessio
 4. **Detección simétrica de duplicados**: Invoca `match_repo.get_by_jornada_and_teams(jornada, team1.id, team2.id, exact_order=False)`. Si ya existe un enfrentamiento previo entre ambos equipos en cualquier orden (`t1 vs t2` O `t2 vs t1`), retorna inmediatamente `is_duplicate=True` sin interactuar con Discord.
 5. **Aislamiento de conexión**: Extrae en variables locales escalares los datos necesarios (`division`, `role_ids`, `slugs`, `ids`, `names`) y **cierra inmediatamente la sesión de base de datos**. Esto previene el acaparamiento de conexiones del pool mientras se realizan llamadas de red a la API de Discord.
 
-#### Fase 2: Validación de Roles en Discord (`src/liga_bot/services/schedule_service.py:203-227`)
+#### Fase 2: Validación de Roles en Discord (`src/liga_bot/services/schedule_service.py:240-266`)
 Obtiene `role1 = guild.get_role(team1_role_id)` y `role2 = guild.get_role(team2_role_id)`. Si alguno de los roles configurados en la base de datos no existe en el servidor de Discord, aborta la operación reportando el ID de rol faltante.
 
-#### Fase 3: Resolución de Categoría (`src/liga_bot/services/schedule_service.py:229-251`)
+#### Fase 3: Resolución de Categoría (`src/liga_bot/services/schedule_service.py:267-294`)
 Determina el nombre canónico de la categoría según la división deportiva:
 - `PREMIER`: `"PREMIER - JORNADA {jornada}"`
 - `ASCEND`: `"ASCEND - JORNADA {jornada}"` (reutiliza una categoría existente `"ASCENSO - JORNADA {jornada}"` como alias, pero nunca la crea)
 
 Busca la categoría en memoria sobre `guild.categories`. Si no existe, la crea mediante `await guild.create_category(category_name)`.
 
-#### Fase 4: Matriz de Permisos (*Overwrites*) (`src/liga_bot/services/schedule_service.py:254-286`)
+#### Fase 4: Matriz de Permisos (*Overwrites*) (`src/liga_bot/services/schedule_service.py:295-336`)
 Aplica una política de mínimo privilegio para garantizar la confidencialidad de la coordinación:
 
 | Entidad / Rol | `view_channel` | `send_messages` | `embed_links` | Justificación |
@@ -159,16 +159,17 @@ Aplica una política de mínimo privilegio para garantizar la confidencialidad d
 | `staff_role` | `True` | `True` | — | Mediación y supervisión de la liga. |
 | `admin_role` | `True` | `True` | — | Administración técnica. |
 | `ceo_premier_role` / `ceo_ascend_role` | `True` | `True` | — | Segregado estrictamente según la división del partido. |
+| `competition_dept_role` (`competition_dept_role_id`) | `True` | `True` | — | Supervisión y arbitraje por el Departamento de Competición. |
 | Bot (`guild.me`) | `True` | `True` | `True` | Envío de embeds y gestión del canal. |
 
-#### Fase 5: Aprovisionamiento de Canal y Mensajes de Coordinación (`src/liga_bot/services/schedule_service.py:288-323`)
+#### Fase 5: Aprovisionamiento de Canal y Mensajes de Coordinación (`src/liga_bot/services/schedule_service.py:338-373`)
 1. Genera el nombre del canal mediante `format_match_channel_name(jornada, team1_slug, team2_slug)` (formato `j{jornada}-{slug1}-vs-{slug2}`, limitado a 100 caracteres).
 2. Crea el canal de texto en Discord: `await guild.create_text_channel(channel_name, category=category, overwrites=overwrites)`.
 3. Construye los textos oficiales mediante `format_mensaje_1` y `format_mensaje_2`.
 4. Envía el **Mensaje 1** mencionando activamente a los dos roles de equipo (`content=f"{role1.mention} {role2.mention}"`) con un embed (`discord.Color.blurple()`) que contiene las instrucciones de acuerdo de horario, plazos y penalizaciones de convocatoria.
 5. Envía el **Mensaje 2** con un embed que detalla las reglas de preparación, uso de Fearless Draft en `https://lol.draftcore.net/` y enlace al canal de reglamento oficial.
 
-#### Fase 6: Persistencia Atómica en Base de Datos (`src/liga_bot/services/schedule_service.py:324-336`)
+#### Fase 6: Persistencia Atómica en Base de Datos (`src/liga_bot/services/schedule_service.py:374-389`)
 Abre una segunda transacción corta en base de datos para registrar la entidad `Match`:
 - `jornada`: Jornada indicada.
 - `division`: División del partido.
@@ -177,7 +178,7 @@ Abre una segunda transacción corta en base de datos para registrar la entidad `
 - `discord_channel_id`: ID numérico del canal creado en Discord (`created_channel.id`).
 - `status`: `MatchStatus.SCHEDULED`.
 
-#### Fase 7: Garantía Anti-Canales Huérfanos (*Rollback Defensivo*) (`src/liga_bot/services/schedule_service.py:347-366`)
+#### Fase 7: Garantía Anti-Canales Huérfanos (*Rollback Defensivo*) (`src/liga_bot/services/schedule_service.py:401-420`)
 Si se produce cualquier excepción durante el posteo de mensajes en Discord o durante la inserción en base de datos:
 1. El bloque `except Exception as exc:` captura el fallo.
 2. Si el canal de Discord fue creado (`created_channel is not None`), se ejecuta inmediatamente:
