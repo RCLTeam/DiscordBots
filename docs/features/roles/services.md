@@ -60,26 +60,29 @@ Se invoca automáticamente cuando un nuevo usuario ingresa al servidor de Discor
 Permite la vinculación directa de un usuario como agente libre sin abrir un canal de ticket de soporte.
 
 - **Firma**: `async def assign_free_role(self, member: discord.Member, nombre_lol: str, riot_tag: str) -> tuple[bool, str]`
-- **Ubicación**: `src/liga_bot/services/role_service.py:264-349`.
+- **Ubicación**: `src/liga_bot/services/role_service.py:264-350`.
 
 ### Pasos de Ejecución
 
-1. **Resolución del Rol de Agente Libre**:
+1. **Normalización Defensiva de Riot Tag**:
+   - Ejecuta `riot_tag = normalize_riot_tag(riot_tag)` al inicio de la función, eliminando cualquier carácter `#` y espacios residuales, y truncando a un máximo de 5 caracteres alfanuméricos según el estándar de Riot Games.
+2. **Resolución del Rol de Agente Libre**:
    - Localiza el rol configurado en `self.settings.free_role_name` (por defecto `"Libre"`) en la colección `member.guild.roles`.
    - Si no existe el rol en el servidor, retorna `(False, "El rol 'Libre' no existe en el servidor.")`.
-2. **Remoción de Rol 'Sin Verificar'**:
+3. **Remoción de Rol 'Sin Verificar'**:
    - Si `self.settings.sin_verificar_role_id > 0` y el usuario lo tiene asignado, ejecuta `await member.remove_roles(sin_verificar)`.
    - Fallos de jerarquía en este paso no interrumpen la ejecución y se registran como advertencias.
-3. **Asignación del Rol y Actualización de Apodo**:
+4. **Asignación del Rol y Actualización de Apodo**:
    - Añade el rol de agente libre: `await member.add_roles(free_role)`.
    - Modifica el apodo del miembro con su nombre de invocador, truncado a 32 caracteres:
      ```python
      nick = nombre_lol[:32]
      await member.edit(nick=nick)
      ```
-4. **Persistencia Transaccional**:
+5. **Persistencia Transaccional**:
    - Abre un bloque `async with transactional_session(self.session_factory) as session:`.
-   - Registra la solicitud en base de datos con `canal_id=None`:
+   - Registra la cuenta de juego en la tabla `players` llamando a `await self._ensure_player(member, nombre_lol, riot_tag, session)` con el Riot Tag saneado.
+   - Registra la solicitud en base de datos con `canal_id=None` y el Riot Tag saneado:
      ```python
      req = await repo.create_request(
          user_id=member.id,
@@ -91,7 +94,7 @@ Permite la vinculación directa de un usuario como agente libre sin abrir un can
      await repo.update_status(req.id, RoleRequestStatus.APPROVED)
      ```
    - Si ocurre una excepción de persistencia, se retorna `(False, "Error al registrar la asignación en la base de datos.")`.
-5. **Retorno**: `(True, f"Rol {self.settings.free_role_name} asignado correctamente.")`.
+6. **Retorno**: `(True, f"Rol {self.settings.free_role_name} asignado correctamente.")`.
 
 ---
 
@@ -108,13 +111,15 @@ Crea un canal privado de texto exclusivo para tramitar la solicitud de incorpora
       nombre_lol: str,
       riot_tag: str,
       equipo: str,
+      posicion: str | None = None,
   ) -> tuple[bool, str, discord.TextChannel | None]
   ```
-- **Ubicación**: `src/liga_bot/services/role_service.py:351-469`.
+- **Ubicación**: `src/liga_bot/services/role_service.py:352-471`.
 
-### 4.1 Prevención de Solicitudes Duplicadas
+### 4.1 Saneamiento de Tag y Prevención de Solicitudes Duplicadas
 
-Antes de crear cualquier canal en Discord, el servicio abre una sesión y consulta:
+1. **Normalización Defensiva**: Al inicio de la invocación ejecuta `riot_tag = normalize_riot_tag(riot_tag)` para garantizar que el tag no posea caracteres `#` ni espacios y respete el tope de 5 caracteres.
+2. **Prevención de Duplicados**: Antes de crear cualquier canal en Discord, el servicio abre una sesión y consulta:
 
 ```python
 active = await repo.get_active_by_user(member.id)
@@ -123,6 +128,8 @@ if active is not None:
 ```
 
 Si el usuario ya tiene un registro en estado `RoleRequestStatus.PENDING`, la operación se rechaza inmediatamente, evitando la proliferación de tickets redundantes.
+
+3. **Registro Previo de Cuenta de Juego**: Ejecuta `await self._ensure_player(member=member, nombre_lol=nombre_lol, riot_tag=riot_tag)` antes de interactuar con la API de Discord para evitar solicitudes o canales huérfanos si la base de datos no está disponible.
 
 ### 4.2 Matriz de Sobreescritura de Permisos (`PermissionOverwrite`)
 
@@ -178,7 +185,7 @@ except Exception as exc:
 ### 4.5 Rollback si no se publica el mensaje del ticket: `discard_role_request_ticket`
 
 - **Firma**: `async def discard_role_request_ticket(self, channel: discord.abc.GuildChannel) -> None`
-- **Ubicación**: `src/liga_bot/services/role_service.py:471-496`.
+- **Ubicación**: `src/liga_bot/services/role_service.py:473-498`.
 - La invoca `PosicionSelect.callback` cuando `channel.send` falla al publicar el mensaje con los botones del ticket.
 - Elimina la solicitud `PENDING` asociada al canal (para que `get_active_by_user` deje de bloquear una nueva solicitud) y después el canal. Es defensiva: registra los fallos en el log sin propagarlos. La cuenta de juego registrada al abrir el ticket se conserva.
 
@@ -189,7 +196,7 @@ except Exception as exc:
 ### 5.1 Aprobación y Confirmación: `confirm_role_request`
 
 - **Firma**: `async def confirm_role_request(self, guild: discord.Guild, channel_id: int, staff_member: discord.Member) -> tuple[bool, str]`
-- **Ubicación**: `src/liga_bot/services/role_service.py:610-743` (resolución del equipo en `_resolve_team_role`, `:500-537`; cambios en Discord en `_apply_team_role_in_discord`, `:539-608`).
+- **Ubicación**: `src/liga_bot/services/role_service.py:612-745` (resolución del equipo en `_resolve_team_role`, `:500-539`; cambios en Discord en `_apply_team_role_in_discord`, `:541-610`).
 
 #### Flujo Operativo:
 1. **Validación de Estado**: Consulta en la base de datos `req = await repo.get_by_channel_id(channel_id)`. Si no existe o su estado es distinto de `RoleRequestStatus.PENDING`, aborta indicando que no hay solicitud pendiente asociada.
@@ -203,14 +210,14 @@ except Exception as exc:
    - Equipo no registrado → `(False, "El equipo '…' no está registrado en la base de datos. … La solicitud sigue pendiente.")`.
    - `discord_role_id` sin rol en el servidor → `(False, "El rol del equipo '…' (discord_role_id …) no existe en el servidor. … La solicitud sigue pendiente.")`.
    - En ambos casos se registra un aviso en el log con el nombre del equipo (y el `discord_role_id` si existe), no se toca Discord y la solicitud sigue `PENDING`. Tras corregir el registro (por ejemplo, con `liga-cli seed-teams`), el mismo botón «Confirmar Rol» funciona sin abrir un ticket nuevo.
-5. **Persistencia Atómica (Fase 1, `L633-709`)**:
+5. **Persistencia Atómica (Fase 1, `L635-711`)**:
    - En la misma transacción, `transfer_player` crea la membresía con `req.posicion` (si la solicitud la tiene y `RosterSyncService` está disponible) y la solicitud pasa a `APPROVED` con `staff_id=staff_member.id`.
-   - **Resolución Canónica de Apodo (`resolve_canonical_nick`, `L681-699`)**: Antes de confirmar la transacción, se calcula `nick_to_apply` delegando en `roster_service.resolve_canonical_nick(discord_user_id=member.id, base_name=req.nombre_lol, session=session)` (con fallback seguro en `apply_team_tag` si el servicio no está inyectado):
+   - **Resolución Canónica de Apodo (`resolve_canonical_nick`, `L683-701`)**: Antes de confirmar la transacción, se calcula `nick_to_apply` delegando en `roster_service.resolve_canonical_nick(discord_user_id=member.id, base_name=req.nombre_lol, session=session)` (con fallback seguro en `apply_team_tag` si el servicio no está inyectado):
      - **Regla Deportiva de Prioridad Competitiva**: Si el usuario ostenta una posición competitiva activa en cualquier club de la liga (`TOP`, `JUNGLE`, `MID`, `ADC`, `SUPPORT`, `SUBSTITUTE`), el apodo preserva obligatoriamente el tag de dicho equipo competitivo (`<TAG_COMPETITIVO> <NombreLoL>`).
      - **Roles No Competitivos (`partners`, `staff`, `coach`)**: Si el usuario carece de membresía competitiva, no se le antepone tag de club (`<NombreLoL>`). Si un jugador que ya compite en el Club A es confirmado para un rol secundario (como `partners`) en el Club B, su apodo retiene de forma inmutable el tag del Club A, impidiendo que roles no competitivos sobreescriban la identidad deportiva principal.
    - Un `RosterSyncError` (por ejemplo, un conflicto de posición competitiva) revierte la transacción y su mensaje llega al staff seguido de «La solicitud sigue pendiente.».
    - Cualquier otra excepción revierte la transacción y devuelve «No se pudo registrar la confirmación en base de datos. No se ha aplicado ningún cambio.».
-6. **Cambios en Discord (Fase 2, `_apply_team_role_in_discord`, `L730-738`)**: tras el commit exitoso en BD, asigna el rol del equipo, remueve el rol no verificado si está presente y aplica el apodo resuelto `nick_to_apply` (acotado a 32 caracteres y sin espacios residuales). Ningún fallo interrumpe los pasos siguientes; si Discord rechaza el rol del equipo, el aviso «No se pudo asignar el rol '…' en Discord (…); asígnalo a mano.» se añade al mensaje de retorno.
+6. **Cambios en Discord (Fase 2, `_apply_team_role_in_discord`, `L732-740`)**: tras el commit exitoso en BD, asigna el rol del equipo, remueve el rol no verificado si está presente y aplica el apodo resuelto `nick_to_apply` (acotado a 32 caracteres y sin espacios residuales). Ningún fallo interrumpe los pasos siguientes; si Discord rechaza el rol del equipo, el aviso «No se pudo asignar el rol '…' en Discord (…); asígnalo a mano.» se añade al mensaje de retorno.
 7. **Retorno**: `(True, f"Rol {req.equipo} confirmado para {member.display_name}.")`, más los avisos de la fase 2 si los hay.
 
 ---
@@ -232,27 +239,28 @@ Usado por `/asignar-rol` cuando el destino es un equipo. Deja lo mismo que confi
       posicion: str | None,
   ) -> tuple[bool, str]
   ```
-- **Ubicación**: `src/liga_bot/services/role_service.py:745-860`.
+- **Ubicación**: `src/liga_bot/services/role_service.py:747-863`.
 
 #### Flujo Operativo:
-1. **No autoasignación**: si `staff_member.id == member.id`, retorna `(False, "No puedes asignarte un rol a ti mismo.")`.
-2. **Posición**: obligatoria y válida como `RosterRole`; si no, retorna un error sin tocar nada.
-3. **Servicio de plantillas**: si `bot.roster_sync_service` no está disponible, retorna un error sin tocar nada (a diferencia del ticket, aquí la cuenta y la membresía son obligatorias).
-4. **Fase 1 (una transacción)**:
+1. **Normalización Defensiva**: Ejecuta `riot_tag = normalize_riot_tag(riot_tag)` al inicio de la función purgando caracteres `#` y espacios residuales, truncando a un máximo de 5 caracteres.
+2. **No autoasignación**: si `staff_member.id == member.id`, retorna `(False, "No puedes asignarte un rol a ti mismo.")`.
+3. **Posición**: obligatoria y válida como `RosterRole`; si no, retorna un error sin tocar nada.
+4. **Servicio de plantillas**: si `bot.roster_sync_service` no está disponible, retorna un error sin tocar nada (a diferencia del ticket, aquí la cuenta y la membresía son obligatorias).
+5. **Fase 1 (una transacción)**:
    - `_resolve_team_role`: equipo registrado y rol por `discord_role_id`, con los mismos errores que en la confirmación del ticket. Un rol del servidor que no es de un equipo registrado se rechaza.
-   - `_ensure_player`: cuenta de juego en `players`.
+   - `_ensure_player`: cuenta de juego en `players` con `riot_tag` normalizado.
    - `transfer_player`: membresía con la posición elegida, movimientos y auditoría.
-   - `create_request(equipo=team.name, canal_id=None, posicion=...)` + `update_status(APPROVED, staff_id=staff_member.id)`.
+   - `create_request(equipo=team.name, canal_id=None, riot_tag=riot_tag, posicion=...)` + `update_status(APPROVED, staff_id=staff_member.id)`.
    - `TeamRoleNotResolvedError` y `RosterSyncError` revierten la transacción y devuelven su mensaje; cualquier otra excepción devuelve «No se pudo registrar la asignación en base de datos. No se ha aplicado ningún cambio.». En ambos casos no se toca Discord.
-5. **Fase 2 (`_apply_team_role_in_discord`)**: rol del equipo, retirada de `Sin Verificar` y apodo `<TAG> <NombreLoL>`, igual que la confirmación del ticket.
-6. **Retorno**: `(True, f"Rol {team.name} asignado a {member.display_name} ({posicion}).")`, más los avisos de la fase 2 si los hay.
+6. **Fase 2 (`_apply_team_role_in_discord`)**: rol del equipo, retirada de `Sin Verificar` y apodo `<TAG> <NombreLoL>`, igual que la confirmación del ticket.
+7. **Retorno**: `(True, f"Rol {team.name} asignado a {member.display_name} ({posicion}).")`, más los avisos de la fase 2 si los hay.
 
 ---
 
 ### 5.2 Denegación de Solicitud: `deny_role_request`
 
 - **Firma**: `async def deny_role_request(self, guild: discord.Guild, channel_id: int, staff_member: discord.Member) -> tuple[bool, str]`
-- **Ubicación**: `src/liga_bot/services/role_service.py:862-897`.
+- **Ubicación**: `src/liga_bot/services/role_service.py:865-900`.
 
 #### Flujo Operativo:
 1. Registra en el sistema de auditoría la acción del staff: `logger.info("Denegando solicitud de rol en canal %s... por staff %s", channel_id, staff_member.id)`.

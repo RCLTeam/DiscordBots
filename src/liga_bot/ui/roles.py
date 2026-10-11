@@ -23,7 +23,7 @@ import discord
 from liga_bot import background_tasks
 from liga_bot.config import TEAMS_ALL, get_settings
 from liga_bot.models.enums import RosterRole
-from liga_bot.utils.formatting import build_opgg_url
+from liga_bot.utils.formatting import build_opgg_url, normalize_riot_tag
 
 if TYPE_CHECKING:
     pass
@@ -65,22 +65,32 @@ class SolicitudRolModal(discord.ui.Modal, title="Solicitud de Rol de Jugador"):
     )
     riot_tag: discord.ui.TextInput[Any] = discord.ui.TextInput(
         label="Riot Tag",
-        placeholder="Ej: EUW o 1234",
+        placeholder="Ej: EUW o 1234 (3-5 caracteres)",
         min_length=1,
-        max_length=20,
+        max_length=10,
         required=True,
     )
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         """
-        Al enviar el modal, abre el menú desplegable para que el usuario
-        elija su equipo o se postule como agente libre.
+        Al enviar el modal, valida y sanea el Riot Tag haciendo cumplir los límites
+        de 3 a 5 caracteres, abriendo el menú desplegable si es válido.
         """
+        clean_tag = normalize_riot_tag(self.riot_tag.value)
+        clean_nombre = self.nombre_lol.value.strip()
+
+        if len(clean_tag) < 3 or len(clean_tag) > 5:
+            await interaction.response.send_message(
+                "❌ El Riot Tag debe tener entre 3 y 5 caracteres alfanuméricos (ej: EUW o 12345).",
+                ephemeral=True,
+            )
+            return
+
         await interaction.response.send_message(
             "Selecciona tu equipo:",
             view=EquipoSelectView(
-                nombre_lol=self.nombre_lol.value,
-                riot_tag=self.riot_tag.value,
+                nombre_lol=clean_nombre,
+                riot_tag=clean_tag,
                 teams=await _fetch_team_names(interaction),
             ),
             ephemeral=True,

@@ -29,6 +29,7 @@ from liga_bot.ui.roles import (
     TicketView,
     build_panel_rol_embed,
 )
+from liga_bot.utils.formatting import normalize_riot_tag
 
 if TYPE_CHECKING:
     from liga_bot.bot import LigaBot
@@ -138,12 +139,21 @@ class RolesCog(commands.Cog, name="Roles"):
             )
             return
 
+        raw_tag = (riot_tag or "").replace("#", "").strip()
+        clean_tag = normalize_riot_tag(riot_tag)
+        if len(raw_tag) > 5 or len(clean_tag) < 3 or len(clean_tag) > 5:
+            await interaction.response.send_message(
+                "❌ El Riot Tag debe tener entre 3 y 5 caracteres alfanuméricos (ej: EUW o 12345).",
+                ephemeral=True,
+            )
+            return
+
         # Las llamadas a Discord y a la base de datos pueden superar los 3 segundos
         # que Discord concede para la primera respuesta.
         await interaction.response.defer(ephemeral=True)
 
         if equipo.strip().casefold() == self.settings.free_role_name.casefold():
-            _, msg = await role_service.assign_free_role(usuario, nombre_lol, riot_tag)
+            _, msg = await role_service.assign_free_role(usuario, nombre_lol, clean_tag)
         else:
             _, msg = await role_service.assign_team_role(
                 guild=interaction.guild,
@@ -151,7 +161,7 @@ class RolesCog(commands.Cog, name="Roles"):
                 staff_member=interaction.user,
                 equipo=equipo,
                 nombre_lol=nombre_lol,
-                riot_tag=riot_tag,
+                riot_tag=clean_tag,
                 posicion=posicion,
             )
         await interaction.followup.send(msg, ephemeral=True)

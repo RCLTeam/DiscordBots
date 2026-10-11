@@ -10,7 +10,7 @@ Los componentes interactivos de Discord para la solicitud y gestión de roles re
 
 | Clase | Tipo de Componente | Persistencia / Timeout | Rol Funcional |
 |---|---|---|---|
-| `SolicitudRolModal` | `discord.ui.Modal` | N/A (modal síncrono del cliente) | Captura nombre de invocador de LoL y Riot Tag. |
+| `SolicitudRolModal` | `discord.ui.Modal` | N/A (modal síncrono del cliente) | Captura nombre de invocador de LoL y Riot Tag con saneamiento defensivo y validación de 3 a 5 caracteres. |
 | `EquipoSelect` | `discord.ui.Select` | Montado en `EquipoSelectView` | Desplegable con los equipos registrados (o `TEAMS_ALL` como respaldo, máximo 24) + Libre. |
 | `PosicionSelect` | `discord.ui.Select` | Montado en `PosicionSelectView` (`timeout=180.0` s) | Desplegable de posición; crea el ticket y lo deshace si no se puede publicar su mensaje. |
 | `EquipoSelectView` | `discord.ui.View` | Efímera (`timeout=180.0` s) | Contenedor interactivo efímero del selector de equipos. |
@@ -22,35 +22,48 @@ Los componentes interactivos de Discord para la solicitud y gestión de roles re
 
 ## 2. Modal de Entrada de Datos: `SolicitudRolModal`
 
-Permite la captura estructurada de las credenciales de juego del miembro.
+Permite la captura estructurada de las credenciales de juego del miembro con saneamiento defensivo del Riot Tag y validación previa a la selección de club.
 
-- **Ubicación**: `src/liga_bot/ui/roles.py:53-87`.
+- **Ubicación**: `src/liga_bot/ui/roles.py:53-97`.
 - **Título**: `"Solicitud de Rol de Jugador"`.
 - **Campos de Texto (`TextInput`)**:
 
 | Campo | Atributo | Longitud Mín / Máx | Requerido | Placeholder |
 |---|---|:---:|:---:|---|
 | **Nombre LoL** | `nombre_lol` | 1 / 100 | Sí | `"Ej: Invocador123"` |
-| **Riot Tag** | `riot_tag` | 1 / 20 | Sí | `"Ej: EUW o 1234"` |
+| **Riot Tag** | `riot_tag` | 1 / 10 | Sí | `"Ej: EUW o 1234 (3-5 caracteres)"` |
 
-- **Callback `on_submit`**:
-  Al completar el modal, el bot responde con un mensaje efímero privado que despliega la vista del selector `EquipoSelectView`:
-  ```python
-  await interaction.response.send_message(
-      "Selecciona tu equipo:",
-      view=EquipoSelectView(
-          nombre_lol=self.nombre_lol.value,
-          riot_tag=self.riot_tag.value,
-      ),
-      ephemeral=True,
-  )
-  ```
+- **Callback `on_submit` (`L74–L97`)**:
+  Al completar el modal, se aplica el siguiente flujo de procesamiento:
+  1. **Saneamiento Defensivo (`L79–L80`)**:
+     - `clean_tag = normalize_riot_tag(self.riot_tag.value)`: elimina todas las apariciones del carácter `#` y espacios en blanco residuales mediante `(riot_tag or "").replace("#", "").strip()[:5]`, permitiendo que el usuario ingrese `#EUW` o `EUW` indistintamente.
+     - `clean_nombre = self.nombre_lol.value.strip()`: recorta espacios superfluos en el nombre de invocador.
+  2. **Validación de Longitud Oficial de Riot Games (`L82–L87`)**:
+     - Verifica que `3 <= len(clean_tag) <= 5`.
+     - Si el tag limpio contiene menos de 3 caracteres (por ejemplo `12`, `#1`, `###` o espacios vacíos) o más de 5 caracteres, rechaza la interacción de inmediato con un mensaje efímero:
+       ```text
+       ❌ El Riot Tag debe tener entre 3 y 5 caracteres alfanuméricos (ej: EUW o 12345).
+       ```
+       abortando la operación sin abrir menús desplegables ni registrar datos.
+  3. **Apertura del Menú de Equipos (`L89–L97`)**:
+     - Habiendo superado la validación, responde de forma efímera desplegando `EquipoSelectView`, pasando `clean_nombre` y `clean_tag` saneados:
+     ```python
+     await interaction.response.send_message(
+         "Selecciona tu equipo:",
+         view=EquipoSelectView(
+             nombre_lol=clean_nombre,
+             riot_tag=clean_tag,
+             teams=await _fetch_team_names(interaction),
+         ),
+         ephemeral=True,
+     )
+     ```
 
 ---
 
 ## 3. Selector de Equipos: `EquipoSelect` & `EquipoSelectView`
 
-- **Ubicación**: `src/liga_bot/ui/roles.py:107-262` (selector de equipo) y `:269-400` (`PosicionSelect` y `PosicionSelectView`).
+- **Ubicación**: `src/liga_bot/ui/roles.py:117-272` (selector de equipo) y `:279-410` (`PosicionSelect` y `PosicionSelectView`).
 - **Límite de Opciones de Discord**: La API de Discord admite un máximo de 25 opciones por selector. `EquipoSelect` muestra hasta 24 equipos y la opción de agente libre:
   - **Equipos registrados en base de datos** (`role_service.list_team_names()`). Si la consulta falla o no devuelve ninguno, usa como respaldo los 20 equipos de la constante `TEAMS_ALL`:
     - *División Premier (10)*: Vanguard Gaming, Nexus Esports, Aegis Club, Eclipse Gaming, Apex Predators, Storm Legion, Titan Gaming, Ironclad Esports, Shadow Guard, Valiant Esports.
@@ -90,7 +103,7 @@ Permite la captura estructurada de las credenciales de juego del miembro.
 
 ## 4. Panel Persistente: `PanelPedirRolView`
 
-- **Ubicación**: `src/liga_bot/ui/roles.py:473-494`.
+- **Ubicación**: `src/liga_bot/ui/roles.py:483-504`.
 - **Persistencia**: `timeout=None`.
 - **Botón `pedir_rol`**:
   - `label="Solicitar mi rol"`, `style=discord.ButtonStyle.primary`, `emoji="🎮"`.
@@ -105,7 +118,7 @@ Permite la captura estructurada de las credenciales de juego del miembro.
 
 Implementa el patrón de elementos dinámicos (`discord.ui.DynamicItem`) para permitir que los botones de confirmación en tickets sigan funcionando tras un reinicio del bot sin requerir el re-escaneo de canales.
 
-- **Ubicación**: `src/liga_bot/ui/roles.py:500-609`.
+- **Ubicación**: `src/liga_bot/ui/roles.py:510-622`.
 - **Template Regex de Registro**:
   ```python
   class ConfirmarRolButton(
@@ -145,7 +158,7 @@ Implementa el patrón de elementos dinámicos (`discord.ui.DynamicItem`) para pe
 
 ## 6. Vista del Canal de Ticket: `TicketView`
 
-- **Ubicación**: `src/liga_bot/ui/roles.py:616-718`.
+- **Ubicación**: `src/liga_bot/ui/roles.py:629-739`.
 - **Persistencia**: `timeout=None`.
 - **Modos de Inicialización**:
   - *Modo Dinámico con Datos* (`TicketView(user_id=123, equipo="Apex")`): Instancia y añade internamente `ConfirmarRolButton(user_id, equipo)` (basta con `user_id`).
