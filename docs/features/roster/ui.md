@@ -12,7 +12,7 @@ Este módulo describe los componentes visuales interactivos de Discord (vistas, 
 
 `GestionarPosicionView` hereda de `discord.ui.View` y orquesta el panel de interacción para seleccionar el equipo objetivo, la posición deportiva deseada y aplicar los cambios validados.
 
-- **Constructor (`L354–L394`):**
+- **Constructor (`L368–L408`):**
   ```python
   class GestionarPosicionView(discord.ui.View):
       def __init__(
@@ -51,8 +51,8 @@ async def interaction_check(self, interaction: discord.Interaction) -> bool:
 - Únicamente el usuario que invocó el comando slash original (`self.actor`) puede interactuar con los selectores y botones. Cualquier otro miembro del servidor (incluido el propio jugador inspeccionado) recibe un rechazo efímero.
 
 ### 1.3 Ciclo de Vida: Expiración y Gestión de Errores
-- **`on_timeout` (`L407–L421`):** Tras 180 segundos sin interacción, el temporizador marca `child.disabled = True` en todos los controles y actualiza el mensaje en Discord para congelar la interfaz.
-- **`on_error` (`L422–L438`):** Captura cualquier excepción no controlada en los callbacks de los componentes hijos, emite un log con trazabilidad completa y responde al usuario con un mensaje efímero de error.
+- **`on_timeout` (`L421–L435`):** Tras 180 segundos sin interacción, el temporizador marca `child.disabled = True` en todos los controles y actualiza el mensaje en Discord para congelar la interfaz.
+- **`on_error` (`L436–L453`):** Captura cualquier excepción no controlada en los callbacks de los componentes hijos, emite un log con trazabilidad completa y responde al usuario con un mensaje efímero de error.
 
 ---
 
@@ -109,12 +109,12 @@ La vista dispone sus controles en tres filas organizadas:
 
 ---
 
-### 2.3 Botón de Confirmación: `SaveButton` (`L191–L304`)
+### 2.3 Botón de Confirmación: `SaveButton` (`L191–L318`)
 - **Fila:** `row=2`
 - **Estilo:** `discord.ButtonStyle.success`
 - **Emoji:** `"💾"`
 - **Custom ID:** `"roster:gestionar_posicion:save"`
-- **Alias de importación:** `SavePositionButton = SaveButton` (`L304`)
+- **Alias de importación:** `SavePositionButton = SaveButton` (`L318`)
 
 #### Validaciones y Manejo de Errores:
 1. **Validación de Selección Incompleta (`L210–L226`):**
@@ -128,15 +128,19 @@ La vista dispone sus controles en tres filas organizadas:
    - **`PlayerNotTeamMemberError` (`L259–L268`):** Notifica que el usuario ya no pertenece a la plantilla del equipo.
    - **`ValueError`, `RosterSyncError` (`L269–L275`):** Muestra el mensaje de la excepción en formato de alerta.
    - **`Exception` no controlada (`L276–L286`):** Registra el error en logs del bot y responde con un mensaje genérico.
-3. **Flujo de Éxito (`L288–L302`):**
-   - Deshabilita todos los componentes hijos de la vista.
+3. **Sincronización de Apodo Canónico (`L288–L301`):**
+   - Invoca `await self.view.roster_sync_service.resolve_canonical_nick(discord_user_id=str(self.view.member.id), base_name=self.view.member.display_name)`.
+   - Aplica el apodo mediante `await self.view.member.edit(nick=nuevo_nick)`.
+   - Se ejecuta protegido dentro de un bloque `try/except Exception` que registra advertencias en log con `logger.warning`, garantizando que incidencias de permisos (jerarquía en Discord) o transitorias de red no aborten la confirmación del cambio ni impidan mostrar el recibo de éxito al usuario.
+4. **Flujo de Éxito (`L302–L316`):**
+   - Deshabilita todos los componentes hijos de la vista (`child.disabled = True`).
    - Detiene la vista con `self.view.stop()`.
    - Genera el embed de éxito con `view.build_success_embed(updated_membership)`.
    - Actualiza el mensaje en Discord mediante `edit_original_response` o `edit_message`.
 
 ---
 
-### 2.4 Botón de Cancelación: `CancelButton` (`L307–L342`)
+### 2.4 Botón de Cancelación: `CancelButton` (`L321–L356`)
 - **Fila:** `row=2`
 - **Estilo:** `discord.ButtonStyle.secondary`
 - **Emoji:** `"❌"`
@@ -149,18 +153,18 @@ La vista dispone sus controles en tres filas organizadas:
 
 La vista centraliza la construcción de los mensajes enriquecidos:
 
-### 3.1 `build_initial_embed` (`L440–L465`)
+### 3.1 `build_initial_embed` (`L454–L479`)
 - **Color:** `discord.Color.blue()`
 - **Contenido:**
   - Título: `"🛡️ Gestión de Posición de Plantilla"`
   - Thumbnail: Avatar del jugador auditado.
   - Campos: Mención del jugador (`<@id>`), etiqueta (`display_name`) y total de equipos vinculados.
-  - Pie: `"RCL League • Selecciona el equipo y la posición deseada"`
+  - Pie: `"RCL League • Gestión de Plantillas"`
 
-### 3.2 `build_success_embed` (`L467–L535`)
+### 3.2 `build_success_embed` (`L481–L550`)
 - **Color:** `discord.Color.green()`
 - **Contenido:**
-  - Título: `"✅ Posición de Plantilla Actualizada"`
+  - Título: `"✅ Posición Actualizada Exitosamente"`
   - Timestamp: Hora UTC de la actualización.
   - Campos:
     - **Jugador:** Mención `<@id>`.
@@ -171,7 +175,7 @@ La vista centraliza la construcción de los mensajes enriquecidos:
     - **Modificado por:** Mención del actor que ejecutó la operación.
   - Pie: `"RCL League • Sincronización de Plantillas"`
 
-### 3.3 `build_conflict_embed` (`L537–L560`)
+### 3.3 `build_conflict_embed` (`L551–L574`)
 - **Color:** `discord.Color.gold()`
 - **Contenido:**
   - Título: `"⚠️ Conflicto de Posición Competitiva"`

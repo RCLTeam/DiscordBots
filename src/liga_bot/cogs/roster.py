@@ -330,14 +330,24 @@ class RosterCog(commands.Cog, name="Roster"):
                 logger.warning("No se pudo asignar el rol '%s': %s", equipo.name, exc)
                 avisos.append(f"no se pudo asignar el rol {equipo.mention}")
 
-        # 3. Apodo: "<TAG> <NombreLoL>", sin Riot Tag
+        # 3. Apodo canónico según prioridad deportiva competitiva
         base_nick = (nombre_lol or "").strip() or target_member.display_name
         try:
-            known_tags = await service.list_team_tags()
+            nuevo_nick = await service.resolve_canonical_nick(
+                discord_user_id=target_member.id,
+                base_name=base_nick,
+            )
         except Exception as exc:
-            logger.warning("No se pudieron cargar los tags de equipo: %s", exc)
-            known_tags = [team.tag]
-        nuevo_nick = apply_team_tag(base_nick, team.tag, known_tags)[:32]
+            logger.warning(
+                "No se pudo resolver el apodo canónico para %s: %s",
+                target_member.display_name,
+                exc,
+            )
+            try:
+                known_tags = await service.list_team_tags()
+            except Exception:
+                known_tags = [team.tag]
+            nuevo_nick = apply_team_tag(base_nick, team.tag, known_tags)[:32].rstrip()
         try:
             await target_member.edit(nick=nuevo_nick)
         except (discord.Forbidden, discord.HTTPException) as exc:

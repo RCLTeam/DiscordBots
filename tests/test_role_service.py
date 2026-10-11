@@ -16,10 +16,11 @@ from liga_bot.bot import LigaBot
 from liga_bot.config import Settings
 from liga_bot.models.enums import Division, RoleRequestStatus, RosterRole
 from liga_bot.models.role_request import RoleRequest
-from liga_bot.models.roster import Player
+from liga_bot.models.roster import DiscordUser, Player
 from liga_bot.models.team import Team
 from liga_bot.repositories.role_request_repo import RoleRequestRepository
 from liga_bot.repositories.roster_repo import TeamMembershipRepository
+from liga_bot.repositories.team_repo import TeamRepository
 from liga_bot.services.role_service import RoleService
 from liga_bot.services.roster_sync_service import RosterSyncError, RosterSyncService
 
@@ -69,11 +70,13 @@ def create_mock_member(
     display_name: str | None = None,
     roles: list[MagicMock] | None = None,
     guild: MagicMock | None = None,
+    global_name: str | None = None,
 ) -> AsyncMock:
     """Crea un mock asíncrono de discord.Member con métodos de gestión de roles y DMs."""
     member = AsyncMock(spec=discord.Member)
     member.id = user_id
     member.name = name
+    member.global_name = global_name or display_name or name
     member.display_name = display_name or name
     member.roles = list(roles or [])
     member.guild = guild
@@ -1212,6 +1215,134 @@ class TestConfirmRoleRequest:
 
         assert ok is True
         assert "Aegis Club confirmado para OwnerPlayer." in msg
+
+    @pytest.mark.asyncio
+    async def test_confirm_role_request_partner_preserves_existing_competitive_team_tag(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        clean_settings: Settings,
+        db_session: AsyncSession,
+    ):
+        """Usuario que ya compite en TLG y pide PARTNERS en LDP conserva tag TLG."""
+        await registrar_equipo(db_session, "The League Gaming", "TLG", 888101)
+        await registrar_equipo(db_session, "Los Del Paddock", "LDP", 888102)
+        tlg = await TeamRepository(db_session).get_by_name("The League Gaming")
+        assert tlg is not None
+
+        # Usuario con membresía competitiva previa en TLG (TOP)
+        user = DiscordUser(discord_id="400100", username="Hiperxp")
+        db_session.add(user)
+        await db_session.flush()
+        await TeamMembershipRepository(db_session).create(tlg.id, "400100", RosterRole.TOP)
+        await db_session.commit()
+
+        role_tlg = create_mock_role(888101, "TLG")
+        role_ldp = create_mock_role(888102, "LDP")
+        guild = create_mock_guild(clean_settings, roles=[role_tlg, role_ldp])
+        staff = create_mock_member(900001, name="StaffBoss", guild=guild)
+        member = create_mock_member(400100, name="Hiperxp", guild=guild)
+        guild._members_map[400100] = member
+
+        repo = RoleRequestRepository(db_session)
+        await repo.create_request(
+            user_id=400100,
+            nombre_lol="Hiperxp",
+            riot_tag="EUW",
+            equipo="Los Del Paddock",
+            canal_id=777100,
+            posicion="partners",
+        )
+
+        bot = MagicMock()
+        bot.roster_sync_service = RosterSyncService(
+            session_factory=session_factory, settings=clean_settings
+        )
+        service = RoleService(session_factory=session_factory, settings=clean_settings, bot=bot)
+
+        ok, msg = await service.confirm_role_request(
+            guild=guild, channel_id=777100, staff_member=staff
+        )
+
+        assert ok is True
+        member.edit.assert_awaited_once_with(nick="TLG Hiperxp")
+
+    @pytest.mark.asyncio
+    async def test_confirm_role_request_partner_without_competitive_team_has_no_team_tag(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        clean_settings: Settings,
+        db_session: AsyncSession,
+    ):
+        """Usuario sin membresía competitiva previa que pide PARTNERS queda sin tag."""
+        await registrar_equipo(db_session, "Los Del Paddock", "LDP", 888102)
+
+        role_ldp = create_mock_role(888102, "LDP")
+        guild = create_mock_guild(clean_settings, roles=[role_ldp])
+        staff = create_mock_member(900001, name="StaffBoss", guild=guild)
+        member = create_mock_member(400101, name="Hiperxp", guild=guild)
+        guild._members_map[400101] = member
+
+        repo = RoleRequestRepository(db_session)
+        await repo.create_request(
+            user_id=400101,
+            nombre_lol="Hiperxp",
+            riot_tag="EUW",
+            equipo="Los Del Paddock",
+            canal_id=777101,
+            posicion="partners",
+        )
+
+        bot = MagicMock()
+        bot.roster_sync_service = RosterSyncService(
+            session_factory=session_factory, settings=clean_settings
+        )
+        service = RoleService(session_factory=session_factory, settings=clean_settings, bot=bot)
+
+        ok, msg = await service.confirm_role_request(
+            guild=guild, channel_id=777101, staff_member=staff
+        )
+
+        assert ok is True
+        member.edit.assert_awaited_once_with(nick="Hiperxp")
+
+    @pytest.mark.asyncio
+    async def test_confirm_role_request_competitive_role_updates_team_tag(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        clean_settings: Settings,
+        db_session: AsyncSession,
+    ):
+        """Usuario al que se le confirma posición competitiva (MID) recibe tag del equipo."""
+        await registrar_equipo(db_session, "Los Del Paddock", "LDP", 888102)
+
+        role_ldp = create_mock_role(888102, "LDP")
+        guild = create_mock_guild(clean_settings, roles=[role_ldp])
+        staff = create_mock_member(900001, name="StaffBoss", guild=guild)
+        member = create_mock_member(400102, name="Hiperxp", guild=guild)
+        guild._members_map[400102] = member
+
+        repo = RoleRequestRepository(db_session)
+        await repo.create_request(
+            user_id=400102,
+            nombre_lol="Hiperxp",
+            riot_tag="EUW",
+            equipo="Los Del Paddock",
+            canal_id=777102,
+            posicion="mid",
+        )
+
+        bot = MagicMock()
+        bot.roster_sync_service = RosterSyncService(
+            session_factory=session_factory, settings=clean_settings
+        )
+        service = RoleService(session_factory=session_factory, settings=clean_settings, bot=bot)
+
+        ok, msg = await service.confirm_role_request(
+            guild=guild, channel_id=777102, staff_member=staff
+        )
+
+        assert ok is True
+        member.edit.assert_awaited_once_with(nick="LDP Hiperxp")
 
 
 # ===========================================================================

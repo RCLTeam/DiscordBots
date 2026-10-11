@@ -12,6 +12,7 @@ Entre sus responsabilidades clave se encuentran:
 - **Sincronización Reactiva:** Detección en tiempo real de cambios en los roles de miembros de Discord (`on_member_update`) para gestionar altas y bajas de membresía de forma resiliente e idempotente.
 - **Panel Interactivo de Gestión:** Comando slash `/gestionar-posicion` con vistas interactivas (`GestionarPosicionView`), menús desplegables para clubes y posiciones, y control de concurrencia restringido al staff.
 - **Invariantes Deportivas de Liga:** Imposición de reglas reglamentarias, incluyendo la posición competitiva única por jugador en toda la competición y la limitación de la capitanía oficial exclusivamente a posiciones titulares.
+- **Resolución Canónica de Apodos:** Algoritmo de formateo (`resolve_canonical_nick`) con prioridad deportiva competitiva sobre roles secundarios, normalizando tags y respetando el límite de 32 caracteres.
 - **Trazabilidad y Auditoría:** Historial inmutable de movimientos en `roster_movements` y bitácoras estructuradas en `audit_logs` con snapshots JSONB de estados previos y posteriores.
 
 ---
@@ -20,7 +21,7 @@ Entre sus responsabilidades clave se encuentran:
 
 | Documento | Descripción |
 |---|---|
-| [**`commands.md`**](./commands.md) | Documenta el comando slash `/gestionar-posicion`, sus permisos, deferral efímero, bifurcación de respuestas (0 equipos vs ≥1 equipos) y el listener reactivo de Discord Gateway `on_member_update`. |
-| [**`services.md`**](./services.md) | Detalla la lógica de dominio en `RosterSyncService`, la jerarquía de excepciones de negocio y las 4 invariantes deportivas (rol inicial, multipresencia técnica, posición competitiva única y capitanía titular). |
-| [**`ui.md`**](./ui.md) | Describe los componentes visuales interactivos: `GestionarPosicionView`, auto-selección de equipo, selector de roles (`PositionSelect`), botones de acción (`SaveButton`, `CancelButton`) y generadores de embeds informativos. |
+| [**`commands.md`**](./commands.md) | Documenta los comandos slash `/gestionar-posicion`, `/traspasa-equipo` y `/liberar-jugador`, sus permisos de staff, deferral efímero, sincronización de apodos canónicos y el listener reactivo de Discord Gateway `on_member_update`. |
+| [**`services.md`**](./services.md) | Detalla la lógica de dominio en `RosterSyncService` (`handle_role_added`, `handle_role_removed`, `change_player_position`, `get_user_teams`, `resolve_canonical_nick`), la jerarquía de excepciones de negocio y las invariantes deportivas. |
+| [**`ui.md`**](./ui.md) | Describe los componentes visuales interactivos: `GestionarPosicionView`, auto-selección de equipo, selector de roles (`PositionSelect`), botones de acción (`SaveButton` con sincronización de apodo canónico, `CancelButton`) y generadores de embeds informativos. |
 | [**`persistence.md`**](./persistence.md) | Detalla los modelos SQLAlchemy (`TeamMembership`, `RosterMovement`, `AuditLog`), las restricciones relacionales DDL (check de capitanía e índice parcial único), normalización JSONB y los repositorios de datos. |

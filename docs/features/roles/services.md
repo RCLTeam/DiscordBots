@@ -189,7 +189,7 @@ except Exception as exc:
 ### 5.1 Aprobación y Confirmación: `confirm_role_request`
 
 - **Firma**: `async def confirm_role_request(self, guild: discord.Guild, channel_id: int, staff_member: discord.Member) -> tuple[bool, str]`
-- **Ubicación**: `src/liga_bot/services/role_service.py:607-721` (resolución del equipo en `_resolve_team_role`, `:498-537`; cambios en Discord en `_apply_team_role_in_discord`, `:539-605`).
+- **Ubicación**: `src/liga_bot/services/role_service.py:610-743` (resolución del equipo en `_resolve_team_role`, `:500-537`; cambios en Discord en `_apply_team_role_in_discord`, `:539-608`).
 
 #### Flujo Operativo:
 1. **Validación de Estado**: Consulta en la base de datos `req = await repo.get_by_channel_id(channel_id)`. Si no existe o su estado es distinto de `RoleRequestStatus.PENDING`, aborta indicando que no hay solicitud pendiente asociada.
@@ -203,10 +203,14 @@ except Exception as exc:
    - Equipo no registrado → `(False, "El equipo '…' no está registrado en la base de datos. … La solicitud sigue pendiente.")`.
    - `discord_role_id` sin rol en el servidor → `(False, "El rol del equipo '…' (discord_role_id …) no existe en el servidor. … La solicitud sigue pendiente.")`.
    - En ambos casos se registra un aviso en el log con el nombre del equipo (y el `discord_role_id` si existe), no se toca Discord y la solicitud sigue `PENDING`. Tras corregir el registro (por ejemplo, con `liga-cli seed-teams`), el mismo botón «Confirmar Rol» funciona sin abrir un ticket nuevo.
-5. **Persistencia Atómica (Fase 1)**: en la misma transacción, `transfer_player` crea la membresía con `req.posicion` (si la solicitud la tiene y `RosterSyncService` está disponible) y la solicitud pasa a `APPROVED` con `staff_id=staff_member.id`.
+5. **Persistencia Atómica (Fase 1, `L633-709`)**:
+   - En la misma transacción, `transfer_player` crea la membresía con `req.posicion` (si la solicitud la tiene y `RosterSyncService` está disponible) y la solicitud pasa a `APPROVED` con `staff_id=staff_member.id`.
+   - **Resolución Canónica de Apodo (`resolve_canonical_nick`, `L681-699`)**: Antes de confirmar la transacción, se calcula `nick_to_apply` delegando en `roster_service.resolve_canonical_nick(discord_user_id=member.id, base_name=req.nombre_lol, session=session)` (con fallback seguro en `apply_team_tag` si el servicio no está inyectado):
+     - **Regla Deportiva de Prioridad Competitiva**: Si el usuario ostenta una posición competitiva activa en cualquier club de la liga (`TOP`, `JUNGLE`, `MID`, `ADC`, `SUPPORT`, `SUBSTITUTE`), el apodo preserva obligatoriamente el tag de dicho equipo competitivo (`<TAG_COMPETITIVO> <NombreLoL>`).
+     - **Roles No Competitivos (`partners`, `staff`, `coach`)**: Si el usuario carece de membresía competitiva, no se le antepone tag de club (`<NombreLoL>`). Si un jugador que ya compite en el Club A es confirmado para un rol secundario (como `partners`) en el Club B, su apodo retiene de forma inmutable el tag del Club A, impidiendo que roles no competitivos sobreescriban la identidad deportiva principal.
    - Un `RosterSyncError` (por ejemplo, un conflicto de posición competitiva) revierte la transacción y su mensaje llega al staff seguido de «La solicitud sigue pendiente.».
    - Cualquier otra excepción revierte la transacción y devuelve «No se pudo registrar la confirmación en base de datos. No se ha aplicado ningún cambio.».
-6. **Cambios en Discord (Fase 2, `_apply_team_role_in_discord`)**: tras el commit, asigna el rol del equipo, remueve el rol no verificado si está presente y pone el apodo `<TAG> <NombreLoL>` con `apply_team_tag`, truncado a 32 caracteres. Ningún fallo interrumpe los pasos siguientes; si Discord rechaza el rol del equipo, el aviso «No se pudo asignar el rol '…' en Discord (…); asígnalo a mano.» se añade al mensaje de retorno.
+6. **Cambios en Discord (Fase 2, `_apply_team_role_in_discord`, `L730-738`)**: tras el commit exitoso en BD, asigna el rol del equipo, remueve el rol no verificado si está presente y aplica el apodo resuelto `nick_to_apply` (acotado a 32 caracteres y sin espacios residuales). Ningún fallo interrumpe los pasos siguientes; si Discord rechaza el rol del equipo, el aviso «No se pudo asignar el rol '…' en Discord (…); asígnalo a mano.» se añade al mensaje de retorno.
 7. **Retorno**: `(True, f"Rol {req.equipo} confirmado para {member.display_name}.")`, más los avisos de la fase 2 si los hay.
 
 ---
@@ -228,7 +232,7 @@ Usado por `/asignar-rol` cuando el destino es un equipo. Deja lo mismo que confi
       posicion: str | None,
   ) -> tuple[bool, str]
   ```
-- **Ubicación**: `src/liga_bot/services/role_service.py:723-838`.
+- **Ubicación**: `src/liga_bot/services/role_service.py:745-860`.
 
 #### Flujo Operativo:
 1. **No autoasignación**: si `staff_member.id == member.id`, retorna `(False, "No puedes asignarte un rol a ti mismo.")`.
@@ -248,7 +252,7 @@ Usado por `/asignar-rol` cuando el destino es un equipo. Deja lo mismo que confi
 ### 5.2 Denegación de Solicitud: `deny_role_request`
 
 - **Firma**: `async def deny_role_request(self, guild: discord.Guild, channel_id: int, staff_member: discord.Member) -> tuple[bool, str]`
-- **Ubicación**: `src/liga_bot/services/role_service.py:840-875`.
+- **Ubicación**: `src/liga_bot/services/role_service.py:862-897`.
 
 #### Flujo Operativo:
 1. Registra en el sistema de auditoría la acción del staff: `logger.info("Denegando solicitud de rol en canal %s... por staff %s", channel_id, staff_member.id)`.

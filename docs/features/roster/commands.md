@@ -2,7 +2,7 @@
 
 [⬅️ Volver a Gestión de Plantillas](./README.md)
 
-Este módulo documenta los puntos de entrada para la administración de plantillas de clubes, abarcando el comando slash interactivo `/gestionar-posicion` y el listener pasivo de Discord Gateway `on_member_update` para la sincronización reactiva de altas y bajas de membresía.
+Este módulo documenta los puntos de entrada para la administración de plantillas de clubes, abarcando los comandos slash interactivos `/gestionar-posicion`, `/traspasa-equipo` y `/liberar-jugador`, así como el listener pasivo de Discord Gateway `on_member_update` para la sincronización reactiva de altas y bajas de membresía.
 
 ---
 
@@ -92,16 +92,103 @@ Si el usuario está registrado en al menos un equipo:
 
 ---
 
-### 1.4 Aclaración Técnica sobre Comandos Slash de Plantilla
+## 2. Slash Command: `/traspasa-equipo`
 
-En la arquitectura del bot:
-- **No existe ningún comando de grupo `/roster`** (como `/roster gestionar`, `/roster sincronizar` o `/roster exportar`).
-- La administración interactiva de posiciones de plantilla se canaliza única y exclusivamente a través de `/gestionar-posicion`.
-- La sincronización de altas y bajas de miembros no es un comando manual, sino un proceso reactivo automático ejecutado en segundo plano por el listener de Discord Gateway.
+El comando `/traspasa-equipo` traspasa a un jugador hacia otro club, actualizando su posición en base de datos, intercambiando sus roles de equipo en Discord y sincronizando su apodo canónico según la prioridad deportiva competitiva.
+
+- **Ubicación en código:** `src/liga_bot/cogs/roster.py:243-364`
+- **Firma del método:**
+  ```python
+  @app_commands.command(
+      name="traspasa-equipo",
+      description="Traspasa a un jugador al equipo indicado con su nueva posición (Solo Staff)",
+  )
+  @app_commands.describe(
+      usuario="Jugador que se traspasa",
+      equipo="Rol de Discord del equipo de destino",
+      posicion="Posición que ocupará en la plantilla",
+      nombre_lol="Nombre de invocador para el apodo (opcional: por defecto el actual)",
+  )
+  @app_commands.default_permissions(manage_guild=True)
+  async def traspasa_equipo(
+      self,
+      interaction: discord.Interaction,
+      usuario: discord.Member,
+      equipo: discord.Role,
+      posicion: RosterRole,
+      nombre_lol: str | None = None,
+  ) -> None:
+  ```
+
+### 2.1 Parámetros de Entrada
+
+| Parámetro | Tipo | Requerido | Descripción |
+|---|---|:---:|---|
+| `usuario` | `discord.Member` | Sí | Jugador que es traspasado al club objetivo. |
+| `equipo` | `discord.Role` | Sí | Rol de Discord correspondiente al equipo de destino registrado. |
+| `posicion` | `RosterRole` | Sí | Posición deportiva que ocupará en la plantilla (`TOP`, `JUNGLE`, `MID`, `ADC`, `SUPPORT`, `SUBSTITUTE`, `COACH`, `STAFF`, `PARTNERS`). |
+| `nombre_lol` | `str \| None` | No | Nombre de invocador para el apodo. Si se omite, se usa el `display_name` actual del usuario. |
+
+### 2.2 Flujo Operativo
+
+1. **Base de Datos Primero (`L291–L313`):**
+   Invoca `await service.transfer_player(...)`. La capa de datos gestiona el movimiento de forma transaccional (`roster.member_transferred_in`, `roster_movements`), asegurando que si ocurre un error o conflicto, la operación se revierte y no se tocan roles ni apodos en Discord.
+2. **Sincronización de Roles en Discord (`L315–L331`):**
+   - Si existía procedencia de un equipo anterior (`previous_team`), se localiza su rol en el servidor y se retira (`remove_roles`).
+   - Se asigna el rol del equipo de destino si el jugador no lo poseía (`add_roles`).
+   - Excepciones de jerarquía (`discord.Forbidden`, `discord.HTTPException`) se capturan y añaden a la lista de `avisos`.
+3. **Apodo Canónico según Prioridad Deportiva Competitiva (`L333–L346`):**
+   - Determina el nombre base: `(nombre_lol or "").strip() or target_member.display_name`.
+   - Invoca `await service.resolve_canonical_nick(discord_user_id=target_member.id, base_name=base_nick)`.
+   - Si la posición asignada es competitiva (`TOP`, `JUNGLE`, etc.), se antepone el tag del club (`<TAG> <NombreLoL>`).
+   - Si la posición es no competitiva (`PARTNERS`, `COACH`, `STAFF`):
+     - Si el jugador ostenta otra posición competitiva en la liga, conserva dicho tag competitivo.
+     - Si no posee ninguna membresía competitiva, queda limpio sin tag de equipo.
+   - En caso de fallo imprevisto en la resolución, se aplica defensivamente `apply_team_tag` con los tags conocidos.
+   - Aplica el cambio con `await target_member.edit(nick=nuevo_nick)` capturando excepciones de permisos.
+4. **Respuesta de Confirmación (`L347–L354`):**
+   Emite un mensaje efímero detallando procedencia, equipo de destino, posición y apodo (`✅ @Jugador traspasado desde Equipo A a Equipo B como MID (TAG Nombre).`). Si hubo incidencias en roles o apodo, añade advertencias en `avisos`.
 
 ---
 
-## 2. Event Listener: Sincronización Reactiva (`on_member_update`)
+## 3. Slash Command: `/liberar-jugador`
+
+El comando `/liberar-jugador` da de baja a un jugador de la plantilla de un equipo sin eliminar su ficha histórica ni cuenta de invocador.
+
+- **Ubicación en código:** `src/liga_bot/cogs/roster.py:366-514`
+- **Firma del método:**
+  ```python
+  @app_commands.command(
+      name="liberar-jugador",
+      description="Saca a un jugador de la plantilla del equipo indicado (Solo Staff)",
+  )
+  @app_commands.describe(
+      equipo="Rol de Discord del equipo del que se libera al jugador",
+      usuario="Jugador al que se libera",
+  )
+  @app_commands.default_permissions(manage_guild=True)
+  async def liberar_jugador(
+      self,
+      interaction: discord.Interaction,
+      equipo: discord.Role,
+      usuario: discord.Member,
+  ) -> None:
+  ```
+
+### 3.1 Flujo Operativo
+
+1. **Baja en Base de Datos (`L405–L435`):**
+   Ejecuta `await service.handle_role_removed(member=target_member, role=equipo, actor_id=interaction.user.id)`. Si el jugador no figuraba en la plantilla, aborta con aviso sin alterar Discord.
+2. **Retirada de Rol (`L439–L445`):**
+   Retira el rol de Discord del equipo en el servidor.
+3. **Evaluación de Plantillas Restantes (`L447–L476`):**
+   Consulta `await service.get_user_teams(target_member.id)`:
+   - **Conserva otras plantillas:** No pasa a agente libre. Su apodo adopta el tag del equipo restante que prevalece por orden alfabético.
+   - **Sin otras plantillas (`L478–L504`):** Se le asigna el rol de agente libre (`settings.free_role_name`, ej. `Libre`) y se limpia su apodo eliminando tags con `strip_team_tag`.
+
+---
+
+## 4. Event Listener: Sincronización Reactiva (`on_member_update`)
 
 El bot escucha activamente los cambios de estado en los miembros del servidor para sincronizar en tiempo real las membresías de los clubes deportivos en la base de datos relacional.
 
@@ -116,7 +203,7 @@ El bot escucha activamente los cambios de estado en los miembros del servidor pa
   ) -> None:
   ```
 
-### 2.1 Detección Diferencial de Roles
+### 4.1 Detección Diferencial de Roles
 
 El evento calcula la diferencia simétrica entre los roles previos y los posteriores al evento:
 
@@ -133,7 +220,7 @@ if not added_roles and not removed_roles:
 
 - **Filtrado Anticipado:** Si el evento `on_member_update` fue disparado por cambios que no involucran roles (como cambio de apodo, actualización de avatar, inicio de streaming o cambio en actividades de voz), el listener retorna inmediatamente sin realizar consultas a la base de datos.
 
-### 2.2 Aislamiento de Excepciones y Resiliencia en Lote
+### 4.2 Aislamiento de Excepciones y Resiliencia en Lote
 
 Cuando un usuario recibe o pierde múltiples roles simultáneamente (por ejemplo, mediante una asignación administrativa en bloque):
 
@@ -154,10 +241,10 @@ Cuando un usuario recibe o pierde múltiples roles simultáneamente (por ejemplo
 
 ---
 
-## 3. Registro y Carga del Cog
+## 5. Registro y Carga del Cog
 
 - **Módulo Principal:** `src/liga_bot/cogs/roster.py`
-- **Punto de Carga Estándar:**
+- **Punto de Carga Estándar (`src/liga_bot/cogs/roster.py:517-521`):**
   ```python
   async def setup(bot: LigaBot | commands.Bot) -> None:
       """Carga la extensión con guard de idempotencia."""

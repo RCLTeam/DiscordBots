@@ -544,12 +544,13 @@ class RoleService:
         nombre_lol: str,
         team_tag: str,
         known_tags: list[str],
+        nick: str | None = None,
     ) -> list[str]:
         """
         Aplica en Discord el alta en un equipo, una vez confirmada la base de datos:
         - Asigna el rol del equipo.
         - Remueve el rol 'Sin Verificar' si el miembro lo tiene.
-        - Pone el apodo '<TAG> <NombreLoL>' (máximo 32 caracteres).
+        - Pone el apodo canónico provisto o '<TAG> <NombreLoL>' (máximo 32 caracteres).
         Ningún fallo interrumpe los pasos siguientes. Retorna los avisos para el staff
         de lo que no se pudo aplicar.
         """
@@ -583,22 +584,24 @@ class RoleService:
                         exc,
                     )
 
-        nick = apply_team_tag(nombre_lol, team_tag, known_tags)[:32]
+        target_nick = (
+            nick if nick is not None else apply_team_tag(nombre_lol, team_tag, known_tags)[:32]
+        )
         try:
-            await member.edit(nick=nick)
+            await member.edit(nick=target_nick)
         except discord.Forbidden:
             logger.warning(
                 "Sin permisos para cambiar el apodo de %s a '%s': el bot necesita "
                 "'Gestionar apodos' y un rol por encima del miembro (los dueños del "
                 "servidor nunca pueden ser renombrados).",
                 member_display,
-                nick,
+                target_nick,
             )
         except discord.HTTPException as exc:
             logger.warning(
                 "No se pudo actualizar el apodo de %s a '%s': %s",
                 member_display,
-                nick,
+                target_nick,
                 exc,
             )
 
@@ -676,8 +679,26 @@ class RoleService:
                     staff_id=staff_member.id,
                 )
 
+                team_repo = TeamRepository(session)
+                nick_to_apply = req.nombre_lol[:32]
+                if roster_service is not None:
+                    nick_to_apply = await roster_service.resolve_canonical_nick(
+                        discord_user_id=member.id,
+                        base_name=req.nombre_lol,
+                        session=session,
+                    )
+                else:
+                    fallback_known_tags: list[str] = []
+                    team_tag_val = team.tag if team is not None else None
+                    if team is not None:
+                        fallback_known_tags = [t.tag for t in await team_repo.list_all()]
+                    if team_tag_val is not None:
+                        nick_to_apply = apply_team_tag(
+                            req.nombre_lol, team_tag_val, fallback_known_tags
+                        )[:32].rstrip()
+
                 # Obtener tags conocidos antes del commit para formateo de apodo
-                known_tags = [t.tag for t in await TeamRepository(session).list_all()]
+                known_tags = [t.tag for t in await team_repo.list_all()]
 
                 # Capturar variables de estado antes de salir de la sesión transaccional
                 team_tag = team.tag
@@ -713,6 +734,7 @@ class RoleService:
             nombre_lol=nombre_lol,
             team_tag=team_tag,
             known_tags=known_tags,
+            nick=nick_to_apply,
         )
 
         message = f"Rol {equipo_nombre} confirmado para {member_display}."
