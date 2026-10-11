@@ -38,7 +38,7 @@ Diseñado bajo una arquitectura modular por capas desacopladas (*vertical slices
 | **Motor Embebido** | `py-pglite` | `0.5+` | PostgreSQL compilado a WebAssembly ejecutado en proceso para desarrollo local y pruebas automatizadas sin Docker. |
 | **Migraciones de Esquema** | `Alembic` | `1.14+` | Control de versiones de la base de datos relacional con soporte asíncrono para migraciones automáticas. |
 | **Red y WebSockets** | `aiohttp` | `3.11+` | Servidor WebSocket interno y endpoints HTTP REST para la pasarela de integración bidireccional (*WebSocket Bridge*). |
-| **Configuración** | `pydantic-settings` | `2.7+` | Validación estricta en tiempo de arranque, normalización de URLs y lectura de 25 variables de entorno. |
+| **Configuración** | `pydantic-settings` | `2.7+` | Validación estricta en tiempo de arranque, normalización de URLs y lectura de 26 variables de entorno. |
 | **Calidad y Testing** | `pytest` + `ruff` | `9.1+` / `0.9+` | Suite de 1.159 pruebas deterministas (`pytest-asyncio`) y formateo/linting estricto de código. |
 
 ---
@@ -53,7 +53,7 @@ Diseñado bajo una arquitectura modular por capas desacopladas (*vertical slices
   - Creación individual de partidos (`/crear-partido`) con validación de división competitiva (Premier y Ascend).
   - Importación masiva por lotes desde archivos CSV (`/importar-jornada` y `/crear-jornada`) con tolerancia a delimitadores (`,` y `;`) y BOM UTF-8.
   - Asignación de URLs de retransmisión en directo (`/stream_url_live`) y grabaciones VOD (`/stream_url`) para cualquier enfrentamiento mediante búsqueda simétrica por roles de Discord.
-  - Generación de canales privados de Discord con permisos automáticos para equipos, árbitros, administración y CEOs.
+  - Generación de canales privados de Discord con permisos automáticos para equipos, árbitros, administración, Departamento de Competición y CEOs.
   - Publicación instantánea de plantillas oficiales de coordinación, reglas de horario, convocatorias y Fearless Draft.
   - **Garantía Anti-Huérfanos**: Reversión transaccional inmediata y eliminación física del canal de Discord si ocurre un error durante el envío de mensajes o la transacción de base de datos.
 - **Gestión de Plantillas y Conciliación de Rosters**:
@@ -156,7 +156,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │   ├── architecture/                         # Fundamentos arquitectónicos y runtime central
 │   │   ├── README.md                         # Índice y mapa de navegación del núcleo arquitectónico
 │   │   ├── cli.md                            # Consola CLI (liga-cli), comandos de sembrado y formatos
-│   │   ├── configuration.md                  # Matriz de 25 variables de entorno con Pydantic Settings v2
+│   │   ├── configuration.md                  # Matriz de 26 variables de entorno con Pydantic Settings v2
 │   │   ├── database-engine.md                # Persistencia dual (PostgreSQL asyncpg y PGlite embebido)
 │   │   ├── permissions.md                    # Política de autorización del staff por tipo de acción
 │   │   └── runtime.md                        # Ciclo de vida asíncrono de LigaBot, inyección de dependencias y hooks
@@ -291,7 +291,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │   ├── test_cli.py                           # Validación de comandos CLI (seed-teams, esquemas JSON y CSV)
 │   ├── test_cogs.py                          # Carga y descarga dinámica de cogs en LigaBot
 │   ├── test_command_tree_errors.py           # Manejador global de errores de los slash commands (avisos efímeros y log)
-│   ├── test_config.py                        # Validación estricta de las 25 variables con Pydantic Settings
+│   ├── test_config.py                        # Validación estricta de las 26 variables con Pydantic Settings
 │   ├── test_database.py                      # Conexión, pooling y sesiones asíncronas con PGlite y PostgreSQL
 │   ├── test_formatting.py                    # Formateo de plantillas oficiales de coordinación y embeds
 │   ├── test_ids.py                           # Limpieza de UUID e IDs de usuario de Discord (utils/ids.py)
@@ -320,7 +320,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │   ├── test_suggestion_service_resilience.py # Resiliencia ante fallos en envío de sugerencias o canal inválido
 │   ├── test_websocket_bridge_concurrency.py  # Concurrencia de múltiples clientes WebSocket simultáneos
 │   └── test_websocket_bridge_service.py      # Flujo de conexión, handshake y procesamiento de tramas
-├── .env.example                              # Plantilla sincronizada con las 25 variables de entorno del sistema
+├── .env.example                              # Plantilla sincronizada con las 26 variables de entorno del sistema
 ├── .gitignore                                # Reglas de exclusión de archivos temporales y entornos virtuales
 ├── README.md                                 # Portal principal y guía integral del proyecto LigaBot
 ├── alembic.ini                               # Archivo de configuración principal para Alembic
@@ -333,9 +333,9 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 
 ## ⚙️ Variables de Entorno
 
-LigaBot utiliza **Pydantic Settings v2** para validar las 25 variables de configuración respaldadas por el archivo `.env`. Todos los nombres de variables son insensibles a mayúsculas/minúsculas.
+LigaBot utiliza **Pydantic Settings v2** para validar las 26 variables de configuración respaldadas por el archivo `.env`. Todos los nombres de variables son insensibles a mayúsculas/minúsculas.
 
-A continuación se muestra la matriz completa de las 25 variables sincronizada con `src/liga_bot/config.py` y `.env.example` (`tests/test_config.py` comprueba que las tres fuentes coinciden):
+A continuación se muestra la matriz completa de las 26 variables sincronizada con `src/liga_bot/config.py` y `.env.example` (`tests/test_config.py` comprueba que las tres fuentes coinciden):
 
 | Variable de Entorno | Tipo | Valor Predeterminado | Requerido | Descripción |
 |---|---|---|:---:|---|
@@ -345,6 +345,7 @@ A continuación se muestra la matriz completa de las 25 variables sincronizada c
 | `ADMIN_ROLE_ID` | `int` | `1548795786110967919` | No | Snowflake del rol de Administradores (acceso completo y comando `/sync`). |
 | `CEO_PREMIER_ROLE_ID` | `int` | `1548795782360993842` | No | Snowflake del rol de CEO para la división Premier. |
 | `CEO_ASCEND_ROLE_ID` | `int` | `1548795784655405087` | No | Snowflake del rol de CEO para la división Ascend. |
+| `COMPETITION_DEPT_ROLE_ID` | `int` | `1548795790896398448` | No | Snowflake del rol del Departamento de Competición (árbitros con acceso y permisos en canales de partido). |
 | `CEO_ROLE_ID` | `int` | `0` | No | Snowflake del rol de CEO general unificado de la liga. |
 | `SIN_VERIFICAR_ROLE_ID` | `int` | `0` | No | Snowflake del rol 'Sin Verificar' asignado a nuevos miembros. |
 | `TICKET_ROL_CATEGORY_ID` | `int` | `0` | No | Snowflake de la categoría de Discord para canales de solicitud de rol. |
@@ -365,7 +366,7 @@ A continuación se muestra la matriz completa de las 25 variables sincronizada c
 | `BRIDGE_RATE_LIMIT_PER_MINUTE` | `int` | `10` | No | Límite máximo global de peticiones por minuto admitidas a través de la pasarela WebSocket. |
 | `LOG_LEVEL` | `str` | `"INFO"` | No | Nivel de logging (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`). |
 
-Si `GUILD_ID`, `STAFF_ROLE_ID`, `ADMIN_ROLE_ID`, `CEO_PREMIER_ROLE_ID`, `CEO_ASCEND_ROLE_ID`, `MODERATORS_CHANNEL_ID`, `CASTERS_CHANNEL_ID` o `REGLAMENTO_CHANNEL_ID` no están definidas en el entorno ni en `.env`, el bot usa el valor por defecto (los IDs del servidor oficial) y registra un aviso `WARNING` por cada una al cargar la configuración. En un servidor de pruebas, defínelas todas.
+Si `GUILD_ID`, `STAFF_ROLE_ID`, `ADMIN_ROLE_ID`, `CEO_PREMIER_ROLE_ID`, `CEO_ASCEND_ROLE_ID`, `COMPETITION_DEPT_ROLE_ID`, `MODERATORS_CHANNEL_ID`, `CASTERS_CHANNEL_ID` o `REGLAMENTO_CHANNEL_ID` no están definidas en el entorno ni en `.env`, el bot usa el valor por defecto (los IDs del servidor oficial) y registra un aviso `WARNING` por cada una al cargar la configuración. En un servidor de pruebas, defínelas todas.
 
 Para un desglose pormenorizado de las propiedades computadas y validadores, consulta [docs/architecture/configuration.md](docs/architecture/configuration.md).
 
@@ -499,7 +500,7 @@ Toda la documentación técnica se encuentra modularizada bajo el directorio [`d
 - 📖 [**Portal Central de Documentación (`docs/README.md`)**](docs/README.md): Centro neurálgico, resumen de diseño modular y estándar de documentación atómica.
 - 🏛️ [**Arquitectura y Núcleo (`docs/architecture/README.md`)**](docs/architecture/README.md):
   - [Ciclo de Vida y Runtime (`runtime.md`)](docs/architecture/runtime.md): Clase `LigaBot`, contenedor de servicios, `setup_hook` y cierre ordenado.
-  - [Configuración (`configuration.md`)](docs/architecture/configuration.md): Matriz de 25 variables, validadores Pydantic y constantes.
+  - [Configuración (`configuration.md`)](docs/architecture/configuration.md): Matriz de 26 variables, validadores Pydantic y constantes.
   - [Consola CLI (`cli.md`)](docs/architecture/cli.md): Sintaxis de `seed-teams`, esquemas JSON/CSV y transacciones.
   - [Motor de Base de Datos (`database-engine.md`)](docs/architecture/database-engine.md): Persistencia dual PostgreSQL/PGlite y context managers.
   - [Política de Autorización (`permissions.md`)](docs/architecture/permissions.md): Roles y permisos que autorizan cada tipo de acción de staff.

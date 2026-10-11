@@ -322,6 +322,14 @@ class ScheduleService:
                 view_channel=True, send_messages=True
             )
 
+        # Asignación de rol del Departamento de Competición (árbitros)
+        if (self.settings.competition_dept_role_id or 0) > 0:
+            competition_role = guild.get_role(self.settings.competition_dept_role_id)
+            if competition_role:
+                overwrites[competition_role] = discord.PermissionOverwrite(
+                    view_channel=True, send_messages=True
+                )
+
         if guild.me:
             overwrites[guild.me] = discord.PermissionOverwrite(
                 view_channel=True, send_messages=True, embed_links=True

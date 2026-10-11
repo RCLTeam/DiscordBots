@@ -2,7 +2,7 @@
 
 [⬅️ Volver a Arquitectura](./README.md)
 
-Este documento detalla la arquitectura de configuración del bot, implementada en `src/liga_bot/config.py` mediante **Pydantic Settings v2**. Cubre la matriz completa de las 25 variables de entorno, las constantes canónicas de la liga, los validadores de campo, las propiedades computadas para el motor de base de datos y la factoría singleton en caché.
+Este documento detalla la arquitectura de configuración del bot, implementada en `src/liga_bot/config.py` mediante **Pydantic Settings v2**. Cubre la matriz completa de las 26 variables de entorno, las constantes canónicas de la liga, los validadores de campo, las propiedades computadas para el motor de base de datos y la factoría singleton en caché.
 
 ---
 
@@ -30,9 +30,9 @@ model_config = SettingsConfigDict(
 
 ---
 
-## 2. Matriz Exhaustiva de las 25 Variables de Entorno
+## 2. Matriz Exhaustiva de las 26 Variables de Entorno
 
-`Settings` tiene 25 campos: los 22 de esta tabla, organizados por dominio funcional, y los 3 de la auditoría de tickets de la sección 2.2. `tests/test_config.py` comprueba que esta página, la tabla del `README.md` y `.env.example` recogen todos los campos de `Settings`.
+`Settings` tiene 26 campos: los 23 de esta tabla, organizados por dominio funcional, y los 3 de la auditoría de tickets de la sección 2.2. `tests/test_config.py` comprueba que esta página, la tabla del `README.md` y `.env.example` recogen todos los campos de `Settings`.
 
 | # | Atributo Python | Tipo | Valor Predeterminado | Variable de Entorno | Descripción Funcional |
 |---|---|---|---|---|---|
@@ -42,26 +42,27 @@ model_config = SettingsConfigDict(
 | 4 | `admin_role_id` | `int` | `1548795786110967919` | `ADMIN_ROLE_ID` | Snowflake ID del rol de Administradores de la liga. |
 | 5 | `ceo_premier_role_id` | `int` | `1548795782360993842` | `CEO_PREMIER_ROLE_ID` | Snowflake ID del rol otorgado a capitanes/CEOs de la división Premier. |
 | 6 | `ceo_ascend_role_id` | `int` | `1548795784655405087` | `CEO_ASCEND_ROLE_ID` | Snowflake ID del rol otorgado a capitanes/CEOs de la división Ascend. |
-| 7 | `ceo_role_id` | `int` | `0` | `CEO_ROLE_ID` | Snowflake ID del rol de CEO unificado o general. |
-| 8 | `sin_verificar_role_id` | `int` | `0` | `SIN_VERIFICAR_ROLE_ID` | Snowflake ID del rol asignado a usuarios recién ingresados sin verificar. |
-| 9 | `ticket_rol_category_id` | `int` | `0` | `TICKET_ROL_CATEGORY_ID` | Snowflake ID de la categoría donde se generan canales de solicitud de roles. |
-| 10 | `free_role_name` | `str` | `"Libre"` | `FREE_ROLE_NAME` | Nombre textual del rol asignado a jugadores en condición de agente libre. |
-| 11 | `moderators_channel_id` | `int` | `1548038711697080494` | `MODERATORS_CHANNEL_ID` | Snowflake ID del canal de moderadores donde `RoleService` publica alertas del sistema. `0` las desactiva. |
-| 12 | `casters_channel_id` | `int` | `1550210628361392278` | `CASTERS_CHANNEL_ID` | Snowflake ID del canal donde se publica el panel de casters. |
-| 13 | `caster_role_id` | `int` | `0` | `CASTER_ROLE_ID` | Snowflake ID del rol de caster requerido para usar los botones del panel. `0` desactiva la restricción. |
-| 14 | `reglamento_channel_id` | `int` | `1548038711697080491` (`DEFAULT_REGLAMENTO_CHANNEL_ID`) | `REGLAMENTO_CHANNEL_ID` | Snowflake ID del canal del reglamento que `format_mensaje_2` menciona en el mensaje de coordinación de cada canal de partido. |
-| 15 | `database_url` | `str` | `"pglite:///:memory:"` | `DATABASE_URL` | URI de conexión para SQLAlchemy (compatible con esquemas PGlite y PostgreSQL). |
-| 16 | `bridge_enabled` | `bool` | `True` | `BRIDGE_ENABLED` | Conmutador booleano maestro para iniciar o deshabilitar el servidor WebSocket local. |
-| 17 | `bridge_host` | `str` | `"127.0.0.1"` | `BRIDGE_HOST` | Dirección IP de enlace para el servidor WebSocket local. |
-| 18 | `bridge_port` | `int` | `8765` | `BRIDGE_PORT` | Puerto TCP de enlace para el servidor WebSocket local. |
-| 19 | `discord_bot_supertoken` | `str` | `""` | `DISCORD_BOT_SUPERTOKEN` | Clave secreta compartida requerida en el handshake de autenticación WebSocket. |
-| 20 | `suggestions_channel_id` | `int` | `0` | `SUGGESTIONS_CHANNEL_ID` | Snowflake ID del canal de Discord donde se publican las sugerencias web. |
-| 21 | `bridge_rate_limit_per_minute` | `int` | `10` | `BRIDGE_RATE_LIMIT_PER_MINUTE` | Límite máximo global de peticiones por minuto admitidas a través de la pasarela WebSocket. |
-| 22 | `log_level` | `str` | `"INFO"` | `LOG_LEVEL` | Nivel de verbosidad del logger (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`). |
+| 7 | `competition_dept_role_id` | `int` | `1548795790896398448` | `COMPETITION_DEPT_ROLE_ID` | Snowflake ID del rol del Departamento de Competición (árbitros con acceso y permisos en canales de partido). |
+| 8 | `ceo_role_id` | `int` | `0` | `CEO_ROLE_ID` | Snowflake ID del rol de CEO unificado o general. |
+| 9 | `sin_verificar_role_id` | `int` | `0` | `SIN_VERIFICAR_ROLE_ID` | Snowflake ID del rol asignado a usuarios recién ingresados sin verificar. |
+| 10 | `ticket_rol_category_id` | `int` | `0` | `TICKET_ROL_CATEGORY_ID` | Snowflake ID de la categoría donde se generan canales de solicitud de roles. |
+| 11 | `free_role_name` | `str` | `"Libre"` | `FREE_ROLE_NAME` | Nombre textual del rol asignado a jugadores en condición de agente libre. |
+| 12 | `moderators_channel_id` | `int` | `1548038711697080494` | `MODERATORS_CHANNEL_ID` | Snowflake ID del canal de moderadores donde `RoleService` publica alertas del sistema. `0` las desactiva. |
+| 13 | `casters_channel_id` | `int` | `1550210628361392278` | `CASTERS_CHANNEL_ID` | Snowflake ID del canal donde se publica el panel de casters. |
+| 14 | `caster_role_id` | `int` | `0` | `CASTER_ROLE_ID` | Snowflake ID del rol de caster requerido para usar los botones del panel. `0` desactiva la restricción. |
+| 15 | `reglamento_channel_id` | `int` | `1548038711697080491` (`DEFAULT_REGLAMENTO_CHANNEL_ID`) | `REGLAMENTO_CHANNEL_ID` | Snowflake ID del canal del reglamento que `format_mensaje_2` menciona en el mensaje de coordinación de cada canal de partido. |
+| 16 | `database_url` | `str` | `"pglite:///:memory:"` | `DATABASE_URL` | URI de conexión para SQLAlchemy (compatible con esquemas PGlite y PostgreSQL). |
+| 17 | `bridge_enabled` | `bool` | `True` | `BRIDGE_ENABLED` | Conmutador booleano maestro para iniciar o deshabilitar el servidor WebSocket local. |
+| 18 | `bridge_host` | `str` | `"127.0.0.1"` | `BRIDGE_HOST` | Dirección IP de enlace para el servidor WebSocket local. |
+| 19 | `bridge_port` | `int` | `8765` | `BRIDGE_PORT` | Puerto TCP de enlace para el servidor WebSocket local. |
+| 20 | `discord_bot_supertoken` | `str` | `""` | `DISCORD_BOT_SUPERTOKEN` | Clave secreta compartida requerida en el handshake de autenticación WebSocket. |
+| 21 | `suggestions_channel_id` | `int` | `0` | `SUGGESTIONS_CHANNEL_ID` | Snowflake ID del canal de Discord donde se publican las sugerencias web. |
+| 22 | `bridge_rate_limit_per_minute` | `int` | `10` | `BRIDGE_RATE_LIMIT_PER_MINUTE` | Límite máximo global de peticiones por minuto admitidas a través de la pasarela WebSocket. |
+| 23 | `log_level` | `str` | `"INFO"` | `LOG_LEVEL` | Nivel de verbosidad del logger (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`). |
 
 ### 2.1 Avisos por IDs de Discord con valor por defecto
 
-Los valores por defecto de `guild_id`, `staff_role_id`, `admin_role_id`, `ceo_premier_role_id`, `ceo_ascend_role_id`, `moderators_channel_id`, `casters_channel_id` y `reglamento_channel_id` son los IDs del servidor oficial de la liga (`DEFAULTED_DISCORD_ID_FIELDS` en `src/liga_bot/config.py`). Se conservan para no romper despliegues cuyo `.env` no los define, pero `get_settings()` llama a `warn_defaulted_discord_ids()` al crear la instancia y registra en el logger `liga_bot.config` un aviso `WARNING` por cada uno que no venga del entorno ni del fichero `.env`, con el nombre de la variable y el valor usado:
+Los valores por defecto de `guild_id`, `staff_role_id`, `admin_role_id`, `ceo_premier_role_id`, `ceo_ascend_role_id`, `competition_dept_role_id`, `moderators_channel_id`, `casters_channel_id` y `reglamento_channel_id` son los IDs del servidor oficial de la liga (`DEFAULTED_DISCORD_ID_FIELDS` en `src/liga_bot/config.py`). Se conservan para no romper despliegues cuyo `.env` no los define, pero `get_settings()` llama a `warn_defaulted_discord_ids()` al crear la instancia y registra en el logger `liga_bot.config` un aviso `WARNING` por cada uno que no venga del entorno ni del fichero `.env`, con el nombre de la variable y el valor usado:
 
 ```text
 STAFF_ROLE_ID no está definida en el entorno; se usa el valor por defecto 1547729760384319518 (servidor de la liga). Defínela en el .env si el bot opera en otro servidor.

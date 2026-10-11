@@ -103,6 +103,10 @@ class Settings(BaseSettings):
         default=1548795784655405087,
         description="ID del rol de CEO de la división Ascend.",
     )
+    competition_dept_role_id: int = Field(
+        default=1548795790896398448,
+        description="ID del rol del Departamento de Competición (árbitros).",
+    )
     ceo_role_id: int = Field(
         default=0,
         description="ID del rol de CEO general.",
@@ -249,6 +253,7 @@ DEFAULTED_DISCORD_ID_FIELDS: Final[tuple[str, ...]] = (
     "admin_role_id",
     "ceo_premier_role_id",
     "ceo_ascend_role_id",
+    "competition_dept_role_id",
     "moderators_channel_id",
     "casters_channel_id",
     "reglamento_channel_id",

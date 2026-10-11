@@ -57,6 +57,9 @@ def make_mock_guild(settings: Settings, roles: list[MagicMock] | None = None) ->
     ceo_ascend = make_mock_role(settings.ceo_ascend_role_id, "CEO Ascend")
 
     all_roles = [default_role, staff_role, admin_role, ceo_premier, ceo_ascend]
+    if (settings.competition_dept_role_id or 0) > 0:
+        comp_role = make_mock_role(settings.competition_dept_role_id, "Departamento de Competicion")
+        all_roles.append(comp_role)
     if roles:
         all_roles.extend(roles)
     role_map = {r.id: r for r in all_roles}
@@ -935,3 +938,272 @@ async def test_csv_no_avisa_de_horario_si_la_fila_falla(test_settings: Settings)
 
     assert j_res.error_count == 1
     assert j_res.warnings == []
+
+
+@pytest.mark.asyncio
+async def test_adversarial_competition_dept_role_overwrites_present(
+    session_factory: async_sessionmaker[AsyncSession],
+    test_settings: Settings,
+):
+    """Verifica de forma adversarial que el rol de Departamento de Competición recibe permisos."""
+    async with session_factory() as session:
+        await session.execute(text("TRUNCATE TABLE matches, teams CASCADE;"))
+        team_repo = TeamRepository(session)
+        await team_repo.create(
+            name="Adv Team 1",
+            tag="AT1",
+            slug="adv-team-1",
+            division=Division.PREMIER,
+            discord_role_id=8801,
+        )
+        await team_repo.create(
+            name="Adv Team 2",
+            tag="AT2",
+            slug="adv-team-2",
+            division=Division.PREMIER,
+            discord_role_id=8802,
+        )
+        await session.commit()
+
+    role1 = make_mock_role(8801, "Adv Team 1")
+    role2 = make_mock_role(8802, "Adv Team 2")
+    guild = make_mock_guild(test_settings, roles=[role1, role2])
+
+    service = ScheduleService(session_factory=session_factory, settings=test_settings)
+    res = await service.create_match(
+        guild=guild,
+        jornada=1,
+        team1_name="Adv Team 1",
+        team2_name="Adv Team 2",
+    )
+
+    assert res.success is True
+    call_overwrites = guild.create_text_channel.call_args.kwargs["overwrites"]
+    comp_role = guild.get_role(test_settings.competition_dept_role_id)
+    assert comp_role is not None
+    assert comp_role in call_overwrites
+    overwrite = call_overwrites[comp_role]
+    assert isinstance(overwrite, discord.PermissionOverwrite)
+    assert overwrite.view_channel is True
+    assert overwrite.send_messages is True
+    assert overwrite.embed_links is None
+
+
+@pytest.mark.asyncio
+async def test_adversarial_competition_dept_role_missing_returns_success(
+    session_factory: async_sessionmaker[AsyncSession],
+    test_settings: Settings,
+):
+    """
+    Verifica que si guild.get_role devuelve None para el rol de competición,
+    create_match no falla.
+    """
+    async with session_factory() as session:
+        await session.execute(text("TRUNCATE TABLE matches, teams CASCADE;"))
+        team_repo = TeamRepository(session)
+        await team_repo.create(
+            name="Adv Team 3",
+            tag="AT3",
+            slug="adv-team-3",
+            division=Division.ASCEND,
+            discord_role_id=8803,
+        )
+        await team_repo.create(
+            name="Adv Team 4",
+            tag="AT4",
+            slug="adv-team-4",
+            division=Division.ASCEND,
+            discord_role_id=8804,
+        )
+        await session.commit()
+
+    role1 = make_mock_role(8803, "Adv Team 3")
+    role2 = make_mock_role(8804, "Adv Team 4")
+    guild = make_mock_guild(test_settings, roles=[role1, role2])
+    original_get_role = guild.get_role.side_effect
+    guild.get_role.side_effect = lambda rid: (
+        None if rid == test_settings.competition_dept_role_id else original_get_role(rid)
+    )
+
+    service = ScheduleService(session_factory=session_factory, settings=test_settings)
+    res = await service.create_match(
+        guild=guild,
+        jornada=1,
+        team1_name="Adv Team 3",
+        team2_name="Adv Team 4",
+    )
+
+    assert res.success is True
+    call_overwrites = guild.create_text_channel.call_args.kwargs["overwrites"]
+    assert not any(
+        getattr(k, "id", None) == test_settings.competition_dept_role_id for k in call_overwrites
+    )
+
+
+@pytest.mark.asyncio
+async def test_adversarial_competition_dept_role_in_ascend_division(
+    session_factory: async_sessionmaker[AsyncSession],
+    test_settings: Settings,
+):
+    """Verifica que en la división Ascend el rol de competición coexiste con el CEO de Ascend."""
+    async with session_factory() as session:
+        await session.execute(text("TRUNCATE TABLE matches, teams CASCADE;"))
+        team_repo = TeamRepository(session)
+        await team_repo.create(
+            name="Ascend Team 1",
+            tag="AS1",
+            slug="ascend-team-1",
+            division=Division.ASCEND,
+            discord_role_id=8811,
+        )
+        await team_repo.create(
+            name="Ascend Team 2",
+            tag="AS2",
+            slug="ascend-team-2",
+            division=Division.ASCEND,
+            discord_role_id=8812,
+        )
+        await session.commit()
+
+    role1 = make_mock_role(8811, "Ascend Team 1")
+    role2 = make_mock_role(8812, "Ascend Team 2")
+    guild = make_mock_guild(test_settings, roles=[role1, role2])
+
+    service = ScheduleService(session_factory=session_factory, settings=test_settings)
+    res = await service.create_match(
+        guild=guild,
+        jornada=2,
+        team1_name="Ascend Team 1",
+        team2_name="Ascend Team 2",
+    )
+
+    assert res.success is True
+    call_overwrites = guild.create_text_channel.call_args.kwargs["overwrites"]
+    comp_role = guild.get_role(test_settings.competition_dept_role_id)
+    ceo_ascend_role = guild.get_role(test_settings.ceo_ascend_role_id)
+    ceo_premier_role = guild.get_role(test_settings.ceo_premier_role_id)
+
+    assert comp_role in call_overwrites
+    assert call_overwrites[comp_role].view_channel is True
+    assert call_overwrites[comp_role].send_messages is True
+
+    assert ceo_ascend_role in call_overwrites
+    assert ceo_premier_role not in call_overwrites
+
+
+@pytest.mark.asyncio
+async def test_adversarial_competition_dept_role_batch_csv_all_channels(
+    session_factory: async_sessionmaker[AsyncSession],
+    test_settings: Settings,
+):
+    """Verifica que en la creación por lotes vía CSV todos los canales creados incluyen el rol."""
+    async with session_factory() as session:
+        await session.execute(text("TRUNCATE TABLE matches, teams CASCADE;"))
+        team_repo = TeamRepository(session)
+        await team_repo.create(
+            name="Batch Alpha",
+            tag="BA1",
+            slug="batch-alpha",
+            division=Division.PREMIER,
+            discord_role_id=8821,
+        )
+        await team_repo.create(
+            name="Batch Beta",
+            tag="BA2",
+            slug="batch-beta",
+            division=Division.PREMIER,
+            discord_role_id=8822,
+        )
+        await team_repo.create(
+            name="Batch Gamma",
+            tag="BA3",
+            slug="batch-gamma",
+            division=Division.PREMIER,
+            discord_role_id=8823,
+        )
+        await team_repo.create(
+            name="Batch Delta",
+            tag="BA4",
+            slug="batch-delta",
+            division=Division.PREMIER,
+            discord_role_id=8824,
+        )
+        await session.commit()
+
+    roles = [
+        make_mock_role(8821, "Batch Alpha"),
+        make_mock_role(8822, "Batch Beta"),
+        make_mock_role(8823, "Batch Gamma"),
+        make_mock_role(8824, "Batch Delta"),
+    ]
+    guild = make_mock_guild(test_settings, roles=roles)
+
+    csv_text = (
+        "equipo1,equipo2,fecha,hora\n"
+        "Batch Alpha,Batch Beta,20/09/2026,21:00\n"
+        "Batch Gamma,Batch Delta,21/09/2026,18:00\n"
+    )
+
+    service = ScheduleService(session_factory=session_factory, settings=test_settings)
+    j_res = await service.create_jornada_from_csv(guild=guild, jornada=1, csv_content=csv_text)
+
+    assert j_res.total_rows == 2
+    assert j_res.success_count == 2
+    assert len(guild.create_text_channel.call_args_list) == 2
+
+    comp_role = guild.get_role(test_settings.competition_dept_role_id)
+    assert comp_role is not None
+
+    for call in guild.create_text_channel.call_args_list:
+        overwrites = call.kwargs["overwrites"]
+        assert comp_role in overwrites
+        assert overwrites[comp_role].view_channel is True
+        assert overwrites[comp_role].send_messages is True
+        assert overwrites[comp_role].embed_links is None
+
+
+@pytest.mark.asyncio
+async def test_adversarial_competition_dept_role_batch_csv_with_zero_id_skips_cleanly(
+    session_factory: async_sessionmaker[AsyncSession],
+    test_settings: Settings,
+):
+    """
+    Verifica que en lote con competition_dept_role_id=0 ningún canal incluye el rol
+    ni llama get_role(0).
+    """
+    async with session_factory() as session:
+        await session.execute(text("TRUNCATE TABLE matches, teams CASCADE;"))
+        team_repo = TeamRepository(session)
+        await team_repo.create(
+            name="Batch Uno",
+            tag="BU1",
+            slug="batch-uno",
+            division=Division.PREMIER,
+            discord_role_id=8831,
+        )
+        await team_repo.create(
+            name="Batch Dos",
+            tag="BU2",
+            slug="batch-dos",
+            division=Division.PREMIER,
+            discord_role_id=8832,
+        )
+        await session.commit()
+
+    roles = [
+        make_mock_role(8831, "Batch Uno"),
+        make_mock_role(8832, "Batch Dos"),
+    ]
+    settings_zero = test_settings.model_copy(update={"competition_dept_role_id": 0})
+    guild = make_mock_guild(settings_zero, roles=roles)
+
+    csv_text = "equipo1,equipo2,fecha,hora\nBatch Uno,Batch Dos,20/09/2026,21:00\n"
+
+    service = ScheduleService(session_factory=session_factory, settings=settings_zero)
+    j_res = await service.create_jornada_from_csv(guild=guild, jornada=1, csv_content=csv_text)
+
+    assert j_res.success_count == 1
+    assert len(guild.create_text_channel.call_args_list) == 1
+    overwrites = guild.create_text_channel.call_args.kwargs["overwrites"]
+    assert not any(getattr(k, "id", None) == 0 for k in overwrites)
+    assert not any(call.args == (0,) for call in guild.get_role.call_args_list)
