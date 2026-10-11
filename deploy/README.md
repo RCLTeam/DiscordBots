@@ -79,6 +79,9 @@ sudo systemctl enable --now liga-bot
 
 Si adaptas `User`, `WorkingDirectory` o la ruta de uv, conserva las opciones de
 `ExecStart` (`run --no-sync liga-bot`).
+Conserva también `KillMode=mixed`: así la SIGTERM de una parada llega una sola vez
+al bot (systemd se la envía a `uv`, que la reenvía); sin ella llegan dos y la segunda
+fuerza la salida antes de completar el cierre ordenado.
 
 ## 4. Operación
 
@@ -155,6 +158,11 @@ sudo systemctl restart liga-bot
 systemctl cat liga-bot | grep ExecStart   # debe mostrar run --no-sync liga-bot
 journalctl -u liga-bot -n 50
 ```
+
+Si tu unidad adaptada no tiene `KillMode=mixed`, añádelo en `[Service]` (debajo de
+`KillSignal=SIGTERM`) con `sudoedit /etc/systemd/system/liga-bot.service`, ejecuta
+`sudo systemctl daemon-reload` y comprueba `systemctl show -p KillMode liga-bot`
+(debe mostrar `KillMode=mixed`). No hace falta reiniciar: se aplica en la próxima parada.
 
 Para que las próximas actualizaciones de la unidad puedan copiarse tal cual, puedes
 dejar en `/etc/systemd/system/` la copia literal y guardar las adaptaciones en un

@@ -254,6 +254,7 @@ def handle_signal(sig: signal.Signals) -> None:
 
 - **Primera señal:** programa una única tarea `bot.close()` y guarda su referencia en `close_task` (el bucle solo guarda referencias débiles a las tareas).
 - **Segunda señal:** si llega otra señal SIGINT o SIGTERM durante el apagado, cancela la tarea principal de `run_bot()`, que devuelve el código de salida `1` sin esperar a que termine el cierre. Sirve para salir cuando el apagado ordenado se queda bloqueado.
+- **Una sola SIGTERM bajo systemd:** el servicio arranca con `uv run`, que reenvía a `liga-bot` las señales que recibe. Por eso `deploy/liga-bot.service` fija `KillMode=mixed`: systemd envía la SIGTERM solo a `uv` y el bot la recibe una vez. Con el valor por defecto (`control-group`) la recibiría también directamente de systemd y esa segunda señal forzaría la salida.
 - **Compatibilidad de bucles:** El registro se realiza mediante `loop.add_signal_handler(sig, functools.partial(handle_signal, sig))` envuelto en un bloque que captura `(NotImplementedError, RuntimeError)`. Esto permite que el bot se ejecute sin excepciones en bucles de eventos no POSIX (como `ProactorEventLoop` en Windows) o en hilos que no son el principal.
 
 ### 6.4 Espera del Cierre y Códigos de Salida (`run_bot`, líneas 85-115; `main`, líneas 118-125)
