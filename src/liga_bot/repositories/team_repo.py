@@ -24,7 +24,9 @@ class TeamRepository(BaseRepository[Team]):
         Permite invocar con o sin slug para compatibilidad.
         """
         slug = kwargs.pop("slug", None)
+        await self._resolve_season_name(entity, kwargs)
         team = await super().create(entity=entity, **kwargs)
+        await self._sync_season_name(team)
         if slug is not None and hasattr(team, "slug"):
             team.slug = slug
         return team
@@ -41,9 +43,49 @@ class TeamRepository(BaseRepository[Team]):
         if division is not None:
             await self._assign_division(entity, _require_division(division))
         team = await super().update(entity, **kwargs)
+        await self._sync_season_name(team)
         if slug is not None and hasattr(team, "slug"):
             team.slug = slug
         return team
+
+    async def _resolve_season_name(self, entity: Team | None, kwargs: dict[str, Any]) -> None:
+        """Toma season_name de la fila de seasons_divisions a la que apunta el equipo.
+
+        La tabla compartida ata ambas columnas con una clave foránea compuesta, así que
+        el valor por omisión del modelo no sirve para divisiones de otra temporada.
+        """
+        season_division = kwargs.get("season_division") or getattr(entity, "season_division", None)
+        if season_division is not None:
+            resolved = season_division.season_name
+        else:
+            season_division_id = kwargs.get("season_division_id") or getattr(
+                entity, "season_division_id", None
+            )
+            if season_division_id is None:
+                return
+            result = await self._session.execute(
+                select(SeasonDivision.season_name).where(SeasonDivision.id == season_division_id)
+            )
+            resolved = result.scalars().first()
+        if resolved is None:
+            return
+        if entity is not None:
+            entity.season_name = resolved
+        else:
+            kwargs["season_name"] = resolved
+
+    async def _sync_season_name(self, team: Team) -> None:
+        """Mantiene teams.season_name igual que la de su fila de seasons_divisions.
+
+        La tabla compartida las ata con una clave foránea compuesta, así que una
+        discrepancia rechaza la escritura.
+        """
+        season_division = team.season_division
+        if season_division is None:
+            return
+        if team.season_name != season_division.season_name:
+            team.season_name = season_division.season_name
+            await self._session.flush()
 
     async def _assign_division(self, team: Team, division: Division) -> None:
         current = team.season_division
@@ -65,6 +107,7 @@ class TeamRepository(BaseRepository[Team]):
                 "de seasons_divisions."
             )
         team.season_division = target
+        team.season_name = target.season_name
 
     async def get_by_name(self, name: str, case_sensitive: bool = False) -> Team | None:
         """

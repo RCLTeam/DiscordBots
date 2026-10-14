@@ -260,6 +260,7 @@ class RosterSyncService:
                 discord_user_id=user_id_str,
                 role=assigned_role,
                 is_captain=False,
+                season_name=team.season_name,
             )
             if membership is None:
                 # Ocurrió un conflicto concurrente; recuperamos la membresía existente sin mutar
@@ -519,7 +520,9 @@ class RosterSyncService:
                 to_release.append(current_in_team)
             if position.is_competitive():
                 competitive = await membership_repo.get_competitive_membership(
-                    user_id_str, with_team=True
+                    user_id_str,
+                    with_team=True,
+                    season_name=team.season_name,
                 )
                 if competitive is not None and competitive.team_id != team.id:
                     to_release.append(competitive)
@@ -559,6 +562,7 @@ class RosterSyncService:
                 discord_user_id=user_id_str,
                 role=position,
                 is_captain=False,
+                season_name=team.season_name,
             )
             await movement_repo.record_movement(
                 team_id=team.id,
@@ -646,7 +650,9 @@ class RosterSyncService:
 
             # 2. Invariante de Posición Única: Rol competitivo único en toda la liga
             if role_enum.is_competitive():
-                comp_membership = await membership_repo.get_competitive_membership(clean_user_id)
+                comp_membership = await membership_repo.get_competitive_membership(
+                    clean_user_id, season_name=membership.season_name
+                )
                 if comp_membership is not None and comp_membership.team_id != clean_team_id:
                     raise CompetitivePositionConflictError(
                         discord_user_id=clean_user_id,

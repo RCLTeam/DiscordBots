@@ -204,13 +204,20 @@ class TestAdversarialCaptainCheckConstraint:
 
         raw_insert = sa.text(
             "INSERT INTO team_memberships "
-            "(team_id, discord_user_id, role, is_captain, created_at, updated_at) "
-            "VALUES (:t_id, :u_id, 'substitute'::roster_role, true, NOW(), NOW())"
+            "(team_id, discord_user_id, season_name, role, is_captain, created_at, updated_at) "
+            "VALUES (:t_id, :u_id, :season, 'substitute'::roster_role, true, NOW(), NOW())"
         )
 
         with pytest.raises(IntegrityError) as exc_info:
             async with session.begin_nested():
-                await session.execute(raw_insert, {"t_id": sample_team.id, "u_id": user.discord_id})
+                await session.execute(
+                    raw_insert,
+                    {
+                        "t_id": sample_team.id,
+                        "u_id": user.discord_id,
+                        "season": sample_team.season_name,
+                    },
+                )
 
         assert isinstance(exc_info.value.orig, psycopg.errors.CheckViolation)
         assert "team_memberships_captain_role_check" in str(exc_info.value)

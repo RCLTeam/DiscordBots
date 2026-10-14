@@ -141,6 +141,52 @@ class TestTeamMembershipRepositoryCRUD:
         assert repo.model_cls is TeamMembership
 
     @pytest.mark.asyncio
+    async def test_season_name_se_resuelve_desde_el_equipo(
+        self,
+        team_membership_repo: TeamMembershipRepository,
+        seed_team: Team,
+        seed_user: DiscordUser,
+    ):
+        """La columna NOT NULL season_name se rellena sola a partir del equipo destino."""
+        creada = await team_membership_repo.create(
+            team_id=seed_team.id,
+            discord_user_id=seed_user.discord_id,
+            role=RosterRole.MID,
+        )
+        assert creada.season_name == seed_team.season_name
+
+        actualizada = await team_membership_repo.upsert(
+            team_id=seed_team.id,
+            discord_user_id=seed_user.discord_id,
+            role=RosterRole.TOP,
+        )
+        assert actualizada.season_name == seed_team.season_name
+
+    @pytest.mark.asyncio
+    async def test_competitiva_acotada_a_la_temporada(
+        self,
+        team_membership_repo: TeamMembershipRepository,
+        seed_team: Team,
+        seed_user: DiscordUser,
+    ):
+        """La exclusividad competitiva se consulta por temporada, no en toda la liga."""
+        await team_membership_repo.create(
+            team_id=seed_team.id,
+            discord_user_id=seed_user.discord_id,
+            role=RosterRole.MID,
+        )
+
+        misma = await team_membership_repo.get_competitive_membership(
+            seed_user.discord_id, season_name=seed_team.season_name
+        )
+        assert misma is not None
+
+        otra = await team_membership_repo.get_competitive_membership(
+            seed_user.discord_id, season_name="otra temporada"
+        )
+        assert otra is None
+
+    @pytest.mark.asyncio
     async def test_create_and_get_by_composite_pk(
         self,
         team_membership_repo: TeamMembershipRepository,
