@@ -130,6 +130,7 @@ Representa un club o equipo participante en las competiciones de la liga.
 | `name` | `String(120)` | `varchar(120)` | No | — (Unique) | Nombre completo oficial del equipo. |
 | `tag` (columna `short_name`) | `String(16)` | `varchar(16)` | No | — | Siglas o acrónimo del club. `slug` es una propiedad Python derivada de `tag`, no una columna. |
 | `season_division_id` | `Uuid` | `uuid` | No | — | FK a `seasons_divisions.id` (`ON DELETE CASCADE`). La propiedad `Team.division` deduce de ella la división (`PREMIER` o `ASCEND`); ver [conversión del nombre](./enums.md#11-division). |
+| `season_name` | `String(120)` | `varchar(120)` | No | — | Temporada del equipo. Debe coincidir con la de su `seasons_divisions`: la clave foránea compuesta lo exige. Sin `DEFAULT` ni trigger, así que el bot la envía siempre. |
 | `discord_role_id` | `BigInteger` | `bigint` | No | — (Unique) | Snowflake del rol de Discord representativo del equipo. |
 | `logo_url` | `Text` | `text` | Sí | `None` | Logo del equipo. Lo gestiona la web; el bot no lo usa. |
 | `color` | `String(7)` | `varchar(7)` | Sí | `None` | Color del equipo. Lo gestiona la web; el bot no lo usa. |
@@ -139,6 +140,8 @@ Representa un club o equipo participante en las competiciones de la liga.
 
 **Restricciones e Índices:**
 - `UniqueConstraint` sobre `name` y sobre `discord_role_id`.
+- `UniqueConstraint("id", "season_name", name="teams_id_season_name_key")`: destino de la clave foránea compuesta de `team_memberships`.
+- `ForeignKeyConstraint(["season_division_id", "season_name"], ["seasons_divisions.id", "seasons_divisions.season_name"], name="teams_season_division_season_fkey", onupdate="CASCADE", ondelete="CASCADE")`: ata el equipo a la temporada de su división. El `ON UPDATE CASCADE` propaga el renombrado de la temporada.
 - `Index("ix_teams_season_division_id", "season_division_id")`: Filtrado indexado por división de temporada.
 
 **Relaciones ORM:**
@@ -161,6 +164,7 @@ Representa la asignación y posición activa de un usuario dentro de la plantill
 | `discord_user_id` | `String(32)` | `varchar(32)` | No | PK Compuesta | FK a `discord_users.discord_id` (`ON DELETE CASCADE`). |
 | `role` | `Enum(RosterRole)` | `roster_role` | No | — | Posición deportiva o rol técnico (`top`, `jungle`, etc.). |
 | `is_captain` | `Boolean` | `boolean` | No | `False` / `false` | Indica si ostenta la capitanía oficial del club. |
+| `season_name` | `String(120)` | `varchar(120)` | No | — | Temporada de la membresía, igual a la de su equipo por clave foránea compuesta. Es la columna sobre la que se evalúa la exclusividad competitiva. |
 | `created_at` | `DateTime(timezone=True)` | `timestamptz` | No | `func.now()` | Fecha de incorporación a la plantilla. |
 | `updated_at` | `DateTime(timezone=True)` | `timestamptz` | No | `func.now()` (`onupdate=func.now()`) | Fecha de último cambio de rol/estado. |
 
@@ -170,6 +174,8 @@ Representa la asignación y posición activa de un usuario dentro de la plantill
 - `Index("team_memberships_unique_captain", "team_id", unique=True, postgresql_where=sa.text("is_captain = true"))`: Índice único parcial que prohíbe tener más de un capitán activo simultáneo por equipo.
 - `Index("team_memberships_team_id_idx", "team_id")`: Optimización de consultas de plantilla por club.
 - `Index("team_memberships_discord_user_id_idx", "discord_user_id")`: Optimización de consultas por usuario.
+- `ForeignKeyConstraint(["team_id", "season_name"], ["teams.id", "teams.season_name"], name="team_memberships_team_season_fkey", onupdate="CASCADE", ondelete="CASCADE")`: la membresía hereda la temporada del equipo y no puede divergir de ella.
+- **Solo en producción**, `one_competitive_team_per_player_and_season`: `EXCLUDE USING gist (season_name WITH =, discord_user_id WITH =) WHERE (role IN ('top', 'jungle', 'mid', 'adc', 'support', 'substitute'))`. Impone como máximo una posición competitiva por jugador y temporada. No se crea en la suite normal porque PGlite no empaqueta `btree_gist`; ver [límites del entorno](../../testing/environment-limits.md) y la [suite de PostgreSQL](../../testing/postgres-suite.md).
 
 **Relaciones ORM:**
 - `team: Mapped[Team]`: Entidad del equipo asociado (`back_populates="memberships"`).
@@ -321,7 +327,7 @@ Registro de auditoría transaccional para operaciones críticas y cambios de est
 | `DiscordUser` | `discord_users` | `String(32)` (`discord_id`) | Ninguna | Snowflake canónico |
 | `Player` | `players` | `Uuid` | `discord_users.discord_id` (SET NULL) | Unique (`game_name`, `riot_tag`) |
 | `Team` | `teams` | `Uuid` | `seasons_divisions.id` (CASCADE) | Unique `name`, Unique `discord_role_id` |
-| `TeamMembership` | `team_memberships` | Compuesta `(team_id, discord_user_id)` | `teams.id` (CASCADE), `discord_users.discord_id` (CASCADE) | Check capitanía para 5 titulares, Unique parcial (`is_captain = true`) |
+| `TeamMembership` | `team_memberships` | Compuesta `(team_id, discord_user_id)` | `teams.id` (CASCADE), `discord_users.discord_id` (CASCADE), `(team_id, season_name)` → `teams(id, season_name)` (CASCADE/CASCADE) | Check capitanía para 5 titulares, Unique parcial (`is_captain = true`), exclusión competitiva por temporada en producción |
 | `RosterMovement` | `roster_movements` | `Uuid` | `teams.id` (CASCADE), `discord_users.discord_id` (CASCADE), `actor_id` (SET NULL) | Ledger append-only |
 | `RoleRequest` | `role_requests` | `Integer` (Autoincrement) | Ninguna | Snowflakes en `user_id`, `canal_id`, `staff_id` |
 | `TicketNotice` | `ticket_notices` | `Uuid` | Ninguna | Unique `discord_channel_id` |

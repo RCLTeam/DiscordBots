@@ -36,6 +36,9 @@ packages = ["src/liga_bot"]
 asyncio_mode = "auto"
 pythonpath = ["src"]
 testpaths = ["tests"]
+markers = [
+    "postgres: suite de integración contra un PostgreSQL real (requiere LIGA_BOT_POSTGRES_DSN)",
+]
 filterwarnings = [
     "ignore:'audioop' is deprecated:DeprecationWarning:discord.player",
 ]

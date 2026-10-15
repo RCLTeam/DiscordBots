@@ -25,6 +25,7 @@ from liga_bot.models.enums import RosterMovementAction, RosterRole
 from liga_bot.models.roster import AuditLog, RosterMovement, TeamMembership
 from liga_bot.models.team import Team
 from liga_bot.repositories.base import BaseRepository
+from liga_bot.repositories.season_repo import current_season_name_select
 from liga_bot.utils.ids import clean_user_id_str, clean_uuid
 
 
@@ -169,9 +170,15 @@ class TeamMembershipRepository(BaseRepository[TeamMembership]):
         """
         Busca si el usuario ostenta actualmente un rol competitivo en cualquier equipo de la liga.
 
-        Conforme a la regla invariante #6, un jugador solo puede ocupar una posición
-        competitiva ('top', 'jungle', 'mid', 'adc', 'support', 'substitute') en como máximo
-        1 equipo simultáneamente. Retorna None si no tiene rol competitivo activo.
+        La invariante es por temporada: en producción la garantiza la restricción de
+        exclusión ``one_competitive_team_per_player_and_season``, que solo permite una
+        posición competitiva ('top', 'jungle', 'mid', 'adc', 'support', 'substitute')
+        por jugador dentro de la misma temporada.
+
+        Con ``season_name`` la búsqueda se acota a esa temporada. Sin él se prioriza la
+        temporada vigente (ver :mod:`liga_bot.repositories.season_repo`) y, a igualdad,
+        la membresía más reciente: así el resultado no depende del orden físico de las
+        filas. Retorna None si no tiene ninguna posición competitiva.
         """
         clean_user_id = clean_user_id_str(discord_user_id)
         if clean_user_id is None:
@@ -186,6 +193,16 @@ class TeamMembershipRepository(BaseRepository[TeamMembership]):
         # membresías de temporadas anteriores.
         if season_name is not None:
             stmt = stmt.where(TeamMembership.season_name == season_name)
+        else:
+            # Sin temporada pedida, la vigente manda; el resto del orden solo existe
+            # para que la consulta sea determinista.
+            stmt = stmt.order_by(
+                (TeamMembership.season_name == current_season_name_select().scalar_subquery())
+                .desc()
+                .nullslast(),
+                TeamMembership.created_at.desc(),
+                TeamMembership.team_id.asc(),
+            )
         if with_team:
             stmt = stmt.options(selectinload(TeamMembership.team))
         if with_user:

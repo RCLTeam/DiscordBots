@@ -53,11 +53,15 @@ El siguiente esquema ilustra cómo interactúan las 9 entidades relacionales del
 | `matches` | `team2_id` | `teams.id` | `CASCADE` | `Team.away_matches`: `cascade="all, delete-orphan", passive_deletes=True, lazy="selectin"` | Si un equipo se da de baja, sus partidos como visitante se eliminan. |
 | `team_memberships` | `team_id` | `teams.id` | `CASCADE` | `Team.memberships`: `cascade="all, delete-orphan", passive_deletes=True` | Al suprimir un club, su plantilla queda purgada de forma atómica. |
 | `team_memberships` | `discord_user_id` | `discord_users.discord_id` | `CASCADE` | `DiscordUser.memberships`: `cascade="all, delete-orphan", passive_deletes=True` | Si un usuario elimina su cuenta, sus cargos en clubes se suprimen. |
+| `teams` | `(season_division_id, season_name)` | `seasons_divisions(id, season_name)` | `CASCADE` (`ON UPDATE CASCADE`) | Relación `Team.season_division` con `foreign_keys=[season_division_id]` para desambiguar | Ata el equipo a la temporada de su división: ninguna fila puede declarar una temporada distinta de la suya. El `ON UPDATE` propaga el renombrado de la temporada. |
+| `team_memberships` | `(team_id, season_name)` | `teams(id, season_name)` | `CASCADE` (`ON UPDATE CASCADE`) | Relaciones `TeamMembership.team` y `Team.memberships` con `foreign_keys=[team_id]` | La membresía hereda la temporada de su equipo, que es la columna sobre la que se evalúa la exclusividad competitiva. |
 | `players` | `discord_user_id` | `discord_users.discord_id` | `SET NULL` | `Player.discord_user`: `back_populates="players"` | Si el usuario de Discord se elimina, la cuenta Riot (`game_name#tag`) permanece en base de datos desvinculada (`NULL`) para conservar estadísticas. |
 | `roster_movements` | `team_id` | `teams.id` | `CASCADE` | `Team.movements`: `cascade="all, delete-orphan", passive_deletes=True` | Historial purgado si el club es eliminado formalmente. |
 | `roster_movements` | `discord_user_id` | `discord_users.discord_id` | `CASCADE` | `DiscordUser.movements`: `passive_deletes=True` | Movimientos del jugador purgados al eliminar su cuenta. |
 | `roster_movements` | `actor_id` | `discord_users.discord_id` | `SET NULL` | `RosterMovement.actor`: `foreign_keys=[actor_id]` | Si el moderador o capitán que ejecutó el cambio es eliminado, el registro del movimiento preserva su validez (`actor_id = NULL`). |
 | `audit_logs` | `actor_discord_user_id` | `discord_users.discord_id` | `SET NULL` | `AuditLog.actor`: `foreign_keys=[actor_discord_user_id], passive_deletes=True` | Preserva el historial transaccional de auditoría aunque el actor ya no exista en la plataforma. |
+
+> `seasons_divisions.season_name` → `seasons.name` solo tiene `ON DELETE CASCADE`, **sin** `ON UPDATE`: renombrar una temporada que ya tenga divisiones falla en producción. La cascada documentada arriba aplica a partir de `seasons_divisions`, no desde `seasons`.
 
 ---
 

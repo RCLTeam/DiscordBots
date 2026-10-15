@@ -270,7 +270,18 @@ La fixture `migrated_db` (`tests/conftest.py`) y algunos tests aplican las migra
 
 ---
 
-## 7. Tabla Comparativa de Límites y Mitigaciones
+## 7. Límite 6: PGlite no empaqueta `btree_gist`
+
+PGlite no incluye los módulos *contrib* de PostgreSQL, de modo que `CREATE EXTENSION btree_gist` falla con `extension "btree_gist" is not available`.
+
+- **Consecuencia:** la restricción de exclusión `one_competitive_team_per_player_and_season` de `team_memberships`, que limita a una posición competitiva por jugador y temporada, **no se crea en la suite normal**. Las claves foráneas compuestas sí, porque no dependen de la extensión.
+- **Por qué importa:** es exactamente el tipo de restricción que provocó el fallo de producción del [issue #63](https://github.com/RCLTeam/DiscordBots/issues/63). Con la suite en verde sobre PGlite, el bot podía seguir sin respetar el esquema real.
+- **Mitigación:** una suite aparte, marcada `@pytest.mark.postgres`, se ejecuta contra un PostgreSQL real y desechable y aplica esa restricción antes de probar. Ver [suite de PostgreSQL](postgres-suite.md).
+- **Limitación que queda:** si esa suite no se ejecuta, los escenarios de exclusión competitiva quedan sin verificar. Es una omisión que hay que declarar explícitamente, no asumir cubierta.
+
+---
+
+## 8. Tabla Comparativa de Límites y Mitigaciones
 
 | Límite Identificado | Subsistema Afectado | Síntoma Sin Mitigación | Estrategia de Mitigación | Verificación Automatizada |
 |---|---|---|---|---|
@@ -279,3 +290,4 @@ La fixture `migrated_db` (`tests/conftest.py`) y algunos tests aplican las migra
 | **Agotamiento de Sockets** | Kernel Linux / `aiohttp` / WebSocket Bridge | `EMFILE` / `EADDRINUSE` / excepciones concurrentes en parada | `port=0` efímero + extracción atómica `self.websocket_bridge_service = None` + cierre trifásico | `test_resilience_rapid_start_stop_real_ephemeral_sockets_20_cycles`, `test_resilience_concurrent_close_stress_50_tasks` |
 | **Sockets UNIX en Windows** | Windows / Node.js / `py-pglite` | `Error: listen EACCES: permission denied` en `.s.PGSQL.5432` | Desacoplamiento de PGlite en Windows y ejecución de PostgreSQL en Docker (`postgres:16`) vía TCP | Verificación de conexión estándar `postgresql+asyncpg` y suite de tests de base de datos |
 | **Logging de Alembic** | `alembic/env.py` / `fileConfig` | Loggers `liga_bot.*` desactivados y `caplog` vacío tras aplicar migraciones | `fileConfig(..., disable_existing_loggers=False)` | `test_migrations_keep_bot_logger_enabled` |
+| **Sin `btree_gist` en PGlite** | PGlite / extensiones contrib | La restricción `EXCLUDE USING gist` de `team_memberships` no existe en la suite normal | Suite aparte contra PostgreSQL real (`@pytest.mark.postgres`) | `tests/test_postgres_competitive_season.py` (5 casos) |

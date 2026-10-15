@@ -3,7 +3,7 @@
 [![Python Version](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![Package Manager](https://img.shields.io/badge/uv-0.5.0%2B-blueviolet.svg)](https://github.com/astral-sh/uv)
 [![Code Style](https://img.shields.io/badge/code%20style-ruff-black.svg)](https://github.com/astral-sh/ruff)
-[![Testing](https://img.shields.io/badge/tests-1138%20passed-brightgreen.svg)](https://docs.pytest.org/)
+[![Testing](https://img.shields.io/badge/tests-1789%20passed-brightgreen.svg)](https://docs.pytest.org/)
 [![Database](https://img.shields.io/badge/SQLAlchemy-2.0%20Async-red.svg)](https://www.sqlalchemy.org/)
 
 **LigaBot** es el bot de Discord oficial para la gestión deportiva, coordinación de enfrentamientos, verificación de miembros y enlace de integración en tiempo real de la liga amateur de League of Legends **RCL** (Rift Champions League). 
@@ -39,7 +39,7 @@ Diseñado bajo una arquitectura modular por capas desacopladas (*vertical slices
 | **Migraciones de Esquema** | `Alembic` | `1.14+` | Control de versiones de la base de datos relacional con soporte asíncrono para migraciones automáticas. |
 | **Red y WebSockets** | `aiohttp` | `3.11+` | Servidor WebSocket interno y endpoints HTTP REST para la pasarela de integración bidireccional (*WebSocket Bridge*). |
 | **Configuración** | `pydantic-settings` | `2.7+` | Validación estricta en tiempo de arranque, normalización de URLs y lectura de 26 variables de entorno. |
-| **Calidad y Testing** | `pytest` + `ruff` | `9.1+` / `0.9+` | Suite de 1.159 pruebas deterministas (`pytest-asyncio`) y formateo/linting estricto de código. |
+| **Calidad y Testing** | `pytest` + `ruff` | `9.1+` / `0.9+` | Suite de 1.796 pruebas deterministas (`pytest-asyncio`) y formateo/linting estricto de código. |
 
 ---
 
@@ -205,7 +205,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │   │   ├── README.md                         # Índice del subsistema de pruebas y resumen métrico
 │   │   ├── environment-limits.md             # Mitigación de límites del kernel UNIX, Node 24+ y PGlite
 │   │   ├── strategy.md                       # Estrategia de testing en pirámide de 4 niveles y fixtures
-│   │   └── suites.md                         # Catálogo de las 49 suites de prueba (1.138 tests unitarios/e2e)
+│   │   └── suites.md                         # Catálogo de las 72 suites de prueba (1.796 tests unitarios/e2e)
 │   └── README.md                             # Portal principal de documentación técnica
 ├── src/                                      # Código fuente modular de la aplicación
 │   └── liga_bot/                             # Paquete principal de LigaBot
@@ -472,7 +472,7 @@ Para especificaciones detalladas de los esquemas JSON y CSV, consulta [docs/arch
 
 ## 🧪 Estrategia de Testing y Calidad
 
-El proyecto cuenta con una infraestructura de pruebas automatizadas determinista y rigurosa respaldada por **33.981 líneas totales de test** (27.014 líneas efectivas de código excluyendo comentarios y blancos) en 50 archivos y **1.138 casos de prueba** divididos en 49 suites:
+El proyecto cuenta con una infraestructura de pruebas automatizadas determinista y rigurosa en 73 archivos y **1.796 casos de prueba** divididos en 72 suites, de los que 1.789 pasan y 5 se omiten sin `LIGA_BOT_POSTGRES_DSN` (la [suite de PostgreSQL](docs/testing/postgres-suite.md), que cubre lo que PGlite no puede crear):
 
 ```bash
 # Ejecución completa de la suite de pruebas

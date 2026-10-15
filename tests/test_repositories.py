@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from liga_bot.models.enums import Division, MatchStatus
+from liga_bot.models.roster import DivisionModel, Season, SeasonDivision
 from liga_bot.models.team import Team
 from liga_bot.repositories.base import BaseRepository
 from liga_bot.repositories.match_repo import MatchRepository
@@ -1227,3 +1228,123 @@ def test_cada_clase_de_repositorios_tiene_un_unico_nombre():
         and nombre != valor.__name__
     ]
     assert alias == []
+
+
+# ---------------------------------------------------------------------------
+# season_name en teams: coherencia con seasons_divisions (issue #63)
+# ---------------------------------------------------------------------------
+
+
+async def _crear_temporada(
+    session: AsyncSession, season_name: str, division_name: str = "PREMIER"
+) -> SeasonDivision:
+    """Siembra temporada y división como lo haría la web, y devuelve su seasons_divisions."""
+    if await session.get(Season, season_name) is None:
+        session.add(Season(name=season_name))
+    if await session.get(DivisionModel, division_name) is None:
+        session.add(DivisionModel(name=division_name))
+    await session.flush()
+    season_division = SeasonDivision(season_name=season_name, division_name=division_name)
+    session.add(season_division)
+    await session.flush()
+    return season_division
+
+
+@pytest.mark.asyncio
+async def test_team_init_respeta_el_id_de_la_season_division_recibida(db_session: AsyncSession):
+    """Con season_division explícita no se cuelan los UUID por defecto del modelo."""
+    season_division = await _crear_temporada(db_session, f"T-{uuid.uuid4().hex[:6]}")
+
+    team = Team(
+        name=f"Koi {uuid.uuid4().hex[:6]}",
+        tag="KOI",
+        season_division=season_division,
+        discord_role_id=400_000_000_000_000_000 + uuid.uuid4().int % 10**12,
+    )
+
+    assert team.season_division_id == season_division.id
+    assert team.season_name == season_division.season_name
+
+
+@pytest.mark.asyncio
+async def test_update_con_season_division_de_otra_temporada(
+    db_session: AsyncSession, team_repo: TeamRepository
+):
+    """Mover el equipo a otra temporada sincroniza season_name antes del flush."""
+    origen = await _crear_temporada(db_session, f"T-{uuid.uuid4().hex[:6]}")
+    destino = await _crear_temporada(db_session, f"T-{uuid.uuid4().hex[:6]}")
+    team = await team_repo.create(
+        name=f"Equipo {uuid.uuid4().hex[:6]}",
+        tag="EQU",
+        season_division=origen,
+        discord_role_id=400_000_000_000_000_000 + uuid.uuid4().int % 10**12,
+    )
+
+    actualizado = await team_repo.update(team, season_division=destino)
+
+    assert actualizado.season_division_id == destino.id
+    assert actualizado.season_name == destino.season_name
+
+
+@pytest.mark.asyncio
+async def test_update_con_season_division_id_de_otra_temporada(
+    db_session: AsyncSession, team_repo: TeamRepository
+):
+    """Pasar solo el id también sincroniza: la relación cargada no debe mandar."""
+    origen = await _crear_temporada(db_session, f"T-{uuid.uuid4().hex[:6]}")
+    destino = await _crear_temporada(db_session, f"T-{uuid.uuid4().hex[:6]}")
+    team = await team_repo.create(
+        name=f"Equipo {uuid.uuid4().hex[:6]}",
+        tag="EQU",
+        season_division=origen,
+        discord_role_id=400_000_000_000_000_000 + uuid.uuid4().int % 10**12,
+    )
+
+    actualizado = await team_repo.update(team, season_division_id=destino.id)
+
+    assert actualizado.season_division_id == destino.id
+    assert actualizado.season_name == destino.season_name
+
+
+@pytest.mark.asyncio
+async def test_create_con_entidad_y_season_division_id_distinto(
+    db_session: AsyncSession, team_repo: TeamRepository
+):
+    """En create, el season_division_id de kwargs manda sobre la relación ya cargada.
+
+    ``Team.season_division`` usa ``lazy="joined"``: sin esa precedencia, el equipo se
+    guardaría con la temporada de la división vieja y la clave foránea compuesta lo
+    rechazaría.
+    """
+    origen = await _crear_temporada(db_session, f"T-{uuid.uuid4().hex[:6]}")
+    destino = await _crear_temporada(db_session, f"T-{uuid.uuid4().hex[:6]}")
+    team = Team(
+        name=f"Equipo {uuid.uuid4().hex[:6]}",
+        tag="EQU",
+        season_division=origen,
+        discord_role_id=400_000_000_000_000_000 + uuid.uuid4().int % 10**12,
+    )
+
+    creado = await team_repo.create(entity=team, season_division_id=destino.id)
+
+    assert creado.season_division_id == destino.id
+    assert creado.season_name == destino.season_name
+
+
+@pytest.mark.asyncio
+async def test_update_con_season_division_id_inexistente(
+    db_session: AsyncSession, team_repo: TeamRepository
+):
+    """Un id que no existe se rechaza antes de tocar la fila."""
+    origen = await _crear_temporada(db_session, f"T-{uuid.uuid4().hex[:6]}")
+    team = await team_repo.create(
+        name=f"Equipo {uuid.uuid4().hex[:6]}",
+        tag="EQU",
+        season_division=origen,
+        discord_role_id=400_000_000_000_000_000 + uuid.uuid4().int % 10**12,
+    )
+
+    with pytest.raises(ValueError):
+        await team_repo.update(team, season_division_id=uuid.uuid4())
+
+    assert team.season_name == origen.season_name

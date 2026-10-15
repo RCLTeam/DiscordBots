@@ -477,7 +477,8 @@ class RosterSyncService:
         - Resuelve el equipo destino por discord_role_id (RosterSyncError si no existe).
         - Libera la membresía previa en el equipo destino, si la tuviera.
         - Si la nueva posición es competitiva, libera también la que ocupe en cualquier
-          otro club, porque un jugador solo puede tener una posición competitiva en la liga.
+          otro club de la misma temporada: un jugador solo puede tener una posición
+          competitiva por temporada.
           Las posiciones no competitivas (coach, staff, partners) se conservan.
         - Crea la nueva membresía y registra movimientos (LEFT/JOINED) y auditoría.
         - Retorna la nueva membresía, el equipo destino y el de procedencia
@@ -607,7 +608,7 @@ class RosterSyncService:
         - Valida que discord_user_id, team_id y actor_id sean válidos.
         - Valida que si is_captain=True, el nuevo rol sea una de las 5 posiciones titulares.
         - Comprueba que el usuario sea miembro activo del equipo (PlayerNotTeamMemberError).
-        - Si new_role es competitivo, valida la invariante de posición única en toda la liga
+        - Si new_role es competitivo, valida la invariante de posición única por temporada
           (CompetitivePositionConflictError).
         - Actualiza la membresía, registra el movimiento correspondiente en roster_movements
           y almacena la trazabilidad en audit_logs con snapshots before/after.
@@ -648,7 +649,7 @@ class RosterSyncService:
                     team_id=clean_team_id,
                 )
 
-            # 2. Invariante de Posición Única: Rol competitivo único en toda la liga
+            # 2. Invariante de Posición Única: un rol competitivo por temporada
             if role_enum.is_competitive():
                 comp_membership = await membership_repo.get_competitive_membership(
                     clean_user_id, season_name=membership.season_name

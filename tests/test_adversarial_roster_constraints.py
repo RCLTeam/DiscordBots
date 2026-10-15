@@ -566,3 +566,134 @@ class TestAdversarialStressHarness:
             assert isinstance(exc_info.value.orig, psycopg.errors.UniqueViolation)
             err_msg = str(exc_info.value).lower()
             assert "team_memberships_pkey" in err_msg or "duplicate key" in err_msg
+
+
+class TestAdversarialSeasonNameForeignKeys:
+    """Las claves foráneas compuestas atan cada fila a la temporada de su equipo."""
+
+    @pytest.mark.asyncio
+    async def test_team_con_season_name_incoherente_se_rechaza(self, session: AsyncSession):
+        """teams_season_division_season_fkey impide un season_name de otra temporada."""
+        season_division = await _sembrar_season_division(session, f"T-{uuid.uuid4().hex[:6]}")
+        await _sembrar_season_division(session, "temporada ajena")
+
+        team = Team(
+            id=uuid.uuid4(),
+            name=f"Incoherente {uuid.uuid4().hex[:6]}",
+            tag="INC",
+            season_division=season_division,
+            discord_role_id=888_111_000_000 + uuid.uuid4().int % 10**6,
+        )
+        team.season_name = "temporada ajena"
+        session.add(team)
+
+        with pytest.raises(IntegrityError) as exc_info:
+            async with session.begin_nested():
+                await session.flush()
+
+        assert isinstance(exc_info.value.orig, psycopg.errors.ForeignKeyViolation)
+
+    @pytest.mark.asyncio
+    async def test_membership_con_season_name_incoherente_se_rechaza(
+        self, session: AsyncSession, sample_team: Team
+    ):
+        """team_memberships_team_season_fkey exige la temporada del propio equipo."""
+        await _sembrar_season_division(session, "temporada ajena")
+        user = DiscordUser(discord_id=f"adv{uuid.uuid4().int % 10**9}", username="adversario")
+        session.add(user)
+        await session.flush()
+
+        session.add(
+            TeamMembership(
+                team_id=sample_team.id,
+                discord_user_id=user.discord_id,
+                role=RosterRole.COACH,
+                season_name="temporada ajena",
+            )
+        )
+
+        with pytest.raises(IntegrityError) as exc_info:
+            async with session.begin_nested():
+                await session.flush()
+
+        assert isinstance(exc_info.value.orig, psycopg.errors.ForeignKeyViolation)
+
+    @pytest.mark.asyncio
+    async def test_on_update_cascade_propaga_la_temporada(
+        self, session: AsyncSession, sample_team: Team
+    ):
+        """Renombrar la temporada de seasons_divisions arrastra teams y team_memberships."""
+        nueva = f"T-{uuid.uuid4().hex[:6]}"
+        await _sembrar_season(session, nueva)
+        user = DiscordUser(discord_id=f"adv{uuid.uuid4().int % 10**9}", username="adversario")
+        session.add(user)
+        await session.flush()
+        session.add(
+            TeamMembership(
+                team_id=sample_team.id,
+                discord_user_id=user.discord_id,
+                role=RosterRole.COACH,
+                season_name=sample_team.season_name,
+            )
+        )
+        await session.flush()
+
+        await session.execute(
+            sa.text("UPDATE seasons_divisions SET season_name = :nueva WHERE id = :sd_id"),
+            {"nueva": nueva, "sd_id": sample_team.season_division_id},
+        )
+
+        team_season = (
+            await session.execute(
+                sa.text("SELECT season_name FROM teams WHERE id = :id"), {"id": sample_team.id}
+            )
+        ).scalar_one()
+        membership_season = (
+            await session.execute(
+                sa.text(
+                    "SELECT season_name FROM team_memberships "
+                    "WHERE team_id = :id AND discord_user_id = :uid"
+                ),
+                {"id": sample_team.id, "uid": user.discord_id},
+            )
+        ).scalar_one()
+
+        assert team_season == nueva
+        assert membership_season == nueva
+
+
+async def _sembrar_season(session: AsyncSession, season_name: str) -> None:
+    """Crea la temporada si no existe (seasons no se trunca entre tests)."""
+    from liga_bot.models.roster import Season
+
+    if await session.get(Season, season_name) is None:
+        session.add(Season(name=season_name))
+        await session.flush()
+
+
+async def _sembrar_season_division(session: AsyncSession, season_name: str):
+    """Crea temporada y seasons_divisions PREMIER, reutilizándolas si ya existen."""
+    from liga_bot.models.roster import DivisionModel, SeasonDivision
+
+    await _sembrar_season(session, season_name)
+    if await session.get(DivisionModel, "PREMIER") is None:
+        session.add(DivisionModel(name="PREMIER"))
+        await session.flush()
+    existente = (
+        (
+            await session.execute(
+                sa.select(SeasonDivision).where(
+                    SeasonDivision.season_name == season_name,
+                    SeasonDivision.division_name == "PREMIER",
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if existente is not None:
+        return existente
+    season_division = SeasonDivision(season_name=season_name, division_name="PREMIER")
+    session.add(season_division)
+    await session.flush()
+    return season_division

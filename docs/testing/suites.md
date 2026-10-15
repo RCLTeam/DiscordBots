@@ -14,8 +14,8 @@ La recolección completa de casos de prueba con `uv run pytest --collect-only -q
 
 | Métrica | Valor Medido |
 |---|---|
-| **Total de Archivos de Test** | 49 archivos (`tests/test_*.py`) + `tests/conftest.py` (50 archivos en total) |
-| **Total de Casos de Prueba** | 1.138 tests recolectados |
+| **Total de Archivos de Test** | 72 archivos (`tests/test_*.py`) + `tests/conftest.py` (73 archivos en total) |
+| **Total de Casos de Prueba** | 1.796 tests recolectados: 1.789 pasan y 5 se omiten sin `LIGA_BOT_POSTGRES_DSN` (ver [suite de PostgreSQL](postgres-suite.md)); 2 fallos conocidos y previos en `test_config.py::test_alembic_cli_with_pglite_file_path` y `test_database.py::test_get_engine_pglite_persistent_directory` |
 | **Líneas de Código de Pruebas (LoC)** | 33.982 LoC totales (27.014 LoC netas) |
 | **Tiempo de Recolección (pytest collect)** | ~0.49 s |
 | **Tiempo de Ejecución Completa** | ~35.8 s |

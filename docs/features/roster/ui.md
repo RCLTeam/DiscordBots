@@ -179,7 +179,7 @@ La vista centraliza la construcción de los mensajes enriquecidos:
 - **Color:** `discord.Color.gold()`
 - **Contenido:**
   - Título: `"⚠️ Conflicto de Posición Competitiva"`
-  - Descripción: Explica que el reglamento prohíbe que un jugador ocupe más de una posición competitiva en toda la liga.
+  - Descripción: Explica que el reglamento prohíbe que un jugador ocupe más de una posición competitiva dentro de la misma temporada.
   - Campos:
     - **Equipo Actual:** UUID del equipo donde ya compite.
     - **Rol Actual:** Posición competitiva que ocupa actualmente.

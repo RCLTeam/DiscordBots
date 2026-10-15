@@ -10,6 +10,7 @@ from liga_bot.models.enums import Division
 from liga_bot.models.roster import SeasonDivision
 from liga_bot.models.team import Team
 from liga_bot.repositories.base import BaseRepository
+from liga_bot.repositories.season_repo import current_season_name_select
 
 
 class TeamRepository(BaseRepository[Team]):
@@ -24,7 +25,13 @@ class TeamRepository(BaseRepository[Team]):
         Permite invocar con o sin slug para compatibilidad.
         """
         slug = kwargs.pop("slug", None)
-        await self._resolve_season_name(entity, kwargs)
+        if entity is None:
+            await self._resolve_season_name(kwargs)
+        else:
+            # BaseRepository.create ignora kwargs cuando recibe una entidad, así que
+            # hay que trasladarlos a ella o season_name y su división acabarían
+            # descuadradas y la clave foránea compuesta rechazaría el INSERT.
+            await self._apply_season_division(entity, kwargs)
         team = await super().create(entity=entity, **kwargs)
         await self._sync_season_name(team)
         if slug is not None and hasattr(team, "slug"):
@@ -42,36 +49,77 @@ class TeamRepository(BaseRepository[Team]):
         division = kwargs.pop("division", None)
         if division is not None:
             await self._assign_division(entity, _require_division(division))
+        # La temporada se resuelve antes del flush de super().update: la clave foránea
+        # compuesta rechaza un season_name que no sea el de su seasons_divisions.
+        await self._apply_season_division(entity, kwargs)
         team = await super().update(entity, **kwargs)
         await self._sync_season_name(team)
         if slug is not None and hasattr(team, "slug"):
             team.slug = slug
         return team
 
-    async def _resolve_season_name(self, entity: Team | None, kwargs: dict[str, Any]) -> None:
-        """Toma season_name de la fila de seasons_divisions a la que apunta el equipo.
+    async def _apply_season_division(self, entity: Team, kwargs: dict[str, Any]) -> None:
+        """Deja coherentes season_division, season_division_id y season_name.
 
-        La tabla compartida ata ambas columnas con una clave foránea compuesta, así que
-        el valor por omisión del modelo no sirve para divisiones de otra temporada.
+        Lo que llega en ``kwargs`` manda sobre lo que el equipo tenga cargado: con
+        ``lazy="joined"`` la relación conserva la división anterior aunque se esté
+        cambiando el ``season_division_id``.
         """
-        season_division = kwargs.get("season_division") or getattr(entity, "season_division", None)
+        season_division = kwargs.pop("season_division", None)
+        season_division_id = kwargs.get("season_division_id")
+
+        if season_division is None and season_division_id is not None:
+            season_division = await self._session.get(SeasonDivision, season_division_id)
+            if season_division is None:
+                raise ValueError(
+                    f"No existe la división de temporada {season_division_id!r} "
+                    "en seasons_divisions."
+                )
+
         if season_division is not None:
-            resolved = season_division.season_name
-        else:
-            season_division_id = kwargs.get("season_division_id") or getattr(
-                entity, "season_division_id", None
-            )
+            entity.season_division = season_division
+            entity.season_division_id = season_division.id
+            entity.season_name = season_division.season_name
+            kwargs.pop("season_division_id", None)
+            kwargs.pop("season_name", None)
+            return
+
+        # Sin cambio de división: basta con que el equipo mutado a mano quede coherente.
+        await self._align_season_name(entity)
+
+    async def _align_season_name(self, entity: Team) -> None:
+        """Alinea ``season_name`` con la división que el equipo tiene asignada."""
+        season_division = entity.season_division
+        if season_division is None:
+            season_division_id = entity.season_division_id
             if season_division_id is None:
                 return
-            result = await self._session.execute(
-                select(SeasonDivision.season_name).where(SeasonDivision.id == season_division_id)
-            )
-            resolved = result.scalars().first()
-        if resolved is None:
+            season_division = await self._session.get(SeasonDivision, season_division_id)
+            if season_division is None:
+                return
+        if entity.season_name != season_division.season_name:
+            entity.season_name = season_division.season_name
+
+    async def _resolve_season_name(self, kwargs: dict[str, Any]) -> None:
+        """Rellena ``kwargs["season_name"]`` desde la división indicada en ``kwargs``.
+
+        Solo para la construcción desde argumentos sueltos: la tabla compartida ata
+        ambas columnas con una clave foránea compuesta, así que el valor por omisión
+        del modelo no sirve para divisiones de otra temporada.
+        """
+        season_division = kwargs.get("season_division")
+        if season_division is not None:
+            kwargs["season_name"] = season_division.season_name
             return
-        if entity is not None:
-            entity.season_name = resolved
-        else:
+
+        season_division_id = kwargs.get("season_division_id")
+        if season_division_id is None:
+            return
+        result = await self._session.execute(
+            select(SeasonDivision.season_name).where(SeasonDivision.id == season_division_id)
+        )
+        resolved = result.scalars().first()
+        if resolved is not None:
             kwargs["season_name"] = resolved
 
     async def _sync_season_name(self, team: Team) -> None:
@@ -98,7 +146,13 @@ class TeamRepository(BaseRepository[Team]):
         if current is not None:
             stmt = stmt.where(SeasonDivision.season_name == current.season_name)
         else:
-            stmt = stmt.order_by(SeasonDivision.created_at.desc())
+            # Sin división previa, la de la temporada vigente; el orden solo desempata.
+            stmt = stmt.order_by(
+                (SeasonDivision.season_name == current_season_name_select().scalar_subquery())
+                .desc()
+                .nullslast(),
+                SeasonDivision.created_at.desc(),
+            )
         target = (await self._session.execute(stmt)).scalars().first()
         if target is None:
             season = current.season_name if current is not None else "?"

@@ -148,7 +148,7 @@ Hereda de `BaseRepository[TeamMembership]`:
   Recupera todas las membresías del usuario ordenadas cronológicamente por `created_at.asc()`.
 - **`list_by_team(team_id, with_user=False) -> Sequence[TeamMembership]`:**
   Recupera la plantilla completa de un club, ordenada prioritariamente por `is_captain.desc()`, luego `role.asc()` y `created_at.asc()`.
-- **`get_competitive_membership(discord_user_id, with_team=False, with_user=False) -> TeamMembership | None`:**
+- **`get_competitive_membership(discord_user_id, with_team=False, with_user=False, season_name=None) -> TeamMembership | None`:**
   ```python
   competitive_roles = [r for r in RosterRole if r.is_competitive()]
   stmt = select(TeamMembership).where(
@@ -156,13 +156,19 @@ Hereda de `BaseRepository[TeamMembership]`:
       TeamMembership.role.in_(competitive_roles),
   )
   ```
-  Permite validar en una sola consulta indexada si el jugador ya ostenta una posición competitiva en cualquier club de la liga.
-- **`create(team_id, discord_user_id, role, is_captain=False) -> TeamMembership`:**
-  Inserta la membresía, ejecuta `await session.flush()` y `await session.refresh()`.
+  Con `season_name` acota la búsqueda a esa temporada, que es el alcance real de la invariante. Sin él ordena priorizando la temporada vigente y, a igualdad, `created_at.desc()` y `team_id.asc()`: sin ese orden la consulta podría devolver una plaza de una temporada anterior.
+- **`create(team_id, discord_user_id, role, is_captain=False, season_name=None) -> TeamMembership`:**
+  Inserta la membresía, ejecuta `await session.flush()` y `await session.refresh()`. Si no se indica `season_name`, la resuelve consultando el equipo (`_resolve_season_name`).
 - **`update_role(team_id, discord_user_id, new_role, is_captain=False) -> TeamMembership`:**
   Actualiza los campos `role` e `is_captain`. Lanza `ValueError` si el registro no existe.
 - **`delete(team_id, discord_user_id=None) -> bool`:**
   Elimina la membresía por clave compuesta o entidad. Retorna `True` si existía y fue eliminada.
+
+- **`insert_if_not_exists(...)` y `upsert(...)`:** aceptan `season_name` opcional. Cuando no se indica, el valor viaja como subconsulta escalar sobre `teams` (`_season_name_value`), de modo que la columna `NOT NULL` se rellena sin un viaje extra a la base de datos. El `DO UPDATE` del `upsert` también la refresca.
+
+**Temporada de los equipos (`TeamRepository`).** `teams.season_name` debe coincidir con la de su fila de `seasons_divisions` por clave foránea compuesta, así que el repositorio la resuelve **antes** del `flush`: `create` la toma de la división indicada y `update` normaliza `season_division`, `season_division_id` y `season_name` juntos, dando precedencia a los argumentos sobre la relación ya cargada (`lazy="joined"` conserva la división anterior).
+
+**Temporada vigente (`repositories/season_repo.py`).** `seasons` no tiene ninguna columna que marque la temporada activa, así que se deduce de las fechas: vigente es la que cumple `starts_on <= hoy` y `ends_on` nulo o `>= hoy`; con varias manda la de `starts_on` más reciente y, si no hay ninguna vigente, la de `created_at` más reciente. Vive en un único módulo para que el repositorio de equipos y el de plantillas no discrepen.
 
 ---
 

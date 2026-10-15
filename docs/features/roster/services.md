@@ -70,12 +70,14 @@ Al inicializar `RosterSyncService`, se comprueba el rol por defecto de ingreso (
 La recepción de un rol de equipo o la adición a una plantilla en Discord **no revoca ni elimina roles de otros clubes**.
 - Un miembro puede pertenecer libremente a varios clubes con roles no competitivos (por ejemplo, ser analista/staff en el Equipo A y entrenador en el Equipo B).
 
-### Regla 3: Posición Competitiva Única a Nivel Liga (`L633–L642`)
-Un jugador solo puede ostentar una posición competitiva en **como máximo un equipo** en toda la competición.
+### Regla 3: Posición Competitiva Única por Temporada (`L633–L642`)
+Un jugador solo puede ostentar una posición competitiva en **como máximo un equipo dentro de la misma temporada**. En producción lo impone la restricción de exclusión `one_competitive_team_per_player_and_season`; el servicio la respeta acotando sus consultas por `season_name`.
 - Los roles competitivos corresponden a: `TOP`, `JUNGLE`, `MID`, `ADC`, `SUPPORT` y `SUBSTITUTE`.
 - Si un miembro ya posee un rol competitivo en el Equipo A, cualquier intento de asignarle un rol competitivo en el Equipo B dispara `CompetitivePositionConflictError`.
 - **Excepción interna:** El cambio de posición dentro del *mismo equipo* (por ejemplo, de `SUBSTITUTE` a `MID`) está permitido.
 - **Roles no competitivos:** Los roles `COACH`, `STAFF` y `PARTNERS` están exentos de esta restricción y permiten la multipresencia entre clubes.
+- **Temporadas distintas:** una posición competitiva en una temporada anterior no bloquea otra en la temporada vigente, y un traspaso no la libera.
+- **`resolve_canonical_nick`** no recibe temporada, así que prioriza la vigente (ver [persistencia](persistence.md)): el apodo lleva el tag del club actual, no el de uno que el jugador ya dejó.
 
 ### Regla 4: Capitanía Exclusiva para Posiciones Titulares (`L610–L611`)
 Únicamente los jugadores con rol de titular activo pueden ser designados capitanes oficiales del equipo.
