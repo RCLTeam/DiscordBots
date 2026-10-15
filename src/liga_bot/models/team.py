@@ -110,9 +110,10 @@ class Team(Base, UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin):
         if "season_division_id" not in kwargs:
             # Una season_division explícita manda sobre los UUID por defecto: si no,
             # season_division_id y season_division quedarían descuadrados en memoria.
-            season_division_id = getattr(kwargs.get("season_division"), "id", None)
-            if season_division_id is not None:
-                kwargs["season_division_id"] = season_division_id
+            season_division = kwargs.get("season_division")
+            if season_division is not None:
+                if getattr(season_division, "id", None) is not None:
+                    kwargs["season_division_id"] = season_division.id
             elif Division.from_name(division) == Division.ASCEND:
                 kwargs["season_division_id"] = DEFAULT_ASCEND_SEASON_DIVISION_ID
             else:

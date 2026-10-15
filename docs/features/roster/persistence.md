@@ -26,12 +26,15 @@ El subsistema utiliza tres tablas principales en PostgreSQL / PGlite:
 │                             team_memberships                              │
 │  team_id: UUID (PK, FK)                                                   │
 │  discord_user_id: String(32) (PK, FK)                                     │
+│  season_name: String(120) (NOT NULL, FK compuesta a teams)                │
 │  role: roster_role (Enum)                                                 │
 │  is_captain: Boolean (Default: False)                                     │
 │  created_at / updated_at: DateTime(tz=True)                               │
 │                                                                           │
+│  [FK] (team_id, season_name) -> teams(id, season_name) ON UPDATE/DELETE   │
 │  [CHECK] is_captain = false OR role IN ('top','jungle','mid','adc','support')│
 │  [UNIQUE] team_id WHERE (is_captain = true)                               │
+│  [EXCLUDE GiST prod] (season_name =, discord_user_id =) WHERE competitivo │
 └───────────────────────────────────────────────────────────────────────────┘
                 │                                          │
                 │ 1:N (CASCADE)                            │ 1:N (CASCADE)
@@ -48,27 +51,36 @@ El subsistema utiliza tres tablas principales en PostgreSQL / PGlite:
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 1.1 Tabla `team_memberships` (`src/liga_bot/models/roster.py:168-241`)
+### 1.1 Tabla `team_memberships` (`src/liga_bot/models/roster.py:168-252`)
 
 Modela la alineación y pertenencia actual de un jugador a un equipo.
 
 - **Clave Primaria:** Compuesta por `(team_id, discord_user_id)`.
+- **Columna de Temporada:** `season_name: String(120) NOT NULL`, sincronizada con la temporada del equipo (`teams.season_name`).
 - **Claves Foráneas:**
   - `team_id` referencia `teams.id` con `ondelete="CASCADE"`.
   - `discord_user_id` referencia `discord_users.discord_id` con `ondelete="CASCADE"`.
-- **Restricción de Capitanía Titular (`L220–L223`):**
+  - `team_memberships_team_season_fkey`: clave foránea compuesta `(team_id, season_name) -> teams(id, season_name)` con `onupdate="CASCADE"` y `ondelete="CASCADE"`.
+- **Restricción de Capitanía Titular (`L224–L227`):**
   ```sql
   CONSTRAINT team_memberships_captain_role_check
   CHECK (is_captain = false OR role IN ('top', 'jungle', 'mid', 'adc', 'support'))
   ```
   Impide a nivel motor que cualquier jugador con rol de suplente (`substitute`), entrenador (`coach`), staff (`staff`) o socio (`partners`) sea marcado como capitán oficial.
-- **Índice Parcial Único de Capitán (`L226–L231`):**
+- **Índice Parcial Único de Capitán (`L230–L235`):**
   ```sql
   CREATE UNIQUE INDEX team_memberships_unique_captain
   ON team_memberships (team_id)
   WHERE (is_captain = true);
   ```
   Garantiza a nivel de base de datos que ningún equipo pueda tener más de un capitán simultáneamente, previniendo condiciones de carrera concurrentes en la asignación de capitanía.
+- **Restricción de Exclusión Competitiva por Temporada (PostgreSQL en producción):**
+  ```sql
+  CONSTRAINT one_competitive_team_per_player_and_season
+  EXCLUDE USING gist ("season_name" WITH =, "discord_user_id" WITH =)
+  WHERE ("role" IN ('top', 'jungle', 'mid', 'adc', 'support', 'substitute'))
+  ```
+  Garantiza en PostgreSQL (mediante `btree_gist`) que un jugador solo pueda ocupar una plaza competitiva por temporada (en PGlite se valida desde `RosterSyncService` y se verifica contra PostgreSQL real en `tests/test_postgres_competitive_season.py`).
 - **Índices de Búsqueda:**
   - `team_memberships_team_id_idx` sobre `team_id`.
   - `team_memberships_discord_user_id_idx` sobre `discord_user_id`.

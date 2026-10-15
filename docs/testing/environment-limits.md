@@ -6,12 +6,14 @@
 
 ## 1. Introducción y Contexto de Infraestructura
 
-El software de alta concurrencia no opera en un vacío teórico; interactúa continuamente con las capas de red, los descriptores del kernel y la memoria intermedia del sistema operativo. Durante las pruebas de estrés y validación en diversos entornos del proyecto `DiscordBots`, se identificaron y resolvieron **cuatro límites empíricos críticos** relacionados con la infraestructura y el entorno de ejecución:
+El software de alta concurrencia no opera en un vacío teórico; interactúa continuamente con las capas de red, los descriptores del kernel y la memoria intermedia del sistema operativo. Durante las pruebas de estrés y validación en diversos entornos del proyecto `DiscordBots`, se identificaron y resolvieron **seis límites empíricos críticos** relacionados con la infraestructura y el entorno de ejecución:
 
 1. **Desbordamiento de buffer en sockets UNIX (Node.js 24+ con PGlite)**: saturación en sentencias `INSERT ... RETURNING` superiores a 16KB.
 2. **Colisión de transacciones concurrentes en motores de conexión única**: contención de operaciones concurrentes en `StaticPool` / PGlite.
 3. **Agotamiento de descriptores de socket de red**: fuga o contención de descriptores TCP en ciclos rápidos de reinicio y parada del WebSocket Bridge.
 4. **Incompatibilidad de sockets de dominio UNIX en Windows (Node.js / PGlite EACCES)**: bloqueo de permisos de escucha en el sistema de archivos NTFS y mitigación con contenedor Docker.
+5. **Configuración de logging de Alembic dentro de la sesión de pytest**: preservación de loggers activos (`disable_existing_loggers=False`).
+6. **Ausencia de la extensión `btree_gist` en PGlite**: verificación de la restricción GiST de exclusión competitiva en una suite dedicada contra PostgreSQL real.
 
 Este documento detalla la causa raíz técnica, el mecanismo de fallo, el impacto en el sistema y la mitigación exacta implementada y verificada en el código fuente.
 
@@ -290,4 +292,4 @@ PGlite no incluye los módulos *contrib* de PostgreSQL, de modo que `CREATE EXTE
 | **Agotamiento de Sockets** | Kernel Linux / `aiohttp` / WebSocket Bridge | `EMFILE` / `EADDRINUSE` / excepciones concurrentes en parada | `port=0` efímero + extracción atómica `self.websocket_bridge_service = None` + cierre trifásico | `test_resilience_rapid_start_stop_real_ephemeral_sockets_20_cycles`, `test_resilience_concurrent_close_stress_50_tasks` |
 | **Sockets UNIX en Windows** | Windows / Node.js / `py-pglite` | `Error: listen EACCES: permission denied` en `.s.PGSQL.5432` | Desacoplamiento de PGlite en Windows y ejecución de PostgreSQL en Docker (`postgres:16`) vía TCP | Verificación de conexión estándar `postgresql+asyncpg` y suite de tests de base de datos |
 | **Logging de Alembic** | `alembic/env.py` / `fileConfig` | Loggers `liga_bot.*` desactivados y `caplog` vacío tras aplicar migraciones | `fileConfig(..., disable_existing_loggers=False)` | `test_migrations_keep_bot_logger_enabled` |
-| **Sin `btree_gist` en PGlite** | PGlite / extensiones contrib | La restricción `EXCLUDE USING gist` de `team_memberships` no existe en la suite normal | Suite aparte contra PostgreSQL real (`@pytest.mark.postgres`) | `tests/test_postgres_competitive_season.py` (5 casos) |
+| **Sin `btree_gist` en PGlite** | PGlite / extensiones contrib | La restricción `EXCLUDE USING gist` de `team_memberships` no existe en la suite normal | Suite aparte contra PostgreSQL real (`@pytest.mark.postgres`) | `tests/test_postgres_competitive_season.py` (6 casos) |

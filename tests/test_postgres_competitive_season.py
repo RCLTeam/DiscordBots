@@ -23,6 +23,7 @@ import pytest
 import pytest_asyncio
 from alembic.config import Config
 from sqlalchemy import create_engine, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -41,6 +42,7 @@ from liga_bot.models.roster import (
     TeamMembership,
 )
 from liga_bot.models.team import Team
+from liga_bot.repositories.roster_repo import TeamMembershipRepository
 from liga_bot.repositories.season_repo import current_season_name
 from liga_bot.services.roster_sync_service import (
     CompetitivePositionConflictError,
@@ -326,3 +328,28 @@ async def test_temporada_vigente_por_fechas(pg_session: AsyncSession):
     await pg_session.flush()
 
     assert await current_season_name(pg_session) == "2026"
+
+
+@pytest.mark.asyncio
+async def test_restriccion_gist_rechaza_segunda_competitiva_en_misma_temporada(
+    pg_session: AsyncSession,
+):
+    """La restricción GiST one_competitive_team_per_player_and_season actúa en PostgreSQL."""
+    sd = await _seed_season(pg_session, "2026", date.today())
+    equipo_a = await _seed_team(pg_session, sd, "AlfaGiST")
+    equipo_b = await _seed_team(pg_session, sd, "BetaGiST")
+    await _seed_user(pg_session, "900004")
+    repo = TeamMembershipRepository(pg_session)
+
+    await repo.create(
+        team_id=equipo_a.id,
+        discord_user_id="900004",
+        role=RosterRole.MID,
+    )
+
+    with pytest.raises(IntegrityError):
+        await repo.create(
+            team_id=equipo_b.id,
+            discord_user_id="900004",
+            role=RosterRole.TOP,
+        )

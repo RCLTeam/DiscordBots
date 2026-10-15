@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from liga_bot.models.enums import Division
@@ -67,6 +67,7 @@ class TeamRepository(BaseRepository[Team]):
         """
         season_division = kwargs.pop("season_division", None)
         season_division_id = kwargs.get("season_division_id")
+        division = kwargs.pop("division", None)
 
         if season_division is None and season_division_id is not None:
             season_division = await self._session.get(SeasonDivision, season_division_id)
@@ -84,19 +85,37 @@ class TeamRepository(BaseRepository[Team]):
             kwargs.pop("season_name", None)
             return
 
+        if division is not None:
+            await self._assign_division(entity, _require_division(division))
+            return
+
         # Sin cambio de división: basta con que el equipo mutado a mano quede coherente.
         await self._align_season_name(entity)
 
     async def _align_season_name(self, entity: Team) -> None:
         """Alinea ``season_name`` con la división que el equipo tiene asignada."""
         season_division = entity.season_division
-        if season_division is None:
+        state = inspect(entity)
+        sd_changed_only = (
+            state.attrs.season_division.history.has_changes()
+            and not state.attrs.season_division_id.history.has_changes()
+        )
+        if season_division is None or (
+            entity.season_division_id is not None
+            and season_division.id != entity.season_division_id
+            and not sd_changed_only
+        ):
             season_division_id = entity.season_division_id
-            if season_division_id is None:
-                return
-            season_division = await self._session.get(SeasonDivision, season_division_id)
+            if season_division_id is not None:
+                season_division = await self._session.get(SeasonDivision, season_division_id)
+            if season_division is None:
+                season_division = await self._find_current_season_division(entity.division)
             if season_division is None:
                 return
+            entity.season_division = season_division
+            entity.season_division_id = season_division.id
+        elif sd_changed_only and season_division is not None and season_division.id is not None:
+            entity.season_division_id = season_division.id
         if entity.season_name != season_division.season_name:
             entity.season_name = season_division.season_name
 
@@ -113,14 +132,38 @@ class TeamRepository(BaseRepository[Team]):
             return
 
         season_division_id = kwargs.get("season_division_id")
-        if season_division_id is None:
+        if season_division_id is not None:
+            result = await self._session.execute(
+                select(SeasonDivision.season_name).where(SeasonDivision.id == season_division_id)
+            )
+            resolved = result.scalars().first()
+            if resolved is not None:
+                kwargs["season_name"] = resolved
             return
-        result = await self._session.execute(
-            select(SeasonDivision.season_name).where(SeasonDivision.id == season_division_id)
+
+        division_arg = kwargs.get("division")
+        division_enum = (
+            _require_division(division_arg) if division_arg is not None else Division.PREMIER
         )
-        resolved = result.scalars().first()
-        if resolved is not None:
-            kwargs["season_name"] = resolved
+        target = await self._find_current_season_division(division_enum)
+        if target is not None:
+            kwargs["season_division"] = target
+            kwargs["season_division_id"] = target.id
+            kwargs["season_name"] = target.season_name
+
+    async def _find_current_season_division(self, division: Division) -> SeasonDivision | None:
+        """Busca la fila de ``seasons_divisions`` de la división en la temporada vigente."""
+        stmt = (
+            select(SeasonDivision)
+            .where(func.upper(func.trim(SeasonDivision.division_name)) == division.value)
+            .order_by(
+                (SeasonDivision.season_name == current_season_name_select().scalar_subquery())
+                .desc()
+                .nullslast(),
+                SeasonDivision.created_at.desc(),
+            )
+        )
+        return (await self._session.execute(stmt)).scalars().first()
 
     async def _sync_season_name(self, team: Team) -> None:
         """Mantiene teams.season_name igual que la de su fila de seasons_divisions.
@@ -140,20 +183,15 @@ class TeamRepository(BaseRepository[Team]):
         if current is not None and Division.from_name(current.division_name) == division:
             return
 
-        stmt = select(SeasonDivision).where(
-            func.upper(func.trim(SeasonDivision.division_name)) == division.value
-        )
         if current is not None:
-            stmt = stmt.where(SeasonDivision.season_name == current.season_name)
+            stmt = select(SeasonDivision).where(
+                func.upper(func.trim(SeasonDivision.division_name)) == division.value,
+                SeasonDivision.season_name == current.season_name,
+            )
+            target = (await self._session.execute(stmt)).scalars().first()
         else:
             # Sin división previa, la de la temporada vigente; el orden solo desempata.
-            stmt = stmt.order_by(
-                (SeasonDivision.season_name == current_season_name_select().scalar_subquery())
-                .desc()
-                .nullslast(),
-                SeasonDivision.created_at.desc(),
-            )
-        target = (await self._session.execute(stmt)).scalars().first()
+            target = await self._find_current_season_division(division)
         if target is None:
             season = current.season_name if current is not None else "?"
             raise ValueError(
@@ -161,6 +199,7 @@ class TeamRepository(BaseRepository[Team]):
                 "de seasons_divisions."
             )
         team.season_division = target
+        team.season_division_id = target.id
         team.season_name = target.season_name
 
     async def get_by_name(self, name: str, case_sensitive: bool = False) -> Team | None:

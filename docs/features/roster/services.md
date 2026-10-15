@@ -191,7 +191,7 @@ async def transfer_player(
 
 - **Resolución de Club**: Resuelve el equipo destino por `discord_role_id` (`get_by_role_id`).
 - **Liberación en Destino**: Libera la membresía previa en el equipo destino si existía.
-- **Preservación de Invariante Competitiva (Regla 3)**: Si la nueva posición es competitiva (`is_competitive()`), libera la membresía competitiva que poseyera en cualquier otro equipo. Las posiciones no competitivas (`coach`, `staff`, `partners`) se conservan sin alteración.
+- **Preservación de Invariante Competitiva (Regla 3)**: Si la nueva posición es competitiva (`is_competitive()`), libera la membresía competitiva que poseyera en cualquier otro equipo de la misma temporada (`season_name=team.season_name`). Las posiciones no competitivas (`coach`, `staff`, `partners`) y las membresías competitivas de otras temporadas se conservan sin alteración.
 - **Trazabilidad**: Registra movimientos en `roster_movements` (acciones `LEFT` y `JOINED`) y bitácora en `audit_logs`.
 - **Retorno**: Tupla `(new_membership, destination_team, previous_team_or_none)`.
 
@@ -223,7 +223,7 @@ async def change_player_position(
      ```
   4. **Pertenencia al Club:** Valida que exista la membresía previa. Si no existe, lanza `PlayerNotTeamMemberError`.
   5. **Verificación de Posición Competitiva Única:**
-     Si `role_enum.is_competitive()`, consulta `membership_repo.get_competitive_membership(clean_user_id)`. Si el jugador ya compite en otro equipo (`comp_membership.team_id != clean_team_id`), lanza `CompetitivePositionConflictError`.
+     Si `role_enum.is_competitive()`, consulta `membership_repo.get_competitive_membership(clean_user_id, season_name=membership.season_name)`. Si el jugador ya compite en otro equipo de la misma temporada (`comp_membership.team_id != clean_team_id`), lanza `CompetitivePositionConflictError`.
   6. **Captura de Snapshot Previo:** Almacena `previous_role`, `was_captain` y genera el diccionario `before_payload`.
   7. **Actualización Relacional:** Ejecuta `await membership_repo.update_role(clean_team_id, clean_user_id, role_enum, is_captain=is_captain)`.
   8. **Clasificación de Movimiento:**

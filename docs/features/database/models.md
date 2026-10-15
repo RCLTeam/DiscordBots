@@ -326,7 +326,7 @@ Registro de auditoría transaccional para operaciones críticas y cambios de est
 |---|---|---|---|---|
 | `DiscordUser` | `discord_users` | `String(32)` (`discord_id`) | Ninguna | Snowflake canónico |
 | `Player` | `players` | `Uuid` | `discord_users.discord_id` (SET NULL) | Unique (`game_name`, `riot_tag`) |
-| `Team` | `teams` | `Uuid` | `seasons_divisions.id` (CASCADE) | Unique `name`, Unique `discord_role_id` |
+| `Team` | `teams` | `Uuid` | `seasons_divisions.id` (CASCADE), `(season_division_id, season_name)` → `seasons_divisions(id, season_name)` (CASCADE/CASCADE) | Unique `name`, Unique `discord_role_id`, Unique `(id, season_name)` (`teams_id_season_name_key`) |
 | `TeamMembership` | `team_memberships` | Compuesta `(team_id, discord_user_id)` | `teams.id` (CASCADE), `discord_users.discord_id` (CASCADE), `(team_id, season_name)` → `teams(id, season_name)` (CASCADE/CASCADE) | Check capitanía para 5 titulares, Unique parcial (`is_captain = true`), exclusión competitiva por temporada en producción |
 | `RosterMovement` | `roster_movements` | `Uuid` | `teams.id` (CASCADE), `discord_users.discord_id` (CASCADE), `actor_id` (SET NULL) | Ledger append-only |
 | `RoleRequest` | `role_requests` | `Integer` (Autoincrement) | Ninguna | Snowflakes en `user_id`, `canal_id`, `staff_id` |

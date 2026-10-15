@@ -20,7 +20,10 @@ from liga_bot.models.enums import Division, RosterMovementAction, RosterRole
 from liga_bot.models.roster import (
     AuditLog,
     DiscordUser,
+    DivisionModel,
     RosterMovement,
+    Season,
+    SeasonDivision,
     Team,
     TeamMembership,
 )
@@ -143,24 +146,50 @@ class TestTeamMembershipRepositoryCRUD:
     @pytest.mark.asyncio
     async def test_season_name_se_resuelve_desde_el_equipo(
         self,
+        session: AsyncSession,
         team_membership_repo: TeamMembershipRepository,
-        seed_team: Team,
         seed_user: DiscordUser,
+        seed_users: tuple[DiscordUser, DiscordUser, DiscordUser, DiscordUser],
     ):
         """La columna NOT NULL season_name se rellena sola a partir del equipo destino."""
+        session.add(Season(name="2026"))
+        if await session.get(DivisionModel, "PREMIER") is None:
+            session.add(DivisionModel(name="PREMIER"))
+        await session.flush()
+        sd_2026 = SeasonDivision(season_name="2026", division_name="PREMIER")
+        session.add(sd_2026)
+        await session.flush()
+        equipo_2026 = Team(
+            name="Equipo 2026",
+            tag="E26",
+            season_division=sd_2026,
+            discord_role_id=777888999111,
+        )
+        session.add(equipo_2026)
+        await session.flush()
+
         creada = await team_membership_repo.create(
-            team_id=seed_team.id,
+            team_id=equipo_2026.id,
             discord_user_id=seed_user.discord_id,
             role=RosterRole.MID,
         )
-        assert creada.season_name == seed_team.season_name
+        assert creada.season_name == "2026"
+
+        u1, _, _, _ = seed_users
+        insertada = await team_membership_repo.insert_if_not_exists(
+            team_id=equipo_2026.id,
+            discord_user_id=u1.discord_id,
+            role=RosterRole.JUNGLE,
+        )
+        assert insertada is not None
+        assert insertada.season_name == "2026"
 
         actualizada = await team_membership_repo.upsert(
-            team_id=seed_team.id,
+            team_id=equipo_2026.id,
             discord_user_id=seed_user.discord_id,
             role=RosterRole.TOP,
         )
-        assert actualizada.season_name == seed_team.season_name
+        assert actualizada.season_name == "2026"
 
     @pytest.mark.asyncio
     async def test_competitiva_acotada_a_la_temporada(

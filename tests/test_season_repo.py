@@ -96,3 +96,29 @@ async def test_temporada_sin_fecha_de_inicio_no_se_considera_vigente(session: As
     await session.flush()
 
     assert await current_season_name(session) == "vigente"
+
+
+@pytest.mark.asyncio
+async def test_temporada_con_ends_on_futuro_es_vigente(session: AsyncSession):
+    """ends_on >= hoy también es vigente y prevalece sobre una temporada ya cerrada."""
+    await _limpiar_temporadas(session)
+    ahora = datetime.now(timezone.utc)
+    session.add(
+        Season(
+            name="cerrada-reciente",
+            starts_on=HOY - timedelta(days=20),
+            ends_on=HOY - timedelta(days=1),
+            created_at=ahora,
+        )
+    )
+    session.add(
+        Season(
+            name="acotada-vigente",
+            starts_on=HOY - timedelta(days=10),
+            ends_on=HOY + timedelta(days=10),
+            created_at=ahora - timedelta(days=5),
+        )
+    )
+    await session.flush()
+
+    assert await current_season_name(session) == "acotada-vigente"

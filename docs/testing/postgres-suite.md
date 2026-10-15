@@ -33,6 +33,7 @@ Fichero: `tests/test_postgres_competitive_season.py`. Marcador: `@pytest.mark.po
 | `test_la_plaza_de_otra_temporada_no_se_toca` | Una posición competitiva de otra temporada se conserva. |
 | `test_cambio_de_posicion_falla_en_la_aplicacion_no_en_la_base_de_datos` | El conflicto competitivo sale como `CompetitivePositionConflictError`, no como error de base de datos. |
 | `test_temporada_vigente_por_fechas` | La temporada vigente se deduce de `starts_on`/`ends_on`, no de una columna inexistente. |
+| `test_restriccion_gist_rechaza_segunda_competitiva_en_misma_temporada` | Dos `INSERT` competitivos directos en la misma temporada para el mismo jugador disparan `IntegrityError` por la restricción GiST `one_competitive_team_per_player_and_season`. |
 
 ## 3. Cómo levantarla
 
@@ -63,7 +64,7 @@ export LIGA_BOT_POSTGRES_DSN="postgresql+asyncpg://usuario:clave@localhost:5432/
 uv run pytest -m postgres -v
 ```
 
-Sin `LIGA_BOT_POSTGRES_DSN` definida, los cinco tests se omiten (`skipped`) y el resto de
+Sin `LIGA_BOT_POSTGRES_DSN` definida, los seis tests se omiten (`skipped`) y el resto de
 la suite no se ve afectada.
 
 ## 4. Cómo prepara el esquema

@@ -4,7 +4,7 @@ Pruebas exhaustivas para la capa de repositorios asíncronos en src/liga_bot/rep
 
 import uuid
 from collections.abc import AsyncGenerator
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 import pytest_asyncio
@@ -1348,3 +1348,68 @@ async def test_update_con_season_division_id_inexistente(
         await team_repo.update(team, season_division_id=uuid.uuid4())
 
     assert team.season_name == origen.season_name
+
+
+@pytest.mark.asyncio
+async def test_create_con_division_resuelve_la_temporada_vigente(
+    db_session: AsyncSession, team_repo: TeamRepository
+):
+    """Crear equipo con division (sin season_division) elige la división de la temporada vigente."""
+    hoy = date.today()
+    db_session.add(Season(name="The Rebellion", starts_on=hoy - timedelta(days=5), ends_on=None))
+    for div_name in ("Premier", "Ascend"):
+        if await db_session.get(DivisionModel, div_name) is None:
+            db_session.add(DivisionModel(name=div_name))
+    await db_session.flush()
+    premier_rebellion = SeasonDivision(season_name="The Rebellion", division_name="Premier")
+    ascend_rebellion = SeasonDivision(season_name="The Rebellion", division_name="Ascend")
+    db_session.add_all([premier_rebellion, ascend_rebellion])
+    await db_session.flush()
+
+    creado = await team_repo.create(
+        name="Equipo Rebelde",
+        tag="REB",
+        division=Division.ASCEND,
+        discord_role_id=999888777,
+    )
+
+    assert creado.season_name == "The Rebellion"
+    assert creado.season_division_id == ascend_rebellion.id
+
+
+@pytest.mark.asyncio
+async def test_create_sin_temporada_default_usa_la_temporada_vigente(
+    db_session: AsyncSession, team_repo: TeamRepository
+):
+    """Sin la temporada 'default', tanto create(**kwargs) como create(Team(...)) usan la vigente."""
+    await db_session.execute(text("DELETE FROM seasons WHERE name = 'default'"))
+    hoy = date.today()
+    db_session.add(Season(name="The Rebellion", starts_on=hoy - timedelta(days=5), ends_on=None))
+    for div_name in ("Premier", "Ascend"):
+        if await db_session.get(DivisionModel, div_name) is None:
+            db_session.add(DivisionModel(name=div_name))
+    await db_session.flush()
+    premier_rebellion = SeasonDivision(season_name="The Rebellion", division_name="Premier")
+    ascend_rebellion = SeasonDivision(season_name="The Rebellion", division_name="Ascend")
+    db_session.add_all([premier_rebellion, ascend_rebellion])
+    await db_session.flush()
+
+    por_kwargs = await team_repo.create(
+        name="Sin Default",
+        tag="SDF",
+        division=Division.PREMIER,
+        discord_role_id=999888778,
+    )
+    por_entidad = await team_repo.create(
+        Team(
+            name="Entidad Sin Default",
+            tag="ESD",
+            division=Division.ASCEND,
+            discord_role_id=999888779,
+        )
+    )
+
+    assert por_kwargs.season_name == "The Rebellion"
+    assert por_kwargs.season_division_id == premier_rebellion.id
+    assert por_entidad.season_name == "The Rebellion"
+    assert por_entidad.season_division_id == ascend_rebellion.id
