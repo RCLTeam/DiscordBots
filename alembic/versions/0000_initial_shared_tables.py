@@ -155,6 +155,11 @@ def upgrade() -> None:
             "division_name",
             name="uq_seasons_divisions_season_division",
         ),
+        sa.UniqueConstraint(
+            "id",
+            "season_name",
+            name="seasons_divisions_id_season_name_key",
+        ),
     )
     op.create_index(
         "ix_seasons_divisions_season_name",
@@ -239,6 +244,7 @@ def upgrade() -> None:
         sa.Column("season_division_id", sa.Uuid(), nullable=False),
         sa.Column("name", sa.String(length=120), nullable=False),
         sa.Column("short_name", sa.String(length=16), nullable=False),
+        sa.Column("season_name", sa.String(length=120), nullable=False),
         sa.Column("logo_url", sa.Text(), nullable=True),
         sa.Column("color", sa.String(length=7), nullable=True),
         sa.Column(
@@ -269,6 +275,14 @@ def upgrade() -> None:
         ),
         sa.UniqueConstraint("name", name="uq_teams_name"),
         sa.UniqueConstraint("discord_role_id", name="uq_teams_discord_role_id"),
+        sa.UniqueConstraint("id", "season_name", name="teams_id_season_name_key"),
+        sa.ForeignKeyConstraint(
+            ["season_division_id", "season_name"],
+            ["seasons_divisions.id", "seasons_divisions.season_name"],
+            name="teams_season_division_season_fkey",
+            onupdate="CASCADE",
+            ondelete="CASCADE",
+        ),
     )
     op.create_index(
         "ix_teams_season_division_id",
@@ -281,6 +295,7 @@ def upgrade() -> None:
         "team_memberships",
         sa.Column("team_id", sa.Uuid(), nullable=False),
         sa.Column("discord_user_id", sa.String(length=32), nullable=False),
+        sa.Column("season_name", sa.String(length=120), nullable=False),
         sa.Column(
             "role",
             postgresql.ENUM(
@@ -332,6 +347,13 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "is_captain = false OR role IN ('top', 'jungle', 'mid', 'adc', 'support')",
             name="team_memberships_captain_role_check",
+        ),
+        sa.ForeignKeyConstraint(
+            ["team_id", "season_name"],
+            ["teams.id", "teams.season_name"],
+            name="team_memberships_team_season_fkey",
+            onupdate="CASCADE",
+            ondelete="CASCADE",
         ),
     )
     op.create_index(

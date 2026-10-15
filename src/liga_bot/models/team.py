@@ -5,7 +5,18 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import BigInteger, Boolean, ForeignKey, Index, String, Text, Uuid, true
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    String,
+    Text,
+    UniqueConstraint,
+    Uuid,
+    true,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from liga_bot.models.base import Base, TimestampMixin, UpdatedAtMixin, UUIDPrimaryKeyMixin
@@ -21,6 +32,9 @@ if TYPE_CHECKING:
 
 DEFAULT_PREMIER_SEASON_DIVISION_ID = uuid.UUID("20000000-0000-4000-8000-000000000001")
 DEFAULT_ASCEND_SEASON_DIVISION_ID = uuid.UUID("20000000-0000-4000-8000-000000000002")
+# Temporada de las filas sembradas de seasons_divisions: la usan los tests y las
+# fixtures que crean equipos sin indicar temporada.
+DEFAULT_SEASON_NAME = "default"
 
 
 class Team(Base, UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin):
@@ -35,6 +49,8 @@ class Team(Base, UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin):
         ForeignKey("seasons_divisions.id", ondelete="CASCADE"),
         nullable=False,
     )
+    # La web exige season_name NOT NULL y la mantiene igual que la de season_division.
+    season_name: Mapped[str] = mapped_column(String(120), nullable=False)
     discord_role_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False)
     # Columnas que gestiona la web; el bot no las usa, pero el modelo describe la tabla entera.
     logo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -47,7 +63,11 @@ class Team(Base, UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin):
     )
 
     # Relación con la división de temporada
-    season_division: Mapped[SeasonDivision] = relationship("SeasonDivision", lazy="joined")
+    season_division: Mapped[SeasonDivision] = relationship(
+        "SeasonDivision",
+        lazy="joined",
+        foreign_keys=[season_division_id],
+    )
 
     # Relaciones bidireccionales con partidos
     home_matches: Mapped[list[Match]] = relationship(
@@ -65,7 +85,17 @@ class Team(Base, UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin):
         lazy="select",
     )
 
-    __table_args__ = (Index("ix_teams_season_division_id", "season_division_id"),)
+    __table_args__ = (
+        UniqueConstraint("id", "season_name", name="teams_id_season_name_key"),
+        ForeignKeyConstraint(
+            ["season_division_id", "season_name"],
+            ["seasons_divisions.id", "seasons_divisions.season_name"],
+            name="teams_season_division_season_fkey",
+            onupdate="CASCADE",
+            ondelete="CASCADE",
+        ),
+        Index("ix_teams_season_division_id", "season_division_id"),
+    )
 
     def __init__(
         self,
@@ -78,10 +108,22 @@ class Team(Base, UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin):
         kwargs.pop("slug", None)
         kwargs.pop("division", None)
         if "season_division_id" not in kwargs:
-            if Division.from_name(division) == Division.ASCEND:
+            # Una season_division explícita manda sobre los UUID por defecto: si no,
+            # season_division_id y season_division quedarían descuadrados en memoria.
+            season_division = kwargs.get("season_division")
+            if season_division is not None:
+                if getattr(season_division, "id", None) is not None:
+                    kwargs["season_division_id"] = season_division.id
+            elif Division.from_name(division) == Division.ASCEND:
                 kwargs["season_division_id"] = DEFAULT_ASCEND_SEASON_DIVISION_ID
             else:
                 kwargs["season_division_id"] = DEFAULT_PREMIER_SEASON_DIVISION_ID
+
+        if "season_name" not in kwargs:
+            season_division = kwargs.get("season_division")
+            kwargs["season_name"] = getattr(season_division, "season_name", None) or (
+                DEFAULT_SEASON_NAME
+            )
 
         super().__init__(*args, **kwargs)
 

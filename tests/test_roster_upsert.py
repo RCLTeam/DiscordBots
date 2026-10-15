@@ -201,6 +201,8 @@ class TestTeamMembershipRepositoryInsertIfNotExists:
         assert membership.discord_user_id == seeded_user.discord_id
         assert membership.role == RosterRole.MID
         assert membership.is_captain is False
+        # season_name es NOT NULL en la tabla compartida y se resuelve desde el equipo.
+        assert membership.season_name == seeded_team.season_name
 
         # Confirmar en base de datos
         db_record = await repo.get(seeded_team.id, seeded_user.discord_id)
@@ -287,6 +289,7 @@ class TestTeamMembershipRepositoryUpsert:
         assert membership is not None
         assert membership.role == RosterRole.ADC
         assert membership.is_captain is True
+        assert membership.season_name == seeded_team.season_name
 
         db_record = await repo.get(seeded_team.id, seeded_user.discord_id)
         assert db_record is not None
@@ -318,6 +321,7 @@ class TestTeamMembershipRepositoryUpsert:
 
         assert updated.role == RosterRole.TOP
         assert updated.is_captain is True
+        assert updated.season_name == seeded_team.season_name
 
         db_record = await repo.get(seeded_team.id, seeded_user.discord_id)
         assert db_record is not None

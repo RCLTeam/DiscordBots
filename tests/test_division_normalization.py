@@ -61,6 +61,7 @@ async def _create_team(session: AsyncSession, sd: SeasonDivision, name: str) -> 
         name=f"{name} {uuid.uuid4().hex[:6]}",
         tag=name[:4].upper(),
         season_division_id=sd.id,
+        season_name=sd.season_name,
         discord_role_id=_role_id(),
     )
     session.add(team)

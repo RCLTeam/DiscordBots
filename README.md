@@ -3,7 +3,7 @@
 [![Python Version](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![Package Manager](https://img.shields.io/badge/uv-0.5.0%2B-blueviolet.svg)](https://github.com/astral-sh/uv)
 [![Code Style](https://img.shields.io/badge/code%20style-ruff-black.svg)](https://github.com/astral-sh/ruff)
-[![Testing](https://img.shields.io/badge/tests-1138%20passed-brightgreen.svg)](https://docs.pytest.org/)
+[![Testing](https://img.shields.io/badge/tests-1798%20passed-brightgreen.svg)](https://docs.pytest.org/)
 [![Database](https://img.shields.io/badge/SQLAlchemy-2.0%20Async-red.svg)](https://www.sqlalchemy.org/)
 
 **LigaBot** es el bot de Discord oficial para la gestión deportiva, coordinación de enfrentamientos, verificación de miembros y enlace de integración en tiempo real de la liga amateur de League of Legends **RCL** (Rift Champions League). 
@@ -39,7 +39,7 @@ Diseñado bajo una arquitectura modular por capas desacopladas (*vertical slices
 | **Migraciones de Esquema** | `Alembic` | `1.14+` | Control de versiones de la base de datos relacional con soporte asíncrono para migraciones automáticas. |
 | **Red y WebSockets** | `aiohttp` | `3.11+` | Servidor WebSocket interno y endpoints HTTP REST para la pasarela de integración bidireccional (*WebSocket Bridge*). |
 | **Configuración** | `pydantic-settings` | `2.7+` | Validación estricta en tiempo de arranque, normalización de URLs y lectura de 26 variables de entorno. |
-| **Calidad y Testing** | `pytest` + `ruff` | `9.1+` / `0.9+` | Suite de 1.159 pruebas deterministas (`pytest-asyncio`) y formateo/linting estricto de código. |
+| **Calidad y Testing** | `pytest` + `ruff` | `9.1+` / `0.9+` | Suite de 1.804 pruebas deterministas (`pytest-asyncio`) y formateo/linting estricto de código. |
 
 ---
 
@@ -204,8 +204,9 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │   ├── testing/                              # Infraestructura, estrategia y suites de pruebas automatizadas
 │   │   ├── README.md                         # Índice del subsistema de pruebas y resumen métrico
 │   │   ├── environment-limits.md             # Mitigación de límites del kernel UNIX, Node 24+ y PGlite
+│   │   ├── postgres-suite.md                 # Suite de integración contra PostgreSQL real (@pytest.mark.postgres)
 │   │   ├── strategy.md                       # Estrategia de testing en pirámide de 4 niveles y fixtures
-│   │   └── suites.md                         # Catálogo de las 49 suites de prueba (1.138 tests unitarios/e2e)
+│   │   └── suites.md                         # Catálogo de las 72 suites de prueba (1.804 tests unitarios/e2e)
 │   └── README.md                             # Portal principal de documentación técnica
 ├── src/                                      # Código fuente modular de la aplicación
 │   └── liga_bot/                             # Paquete principal de LigaBot
@@ -236,6 +237,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │       │   ├── match_repo.py                 # Consultas especializadas sobre partidos y fechas de juego
 │       │   ├── role_request_repo.py          # Consultas para solicitudes de rol por usuario y estado
 │       │   ├── roster_repo.py                # Consultas atómicas de membresías de equipo y conciliación de roles
+│       │   ├── season_repo.py                # Resolución de la temporada vigente por starts_on y ends_on
 │       │   ├── team_repo.py                  # Consultas de equipos por nombre normalizado, división o rol
 │       │   └── ticket_repo.py                # Consultas para control de avisos y marcas de inactividad
 │       ├── services/                         # Capa de servicios de dominio y orquestación de negocio
@@ -296,6 +298,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │   ├── test_formatting.py                    # Formateo de plantillas oficiales de coordinación y embeds
 │   ├── test_ids.py                           # Limpieza de UUID e IDs de usuario de Discord (utils/ids.py)
 │   ├── test_models.py                        # Instanciación y restricciones de modelos relacionales
+│   ├── test_postgres_competitive_season.py   # Integración contra PostgreSQL real para exclusión competitiva GiST
 │   ├── test_rate_limiter.py                  # Pruebas de consumo de tokens y tasa de reposición en el limitador
 │   ├── test_repositories.py                  # Operaciones CRUD en repositorios de persistencia
 │   ├── test_role_config_permissions.py       # Permisos de comandos slash de asignación de roles
@@ -314,6 +317,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │   ├── test_roster_sync_stress.py            # Estrés en sincronización masiva de miembros del servidor
 │   ├── test_roster_ui.py                     # Componentes visuales de confirmación de roster
 │   ├── test_roster_ui_adversarial.py         # Interacciones duplicadas o desincronizadas en UI de roster
+│   ├── test_season_repo.py                   # Resolución de la temporada vigente por fechas de inicio y fin
 │   ├── test_services.py                      # Pruebas unitarias de servicios de dominio
 │   ├── test_staff_permissions_policy.py      # Matriz de la política de autorización del staff
 │   ├── test_suggestion_service.py            # Despacho de sugerencias a canales designados de Discord
@@ -472,7 +476,7 @@ Para especificaciones detalladas de los esquemas JSON y CSV, consulta [docs/arch
 
 ## 🧪 Estrategia de Testing y Calidad
 
-El proyecto cuenta con una infraestructura de pruebas automatizadas determinista y rigurosa respaldada por **33.981 líneas totales de test** (27.014 líneas efectivas de código excluyendo comentarios y blancos) en 50 archivos y **1.138 casos de prueba** divididos en 49 suites:
+El proyecto cuenta con una infraestructura de pruebas automatizadas determinista y rigurosa en 73 archivos y **1.804 casos de prueba** divididos en 72 suites, de los que 1.798 pasan y 6 se omiten sin `LIGA_BOT_POSTGRES_DSN` (la [suite de PostgreSQL](docs/testing/postgres-suite.md), que cubre lo que PGlite no puede crear):
 
 ```bash
 # Ejecución completa de la suite de pruebas
@@ -539,5 +543,6 @@ Toda la documentación técnica se encuentra modularizada bajo el directorio [`d
     - [Persistencia Relacional (`persistence.md`)](docs/features/casters/persistence.md)
 - 🧪 [**Subsistema de Testing (`docs/testing/README.md`)**](docs/testing/README.md):
   - [Estrategia de Pruebas (`strategy.md`)](docs/testing/strategy.md): Pirámide de 4 niveles, fixtures y aislamiento.
-  - [Catálogo de Suites (`suites.md`)](docs/testing/suites.md): Detalle de las 49 suites y distribución de casos.
-  - [Límites de Entorno (`environment-limits.md`)](docs/testing/environment-limits.md): Mitigaciones de buffers de sockets y kernel.
+  - [Catálogo de Suites (`suites.md`)](docs/testing/suites.md): Detalle de las 72 suites (1.804 casos) y distribución de pruebas.
+  - [Límites de Entorno (`environment-limits.md`)](docs/testing/environment-limits.md): Mitigaciones de buffers de sockets, kernel y PGlite.
+  - [Suite de PostgreSQL (`postgres-suite.md`)](docs/testing/postgres-suite.md): Integración contra PostgreSQL real para exclusión competitiva GiST.

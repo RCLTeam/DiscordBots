@@ -26,12 +26,15 @@ El subsistema utiliza tres tablas principales en PostgreSQL / PGlite:
 │                             team_memberships                              │
 │  team_id: UUID (PK, FK)                                                   │
 │  discord_user_id: String(32) (PK, FK)                                     │
+│  season_name: String(120) (NOT NULL, FK compuesta a teams)                │
 │  role: roster_role (Enum)                                                 │
 │  is_captain: Boolean (Default: False)                                     │
 │  created_at / updated_at: DateTime(tz=True)                               │
 │                                                                           │
+│  [FK] (team_id, season_name) -> teams(id, season_name) ON UPDATE/DELETE   │
 │  [CHECK] is_captain = false OR role IN ('top','jungle','mid','adc','support')│
 │  [UNIQUE] team_id WHERE (is_captain = true)                               │
+│  [EXCLUDE GiST prod] (season_name =, discord_user_id =) WHERE competitivo │
 └───────────────────────────────────────────────────────────────────────────┘
                 │                                          │
                 │ 1:N (CASCADE)                            │ 1:N (CASCADE)
@@ -48,27 +51,36 @@ El subsistema utiliza tres tablas principales en PostgreSQL / PGlite:
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 1.1 Tabla `team_memberships` (`src/liga_bot/models/roster.py:168-241`)
+### 1.1 Tabla `team_memberships` (`src/liga_bot/models/roster.py:168-252`)
 
 Modela la alineación y pertenencia actual de un jugador a un equipo.
 
 - **Clave Primaria:** Compuesta por `(team_id, discord_user_id)`.
+- **Columna de Temporada:** `season_name: String(120) NOT NULL`, sincronizada con la temporada del equipo (`teams.season_name`).
 - **Claves Foráneas:**
   - `team_id` referencia `teams.id` con `ondelete="CASCADE"`.
   - `discord_user_id` referencia `discord_users.discord_id` con `ondelete="CASCADE"`.
-- **Restricción de Capitanía Titular (`L220–L223`):**
+  - `team_memberships_team_season_fkey`: clave foránea compuesta `(team_id, season_name) -> teams(id, season_name)` con `onupdate="CASCADE"` y `ondelete="CASCADE"`.
+- **Restricción de Capitanía Titular (`L224–L227`):**
   ```sql
   CONSTRAINT team_memberships_captain_role_check
   CHECK (is_captain = false OR role IN ('top', 'jungle', 'mid', 'adc', 'support'))
   ```
   Impide a nivel motor que cualquier jugador con rol de suplente (`substitute`), entrenador (`coach`), staff (`staff`) o socio (`partners`) sea marcado como capitán oficial.
-- **Índice Parcial Único de Capitán (`L226–L231`):**
+- **Índice Parcial Único de Capitán (`L230–L235`):**
   ```sql
   CREATE UNIQUE INDEX team_memberships_unique_captain
   ON team_memberships (team_id)
   WHERE (is_captain = true);
   ```
   Garantiza a nivel de base de datos que ningún equipo pueda tener más de un capitán simultáneamente, previniendo condiciones de carrera concurrentes en la asignación de capitanía.
+- **Restricción de Exclusión Competitiva por Temporada (PostgreSQL en producción):**
+  ```sql
+  CONSTRAINT one_competitive_team_per_player_and_season
+  EXCLUDE USING gist ("season_name" WITH =, "discord_user_id" WITH =)
+  WHERE ("role" IN ('top', 'jungle', 'mid', 'adc', 'support', 'substitute'))
+  ```
+  Garantiza en PostgreSQL (mediante `btree_gist`) que un jugador solo pueda ocupar una plaza competitiva por temporada (en PGlite se valida desde `RosterSyncService` y se verifica contra PostgreSQL real en `tests/test_postgres_competitive_season.py`).
 - **Índices de Búsqueda:**
   - `team_memberships_team_id_idx` sobre `team_id`.
   - `team_memberships_discord_user_id_idx` sobre `discord_user_id`.
@@ -148,7 +160,7 @@ Hereda de `BaseRepository[TeamMembership]`:
   Recupera todas las membresías del usuario ordenadas cronológicamente por `created_at.asc()`.
 - **`list_by_team(team_id, with_user=False) -> Sequence[TeamMembership]`:**
   Recupera la plantilla completa de un club, ordenada prioritariamente por `is_captain.desc()`, luego `role.asc()` y `created_at.asc()`.
-- **`get_competitive_membership(discord_user_id, with_team=False, with_user=False) -> TeamMembership | None`:**
+- **`get_competitive_membership(discord_user_id, with_team=False, with_user=False, season_name=None) -> TeamMembership | None`:**
   ```python
   competitive_roles = [r for r in RosterRole if r.is_competitive()]
   stmt = select(TeamMembership).where(
@@ -156,13 +168,19 @@ Hereda de `BaseRepository[TeamMembership]`:
       TeamMembership.role.in_(competitive_roles),
   )
   ```
-  Permite validar en una sola consulta indexada si el jugador ya ostenta una posición competitiva en cualquier club de la liga.
-- **`create(team_id, discord_user_id, role, is_captain=False) -> TeamMembership`:**
-  Inserta la membresía, ejecuta `await session.flush()` y `await session.refresh()`.
+  Con `season_name` acota la búsqueda a esa temporada, que es el alcance real de la invariante. Sin él ordena priorizando la temporada vigente y, a igualdad, `created_at.desc()` y `team_id.asc()`: sin ese orden la consulta podría devolver una plaza de una temporada anterior.
+- **`create(team_id, discord_user_id, role, is_captain=False, season_name=None) -> TeamMembership`:**
+  Inserta la membresía, ejecuta `await session.flush()` y `await session.refresh()`. Si no se indica `season_name`, la resuelve consultando el equipo (`_resolve_season_name`).
 - **`update_role(team_id, discord_user_id, new_role, is_captain=False) -> TeamMembership`:**
   Actualiza los campos `role` e `is_captain`. Lanza `ValueError` si el registro no existe.
 - **`delete(team_id, discord_user_id=None) -> bool`:**
   Elimina la membresía por clave compuesta o entidad. Retorna `True` si existía y fue eliminada.
+
+- **`insert_if_not_exists(...)` y `upsert(...)`:** aceptan `season_name` opcional. Cuando no se indica, el valor viaja como subconsulta escalar sobre `teams` (`_season_name_value`), de modo que la columna `NOT NULL` se rellena sin un viaje extra a la base de datos. El `DO UPDATE` del `upsert` también la refresca.
+
+**Temporada de los equipos (`TeamRepository`).** `teams.season_name` debe coincidir con la de su fila de `seasons_divisions` por clave foránea compuesta, así que el repositorio la resuelve **antes** del `flush`: `create` la toma de la división indicada y `update` normaliza `season_division`, `season_division_id` y `season_name` juntos, dando precedencia a los argumentos sobre la relación ya cargada (`lazy="joined"` conserva la división anterior).
+
+**Temporada vigente (`repositories/season_repo.py`).** `seasons` no tiene ninguna columna que marque la temporada activa, así que se deduce de las fechas: vigente es la que cumple `starts_on <= hoy` y `ends_on` nulo o `>= hoy`; con varias manda la de `starts_on` más reciente y, si no hay ninguna vigente, la de `created_at` más reciente. Vive en un único módulo para que el repositorio de equipos y el de plantillas no discrepen.
 
 ---
 

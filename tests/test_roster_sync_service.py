@@ -14,6 +14,7 @@ Valida de forma exhaustiva:
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from datetime import date, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
@@ -1387,3 +1388,198 @@ class TestResolveCanonicalNick:
         nick = await roster_sync_service.resolve_canonical_nick("700105", base_name)
         assert not nick.endswith(" ")
         assert len(nick) <= 32
+
+
+# ===========================================================================
+# Exclusividad competitiva por temporada (issue #63)
+# ===========================================================================
+
+
+async def _sembrar_temporada(session: AsyncSession, season_name: str, starts_on: date):
+    """Crea temporada y su seasons_divisions PREMIER como lo haría la web."""
+    from liga_bot.models.roster import DivisionModel, Season, SeasonDivision
+
+    if await session.get(Season, season_name) is None:
+        session.add(Season(name=season_name, starts_on=starts_on))
+    if await session.get(DivisionModel, "PREMIER") is None:
+        session.add(DivisionModel(name="PREMIER"))
+    await session.flush()
+    # Idempotente: seasons y seasons_divisions no se truncan entre tests.
+    existente = (
+        (
+            await session.execute(
+                select(SeasonDivision).where(
+                    SeasonDivision.season_name == season_name,
+                    SeasonDivision.division_name == "PREMIER",
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if existente is not None:
+        return existente
+    season_division = SeasonDivision(season_name=season_name, division_name="PREMIER")
+    session.add(season_division)
+    await session.flush()
+    return season_division
+
+
+async def _sembrar_equipo(session: AsyncSession, season_division, name: str, role_id: int) -> Team:
+    team = Team(
+        name=name,
+        tag=name[:4].upper(),
+        season_division=season_division,
+        discord_role_id=role_id,
+    )
+    session.add(team)
+    await session.flush()
+    return team
+
+
+class TestExclusividadCompetitivaPorTemporada:
+    """La invariante competitiva se evalúa dentro de una temporada, no en toda la liga."""
+
+    @pytest_asyncio.fixture
+    async def escenario(self, session_factory: async_sessionmaker[AsyncSession]):
+        """Jugador con plaza competitiva en la temporada pasada y dos equipos en la actual."""
+        hoy = date.today()
+        async with session_factory() as session:
+            pasada = await _sembrar_temporada(session, "2025", hoy - timedelta(days=400))
+            actual = await _sembrar_temporada(session, "2026", hoy - timedelta(days=10))
+            viejo = await _sembrar_equipo(session, pasada, "Old Club", 7001)
+            nuevo_a = await _sembrar_equipo(session, actual, "New Alpha", 7002)
+            nuevo_b = await _sembrar_equipo(session, actual, "New Beta", 7003)
+            session.add(DiscordUser(discord_id="770001", username="jugador"))
+            await session.commit()
+            for team in (viejo, nuevo_a, nuevo_b):
+                await session.refresh(team)
+            return viejo, nuevo_a, nuevo_b
+
+    @pytest.mark.asyncio
+    async def test_traspaso_no_toca_la_plaza_de_otra_temporada(
+        self, roster_sync_service: RosterSyncService, escenario
+    ):
+        """Al entrar en un equipo de 2026 se libera la plaza de 2026, no la de 2025."""
+        viejo, nuevo_a, nuevo_b = escenario
+        member = create_mock_member(770001)
+
+        await roster_sync_service.transfer_player(
+            member=member,
+            team_role=create_mock_role(viejo.discord_role_id, viejo.name),
+            new_position=RosterRole.MID,
+        )
+        await roster_sync_service.transfer_player(
+            member=member,
+            team_role=create_mock_role(nuevo_a.discord_role_id, nuevo_a.name),
+            new_position=RosterRole.MID,
+        )
+        _, _, origen = await roster_sync_service.transfer_player(
+            member=member,
+            team_role=create_mock_role(nuevo_b.discord_role_id, nuevo_b.name),
+            new_position=RosterRole.MID,
+        )
+
+        assert origen is not None
+        assert origen.id == nuevo_a.id
+
+        equipos = {t.id: m.season_name for t, m in await roster_sync_service.get_user_teams(770001)}
+        assert equipos == {viejo.id: "2025", nuevo_b.id: "2026"}
+
+    @pytest.mark.asyncio
+    async def test_cambio_de_posicion_admite_competitiva_en_otra_temporada(
+        self, roster_sync_service: RosterSyncService, escenario, seed_actor: DiscordUser
+    ):
+        """Tener plaza en 2025 no impide ocupar una competitiva en 2026."""
+        viejo, nuevo_a, _ = escenario
+        member = create_mock_member(770001)
+
+        await roster_sync_service.transfer_player(
+            member=member,
+            team_role=create_mock_role(viejo.discord_role_id, viejo.name),
+            new_position=RosterRole.ADC,
+        )
+        await roster_sync_service.transfer_player(
+            member=member,
+            team_role=create_mock_role(nuevo_a.discord_role_id, nuevo_a.name),
+            new_position=RosterRole.COACH,
+        )
+
+        actualizada = await roster_sync_service.change_player_position(
+            team_id=nuevo_a.id,
+            discord_user_id="770001",
+            new_role=RosterRole.TOP,
+            actor_id=seed_actor.discord_id,
+        )
+
+        assert actualizada.role == RosterRole.TOP
+        assert actualizada.season_name == "2026"
+
+    @pytest.mark.asyncio
+    async def test_cambio_de_posicion_rechaza_segunda_competitiva_de_la_misma_temporada(
+        self, roster_sync_service: RosterSyncService, escenario, seed_actor: DiscordUser
+    ):
+        """Dos competitivas dentro de 2026 siguen prohibidas."""
+        _, nuevo_a, nuevo_b = escenario
+        member = create_mock_member(770001)
+
+        await roster_sync_service.transfer_player(
+            member=member,
+            team_role=create_mock_role(nuevo_a.discord_role_id, nuevo_a.name),
+            new_position=RosterRole.SUPPORT,
+        )
+        await roster_sync_service.transfer_player(
+            member=member,
+            team_role=create_mock_role(nuevo_b.discord_role_id, nuevo_b.name),
+            new_position=RosterRole.STAFF,
+        )
+
+        with pytest.raises(CompetitivePositionConflictError):
+            await roster_sync_service.change_player_position(
+                team_id=nuevo_b.id,
+                discord_user_id="770001",
+                new_role=RosterRole.MID,
+                actor_id=seed_actor.discord_id,
+            )
+
+    @pytest.mark.asyncio
+    async def test_apodo_canonico_usa_el_equipo_de_la_temporada_vigente(
+        self,
+        roster_sync_service: RosterSyncService,
+        escenario,
+        session_factory: async_sessionmaker[AsyncSession],
+    ):
+        """El tag sale de la plaza vigente aunque la antigua sea la más reciente por created_at.
+
+        Tras insertar ambas se fija created_at de la plaza de 2026 antes que el de la
+        de 2025: el desempate por created_at DESC elegiría la antigua, de modo que solo la
+        prioridad a la temporada vigente devuelve el club actual.
+        """
+        viejo, nuevo_a, _ = escenario
+        member = create_mock_member(770001)
+
+        await roster_sync_service.transfer_player(
+            member=member,
+            team_role=create_mock_role(viejo.discord_role_id, viejo.name),
+            new_position=RosterRole.MID,
+        )
+        await roster_sync_service.transfer_player(
+            member=member,
+            team_role=create_mock_role(nuevo_a.discord_role_id, nuevo_a.name),
+            new_position=RosterRole.MID,
+        )
+
+        async with session_factory() as session:
+            await session.execute(
+                text(
+                    "UPDATE team_memberships SET created_at = CASE season_name "
+                    "WHEN '2026' THEN now() - interval '2 days' "
+                    "ELSE now() - interval '1 day' END "
+                    "WHERE discord_user_id = '770001'"
+                )
+            )
+            await session.commit()
+
+        nick = await roster_sync_service.resolve_canonical_nick("770001", "Jugador")
+
+        assert nick.startswith(nuevo_a.tag), f"el apodo usó el club antiguo: {nick!r}"

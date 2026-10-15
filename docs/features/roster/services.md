@@ -70,12 +70,14 @@ Al inicializar `RosterSyncService`, se comprueba el rol por defecto de ingreso (
 La recepción de un rol de equipo o la adición a una plantilla en Discord **no revoca ni elimina roles de otros clubes**.
 - Un miembro puede pertenecer libremente a varios clubes con roles no competitivos (por ejemplo, ser analista/staff en el Equipo A y entrenador en el Equipo B).
 
-### Regla 3: Posición Competitiva Única a Nivel Liga (`L633–L642`)
-Un jugador solo puede ostentar una posición competitiva en **como máximo un equipo** en toda la competición.
+### Regla 3: Posición Competitiva Única por Temporada (`L633–L642`)
+Un jugador solo puede ostentar una posición competitiva en **como máximo un equipo dentro de la misma temporada**. En producción lo impone la restricción de exclusión `one_competitive_team_per_player_and_season`; el servicio la respeta acotando sus consultas por `season_name`.
 - Los roles competitivos corresponden a: `TOP`, `JUNGLE`, `MID`, `ADC`, `SUPPORT` y `SUBSTITUTE`.
 - Si un miembro ya posee un rol competitivo en el Equipo A, cualquier intento de asignarle un rol competitivo en el Equipo B dispara `CompetitivePositionConflictError`.
 - **Excepción interna:** El cambio de posición dentro del *mismo equipo* (por ejemplo, de `SUBSTITUTE` a `MID`) está permitido.
 - **Roles no competitivos:** Los roles `COACH`, `STAFF` y `PARTNERS` están exentos de esta restricción y permiten la multipresencia entre clubes.
+- **Temporadas distintas:** una posición competitiva en una temporada anterior no bloquea otra en la temporada vigente, y un traspaso no la libera.
+- **`resolve_canonical_nick`** no recibe temporada, así que prioriza la vigente (ver [persistencia](persistence.md)): el apodo lleva el tag del club actual, no el de uno que el jugador ya dejó.
 
 ### Regla 4: Capitanía Exclusiva para Posiciones Titulares (`L610–L611`)
 Únicamente los jugadores con rol de titular activo pueden ser designados capitanes oficiales del equipo.
@@ -189,7 +191,7 @@ async def transfer_player(
 
 - **Resolución de Club**: Resuelve el equipo destino por `discord_role_id` (`get_by_role_id`).
 - **Liberación en Destino**: Libera la membresía previa en el equipo destino si existía.
-- **Preservación de Invariante Competitiva (Regla 3)**: Si la nueva posición es competitiva (`is_competitive()`), libera la membresía competitiva que poseyera en cualquier otro equipo. Las posiciones no competitivas (`coach`, `staff`, `partners`) se conservan sin alteración.
+- **Preservación de Invariante Competitiva (Regla 3)**: Si la nueva posición es competitiva (`is_competitive()`), libera la membresía competitiva que poseyera en cualquier otro equipo de la misma temporada (`season_name=team.season_name`). Las posiciones no competitivas (`coach`, `staff`, `partners`) y las membresías competitivas de otras temporadas se conservan sin alteración.
 - **Trazabilidad**: Registra movimientos en `roster_movements` (acciones `LEFT` y `JOINED`) y bitácora en `audit_logs`.
 - **Retorno**: Tupla `(new_membership, destination_team, previous_team_or_none)`.
 
@@ -221,7 +223,7 @@ async def change_player_position(
      ```
   4. **Pertenencia al Club:** Valida que exista la membresía previa. Si no existe, lanza `PlayerNotTeamMemberError`.
   5. **Verificación de Posición Competitiva Única:**
-     Si `role_enum.is_competitive()`, consulta `membership_repo.get_competitive_membership(clean_user_id)`. Si el jugador ya compite en otro equipo (`comp_membership.team_id != clean_team_id`), lanza `CompetitivePositionConflictError`.
+     Si `role_enum.is_competitive()`, consulta `membership_repo.get_competitive_membership(clean_user_id, season_name=membership.season_name)`. Si el jugador ya compite en otro equipo de la misma temporada (`comp_membership.team_id != clean_team_id`), lanza `CompetitivePositionConflictError`.
   6. **Captura de Snapshot Previo:** Almacena `previous_role`, `was_captain` y genera el diccionario `before_payload`.
   7. **Actualización Relacional:** Ejecuta `await membership_repo.update_role(clean_team_id, clean_user_id, role_enum, is_captain=is_captain)`.
   8. **Clasificación de Movimiento:**

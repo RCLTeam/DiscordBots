@@ -6,20 +6,20 @@
 
 ## 1. Inventario General de la Suite
 
-El repositorio `DiscordBots` cuenta con un total de **1.138 pruebas automatizadas** distribuidas a lo largo de **49 archivos de test** más el módulo raíz de fixtures (`tests/conftest.py`), sumando un volumen de **33.982 líneas totales de test** (27.014 líneas efectivas de código excluyendo comentarios y blancos) en 50 archivos y 1.138 tests.
+El repositorio `DiscordBots` cuenta con un total de **1.804 pruebas automatizadas** distribuidas a lo largo de **72 archivos de test** más el módulo raíz de fixtures (`tests/conftest.py`), sumando 73 archivos en total.
 
-La recolección completa de casos de prueba con `uv run pytest --collect-only -q` toma **0.49 segundos**, y la ejecución íntegra de la suite insume aproximadamente **~35.8 segundos** en una estación Linux x86_64 estándar.
+La recolección completa de casos de prueba con `uv run pytest --collect-only -q` toma **0.49 segundos**, y la ejecución íntegra de la suite insume aproximadamente **~41.3 segundos** en una estación Linux x86_64 estándar.
 
 ### Métricas Consolidadas
 
 | Métrica | Valor Medido |
 |---|---|
-| **Total de Archivos de Test** | 49 archivos (`tests/test_*.py`) + `tests/conftest.py` (50 archivos en total) |
-| **Total de Casos de Prueba** | 1.138 tests recolectados |
+| **Total de Archivos de Test** | 72 archivos (`tests/test_*.py`) + `tests/conftest.py` (73 archivos en total) |
+| **Total de Casos de Prueba** | 1.804 tests recolectados: 1.798 pasan y 6 se omiten sin `LIGA_BOT_POSTGRES_DSN` (ver [suite de PostgreSQL](postgres-suite.md)) |
 | **Líneas de Código de Pruebas (LoC)** | 33.982 LoC totales (27.014 LoC netas) |
 | **Tiempo de Recolección (pytest collect)** | ~0.49 s |
-| **Tiempo de Ejecución Completa** | ~35.8 s |
-| **Tasa de Aprobación** | 100% (1.138 pasados, 0 fallos, 0 errores) |
+| **Tiempo de Ejecución Completa** | ~41.3 s |
+| **Tasa de Aprobación** | 100% (1.798 pasados, 6 omitidos sin PostgreSQL externo, 0 fallos, 0 errores) |
 
 ---
 
@@ -153,7 +153,7 @@ Para mantener la uniformidad en una base de código de más de 33.000 líneas de
 # Recolección rápida de casos sin ejecución (verificar conteo)
 uv run pytest --collect-only -q
 
-# Ejecución completa de toda la suite (1.138 tests)
+# Ejecución completa de toda la suite (1.804 tests)
 uv run pytest
 
 # Ejecución con resumen compacto mostrando porcentaje de avance

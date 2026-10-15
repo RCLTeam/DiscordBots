@@ -29,6 +29,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     PrimaryKeyConstraint,
     String,
@@ -41,7 +42,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from liga_bot.models.base import Base
 from liga_bot.models.enums import AppRole, RosterMovementAction, RosterRole
-from liga_bot.models.team import Team
+from liga_bot.models.team import DEFAULT_SEASON_NAME, Team
 
 
 class Season(Base):
@@ -129,6 +130,8 @@ class SeasonDivision(Base):
             "division_name",
             name="uq_seasons_divisions_season_division",
         ),
+        # Destino de la clave foránea compuesta de teams.
+        UniqueConstraint("id", "season_name", name="seasons_divisions_id_season_name_key"),
     )
 
     def __repr__(self) -> str:
@@ -306,12 +309,27 @@ class TeamMembership(Base):
         nullable=False,
     )
 
+    # La web exige season_name NOT NULL y la usa para limitar a un equipo competitivo
+    # por jugador y temporada mediante una restricción de exclusión GiST.
+    season_name: Mapped[str] = mapped_column(String(120), nullable=False)
+
     # Relaciones
-    team: Mapped[Team] = relationship("Team", back_populates="memberships")
+    team: Mapped[Team] = relationship(
+        "Team",
+        back_populates="memberships",
+        foreign_keys=[team_id],
+    )
     discord_user: Mapped[DiscordUser] = relationship("DiscordUser", back_populates="memberships")
 
     __table_args__ = (
         PrimaryKeyConstraint("team_id", "discord_user_id", name="team_memberships_pkey"),
+        ForeignKeyConstraint(
+            ["team_id", "season_name"],
+            ["teams.id", "teams.season_name"],
+            name="team_memberships_team_season_fkey",
+            onupdate="CASCADE",
+            ondelete="CASCADE",
+        ),
         CheckConstraint(
             "is_captain = false OR role IN ('top', 'jungle', 'mid', 'adc', 'support')",
             name="team_memberships_captain_role_check",
@@ -325,6 +343,17 @@ class TeamMembership(Base):
             postgresql_where=sa.text("is_captain = true"),
         ),
     )
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Deriva ``season_name`` del equipo cuando el llamador no la aporta.
+
+        La columna es NOT NULL en la tabla compartida y está atada al equipo por una
+        clave foránea compuesta, así que una temporada distinta a la suya se rechaza.
+        """
+        if "season_name" not in kwargs:
+            team = kwargs.get("team")
+            kwargs["season_name"] = getattr(team, "season_name", None) or DEFAULT_SEASON_NAME
+        super().__init__(*args, **kwargs)
 
     def __repr__(self) -> str:
         role_val = self.role.value if isinstance(self.role, RosterRole) else self.role
@@ -490,6 +519,7 @@ Team.memberships = relationship(
     back_populates="team",
     cascade="all, delete-orphan",
     passive_deletes=True,
+    foreign_keys="[TeamMembership.team_id]",
 )
 Team.movements = relationship(
     "RosterMovement",

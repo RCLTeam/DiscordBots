@@ -138,9 +138,11 @@ class RosterRole(str, enum.Enum):
         """
         Determina si el rol corresponde a una posición competitiva de juego.
 
-        Conforme a la regla invariante #6: Un usuario solo puede ocupar un rol
-        competitivo en como máximo 1 equipo en toda la liga. Los roles no
-        competitivos (coach, staff, partners) pueden ejercerse en múltiples clubes.
+        Conforme a la regla invariante #6: un usuario solo puede ocupar un rol
+        competitivo en como máximo 1 equipo dentro de la misma temporada, que es
+        lo que impone en producción la restricción de exclusión
+        ``one_competitive_team_per_player_and_season``. Los roles no competitivos
+        (coach, staff, partners) pueden ejercerse en múltiples clubes.
         """
         return self in (
             RosterRole.TOP,

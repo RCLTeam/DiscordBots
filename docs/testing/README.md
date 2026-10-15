@@ -6,7 +6,7 @@
 
 ## Resumen Ejecutivo
 
-El subsistema de pruebas de `DiscordBots` proporciona una infraestructura de verificación exhaustiva, determinista y de alta fidelidad relacional. Con un total de **1.138 casos de prueba** distribuidos en **50 archivos** (49 archivos de test más `tests/conftest.py`), sumando **33.982 líneas totales de test** (27.014 líneas efectivas de código excluyendo comentarios y blancos), el conjunto valida desde la lógica pura en memoria hasta condiciones extremas de concurrencia y límites del kernel del sistema operativo.
+El subsistema de pruebas de `DiscordBots` proporciona una infraestructura de verificación exhaustiva, determinista y de alta fidelidad relacional. Con un total de **1.804 casos de prueba** distribuidos en **73 archivos** (72 suites de test más `tests/conftest.py`), de los que **1.798 pasan** y **6 se omiten** sin `LIGA_BOT_POSTGRES_DSN`, el conjunto valida desde la lógica pura en memoria hasta condiciones extremas de concurrencia y límites del kernel del sistema operativo.
 
 El stack de pruebas se ejecuta de forma hermética utilizando **PGlite** (`py-pglite[sqlalchemy]`), una compilación WebAssembly/C de PostgreSQL sobre sockets UNIX locales, eliminando la necesidad de contenedores Docker externos o servicios de base de datos remotos y garantizando compatibilidad 100% con tipos y restricciones nativas de PostgreSQL.
 
@@ -17,8 +17,9 @@ El stack de pruebas se ejecuta de forma hermética utilizando **PGlite** (`py-pg
 | Documento | Descripción |
 |---|---|
 | [**Estrategia de Pruebas (`strategy.md`)**](strategy.md) | Filosofía de pruebas, arquitectura en pirámide de 4 niveles (Unit 46%, Integration 15%, Resilience 9.7%, Adversarial 29.3%), ciclo de vida de fixtures con PGlite, aislamiento transaccional por savepoints y factoría de mocks de Discord. |
-| [**Catálogo de Suites (`suites.md`)**](suites.md) | Inventario completo de los 49 archivos de prueba clasificados por nivel de pirámide, métricas de casos y LoC por archivo, convenciones de nomenclatura y comandos de ejecución con `uv run pytest`. |
-| [**Límites de Entorno (`environment-limits.md`)**](environment-limits.md) | Análisis técnico de los 3 límites críticos de infraestructura mitigados: desbordamiento de buffer UNIX en Node 24+ (>16KB), serialización de transacciones con `asyncio.Lock` en PGlite, liberación de descriptores de sockets en ciclos rápidos, y configuración de logging de Alembic dentro de la sesión de pytest. |
+| [**Catálogo de Suites (`suites.md`)**](suites.md) | Inventario completo de los 72 archivos de prueba clasificados por nivel de pirámide, métricas de casos y LoC por archivo, convenciones de nomenclatura y comandos de ejecución con `uv run pytest`. |
+| [**Límites de Entorno (`environment-limits.md`)**](environment-limits.md) | Análisis técnico de los límites críticos de infraestructura mitigados: desbordamiento de buffer UNIX en Node 24+ (>16KB), serialización de transacciones con `asyncio.Lock` en PGlite, liberación de descriptores de sockets en ciclos rápidos, configuración de logging de Alembic dentro de la sesión de pytest y la ausencia de `btree_gist` en PGlite. |
+| [**Suite de PostgreSQL (`postgres-suite.md`)**](postgres-suite.md) | Suite de integración marcada `@pytest.mark.postgres` que se ejecuta contra un PostgreSQL real y desechable: cubre la restricción de exclusión competitiva por temporada, que PGlite no puede crear. |
 
 ---
 
@@ -28,7 +29,7 @@ El stack de pruebas se ejecuta de forma hermética utilizando **PGlite** (`py-pg
 # Recolección e inventario de casos de prueba
 uv run pytest --collect-only -q
 
-# Ejecución completa de la suite (1.138 tests, ~35.8s)
+# Ejecución completa de la suite (1.804 tests recolectados: 1.798 pasan, 6 omitidos sin LIGA_BOT_POSTGRES_DSN)
 uv run pytest
 
 # Ejecución de suites críticas de límites de entorno y resiliencia
