@@ -79,18 +79,20 @@ class RoleRequestStatus(str, enum.Enum):
 ---
 
 ### 1.4 `AppRole`
-Define el nivel de autorización y privilegios de un usuario en el ecosistema (alineado de forma idéntica con el enum `app_role` en RCL-Next).
+Define el nivel de autorización y privilegios de un usuario en el ecosistema (alineado de forma idéntica con el enum `app_role` en RCL-Next, en `src/liga_bot/models/enums.py:111-118`).
 
 ```python
 class AppRole(str, enum.Enum):
     VIEWER = "viewer"
+    EDITOR = "editor"
     ADMIN = "admin"
     OWNER = "owner"
 ```
 
-- **Tipo PostgreSQL Subyacente:** `app_role` (creado y gobernado por RCL-Next).
+- **Tipo PostgreSQL Subyacente:** `app_role` (creado y gobernado por RCL-Next; en local y en bases de datos previas, `0000_initial_shared_tables.py` y `0004_match_mvp_and_editor_role.py` aseguran la presencia de `'editor'` antes de `'admin'`, alineado con `0004_editor_role.sql`).
 - **Valores Permitidos:**
   - `viewer`: Usuario estándar con permisos de lectura y visualización (`default=AppRole.VIEWER`, `server_default="viewer"`).
+  - `editor`: Rol con privilegios editoriales en la plataforma web RCL-Next (`0004_editor_role.sql`).
   - `admin`: Administrador de la plataforma con privilegios de gestión y moderación.
   - `owner`: Propietario de la plataforma con máximos privilegios administrativos.
 - **Modelos que lo utilizan:** `DiscordUser.role`.
@@ -136,7 +138,7 @@ La clase `RosterRole` encapsula métodos auxiliares para validar las reglas depo
            RosterRole.SUBSTITUTE,
        )
    ```
-   - **Regla Invariante #6:** Un usuario de Discord únicamente puede ostentar un rol competitivo (`top`, `jungle`, `mid`, `adc`, `support`, `substitute`) en **como máximo un equipo** en toda la competición.
+   - **Regla Invariante #6:** Un usuario de Discord únicamente puede ostentar un rol competitivo (`top`, `jungle`, `mid`, `adc`, `support`, `substitute`) en **como máximo un equipo dentro de la misma temporada** (`one_competitive_team_per_player_and_season`).
    - En contraste, los roles no competitivos (`coach`, `staff`, `partners`) devuelven `False`, permitiendo que un mismo profesional ejerza labores técnicas o de patrocinio en múltiples clubes concurrentemente.
 
 2. **`is_starter(self) -> bool`**

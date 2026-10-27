@@ -3,7 +3,7 @@
 [![Python Version](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![Package Manager](https://img.shields.io/badge/uv-0.5.0%2B-blueviolet.svg)](https://github.com/astral-sh/uv)
 [![Code Style](https://img.shields.io/badge/code%20style-ruff-black.svg)](https://github.com/astral-sh/ruff)
-[![Testing](https://img.shields.io/badge/tests-1798%20passed-brightgreen.svg)](https://docs.pytest.org/)
+[![Testing](https://img.shields.io/badge/tests-1804%20passed-brightgreen.svg)](https://docs.pytest.org/)
 [![Database](https://img.shields.io/badge/SQLAlchemy-2.0%20Async-red.svg)](https://www.sqlalchemy.org/)
 
 **LigaBot** es el bot de Discord oficial para la gestión deportiva, coordinación de enfrentamientos, verificación de miembros y enlace de integración en tiempo real de la liga amateur de League of Legends **RCL** (Rift Champions League). 
@@ -39,7 +39,7 @@ Diseñado bajo una arquitectura modular por capas desacopladas (*vertical slices
 | **Migraciones de Esquema** | `Alembic` | `1.14+` | Control de versiones de la base de datos relacional con soporte asíncrono para migraciones automáticas. |
 | **Red y WebSockets** | `aiohttp` | `3.11+` | Servidor WebSocket interno y endpoints HTTP REST para la pasarela de integración bidireccional (*WebSocket Bridge*). |
 | **Configuración** | `pydantic-settings` | `2.7+` | Validación estricta en tiempo de arranque, normalización de URLs y lectura de 26 variables de entorno. |
-| **Calidad y Testing** | `pytest` + `ruff` | `9.1+` / `0.9+` | Suite de 1.804 pruebas deterministas (`pytest-asyncio`) y formateo/linting estricto de código. |
+| **Calidad y Testing** | `pytest` + `ruff` | `9.1+` / `0.9+` | Suite de 1.810 pruebas deterministas (`pytest-asyncio`) y formateo/linting estricto de código. |
 
 ---
 
@@ -149,7 +149,8 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │   │   ├── 0000_initial_shared_tables.py     # Tablas compartidas iniciales
 │   │   ├── 0001_bot_tables.py                # Tablas específicas del bot
 │   │   ├── 0002_match_round.py               # Enlace con jornadas
-│   │   └── 0003_match_casters.py             # Migración de casters: tablas match_casters y match_caster_cards
+│   │   ├── 0003_match_casters.py             # Migración de casters: tablas match_casters y match_caster_cards
+│   │   └── 0004_match_mvp_and_editor_role.py # Sincronización defensiva de campos MVP en matches y rol editor en app_role
 │   ├── env.py                                # Configuración de ejecución asíncrona de Alembic con SQLAlchemy
 │   └── script.py.mako                        # Plantilla Mako para generación de nuevas revisiones de migración
 ├── docs/                                     # Centro neurálgico de documentación técnica granular
@@ -163,7 +164,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │   ├── features/                             # Módulos funcionales del bot organizados por dominios
 │   │   ├── database/                         # Modelos, esquemas relacionales y persistencia SQLAlchemy 2.0
 │   │   │   ├── README.md                     # Índice del módulo de base de datos
-│   │   │   ├── enums.md                      # Enumerados canónicos (Division, MatchStatus, RoleRequestStatus)
+│   │   │   ├── enums.md                      # Enumerados canónicos (Division, MatchStatus, RoleRequestStatus, AppRole, RosterRole)
 │   │   │   ├── models.md                     # Definición técnica de modelos declarativos y columnas
 │   │   │   ├── persistence.md                # Repositorios de persistencia y consultas asíncronas
 │   │   │   └── relationships.md              # Relaciones relacionales, claves foráneas y cascadas
@@ -206,7 +207,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │   │   ├── environment-limits.md             # Mitigación de límites del kernel UNIX, Node 24+ y PGlite
 │   │   ├── postgres-suite.md                 # Suite de integración contra PostgreSQL real (@pytest.mark.postgres)
 │   │   ├── strategy.md                       # Estrategia de testing en pirámide de 4 niveles y fixtures
-│   │   └── suites.md                         # Catálogo de las 72 suites de prueba (1.804 tests unitarios/e2e)
+│   │   └── suites.md                         # Catálogo de las 72 suites de prueba (1.810 tests unitarios/e2e)
 │   └── README.md                             # Portal principal de documentación técnica
 ├── src/                                      # Código fuente modular de la aplicación
 │   └── liga_bot/                             # Paquete principal de LigaBot
@@ -227,7 +228,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │       │   ├── enums.py                      # Enumeraciones Python respaldadas por tipos ENUM de PostgreSQL
 │       │   ├── match.py                      # Entidad Match (partidos, canales de Discord, fechas y estados)
 │       │   ├── role_request.py               # Entidad RoleRequest (solicitudes de rol, apodos y resoluciones)
-│       │   ├── roster.py                     # Entidades DiscordUser, TeamMembership y RosterMovementHistory
+│       │   ├── roster.py                     # Entidades DiscordUser, TeamMembership y RosterMovement
 │       │   ├── team.py                       # Entidad Team (equipos, divisiones, roles de capitán y servidor)
 │       │   └── ticket_notice.py              # Entidad TicketNotice (registro de avisos de inactividad de soporte)
 │       ├── repositories/                     # Capa de abstracción y persistencia relacional (patrón Repository)
@@ -310,7 +311,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │   ├── test_roles_cog.py                     # Manejo de interacciones slash en cogs de roles
 │   ├── test_roles_ui.py                      # Interacción de modales y botones de verificación de roles
 │   ├── test_roster_cog.py                    # Comandos slash de asignación de alineaciones y capitanías
-│   ├── test_roster_models.py                 # Modelos DiscordUser, TeamMembership y RosterMovementHistory
+│   ├── test_roster_models.py                 # Modelos DiscordUser, TeamMembership y RosterMovement
 │   ├── test_roster_repositories.py           # Métodos de acceso a datos para gestión de plantillas
 │   ├── test_roster_sync_e2e.py               # Flujo E2E de sincronización de roles de equipo con Discord
 │   ├── test_roster_sync_service.py           # Servicio de conciliación de discrepancias entre Discord y BD
@@ -319,6 +320,7 @@ A continuación se muestra el árbol estructurado del repositorio, con comentari
 │   ├── test_roster_ui_adversarial.py         # Interacciones duplicadas o desincronizadas en UI de roster
 │   ├── test_season_repo.py                   # Resolución de la temporada vigente por fechas de inicio y fin
 │   ├── test_services.py                      # Pruebas unitarias de servicios de dominio
+│   ├── test_shared_schema_alignment.py       # Paridad de esquema compartido, restricciones y coexistencia con RCL-Next
 │   ├── test_staff_permissions_policy.py      # Matriz de la política de autorización del staff
 │   ├── test_suggestion_service.py            # Despacho de sugerencias a canales designados de Discord
 │   ├── test_suggestion_service_resilience.py # Resiliencia ante fallos en envío de sugerencias o canal inválido
@@ -476,7 +478,7 @@ Para especificaciones detalladas de los esquemas JSON y CSV, consulta [docs/arch
 
 ## 🧪 Estrategia de Testing y Calidad
 
-El proyecto cuenta con una infraestructura de pruebas automatizadas determinista y rigurosa en 73 archivos y **1.804 casos de prueba** divididos en 72 suites, de los que 1.798 pasan y 6 se omiten sin `LIGA_BOT_POSTGRES_DSN` (la [suite de PostgreSQL](docs/testing/postgres-suite.md), que cubre lo que PGlite no puede crear):
+El proyecto cuenta con una infraestructura de pruebas automatizadas determinista y rigurosa en 73 archivos y **1.810 casos de prueba** divididos en 72 suites, de los que 1.804 pasan y 6 se omiten sin `LIGA_BOT_POSTGRES_DSN` (la [suite de PostgreSQL](docs/testing/postgres-suite.md), que cubre lo que PGlite no puede crear):
 
 ```bash
 # Ejecución completa de la suite de pruebas
@@ -543,6 +545,6 @@ Toda la documentación técnica se encuentra modularizada bajo el directorio [`d
     - [Persistencia Relacional (`persistence.md`)](docs/features/casters/persistence.md)
 - 🧪 [**Subsistema de Testing (`docs/testing/README.md`)**](docs/testing/README.md):
   - [Estrategia de Pruebas (`strategy.md`)](docs/testing/strategy.md): Pirámide de 4 niveles, fixtures y aislamiento.
-  - [Catálogo de Suites (`suites.md`)](docs/testing/suites.md): Detalle de las 72 suites (1.804 casos) y distribución de pruebas.
+  - [Catálogo de Suites (`suites.md`)](docs/testing/suites.md): Detalle de las 72 suites (1.810 casos) y distribución de pruebas.
   - [Límites de Entorno (`environment-limits.md`)](docs/testing/environment-limits.md): Mitigaciones de buffers de sockets, kernel y PGlite.
   - [Suite de PostgreSQL (`postgres-suite.md`)](docs/testing/postgres-suite.md): Integración contra PostgreSQL real para exclusión competitiva GiST.

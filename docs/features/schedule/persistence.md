@@ -10,7 +10,7 @@ El subsistema de persistencia para el calendario y seguimiento de partidos está
 
 El modelo `Match` representa un enfrentamiento programado entre dos clubes deportivos durante una jornada específica.
 
-- **Ubicación**: `src/liga_bot/models/match.py:29-84`.
+- **Ubicación**: `src/liga_bot/models/match.py:46-208`.
 - **Tabla**: `matches`.
 - **Mixins**:
   - `UUIDPrimaryKeyMixin`: Genera una clave primaria `id` de tipo UUID v4 (`Uuid`).
@@ -24,6 +24,7 @@ class Match(Base, UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin):
     __tablename__ = "matches"
 
     jornada: Mapped[int] = mapped_column(Integer, nullable=False)
+    id_round: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     id_season_division: Mapped[uuid.UUID] = mapped_column(
         Uuid,
         ForeignKey(
@@ -71,13 +72,27 @@ class Match(Base, UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin):
         String(255),
         nullable=True,
     )
+    mvp_player_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey(
+            "players.id",
+            name="matches_mvp_player_id_fkey",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+    )
+    mvp_score: Mapped[Decimal | None] = mapped_column(
+        Numeric(5, 1),
+        nullable=True,
+    )
 ```
 
 | Columna | Tipo SQLAlchemy | Tipo Python | Nulo | Por Defecto | Descripción |
 |---|---|---|:---:|---|---|
 | `id` | `Uuid` | `uuid.UUID` | No | `uuid.uuid4()` | Clave primaria única del partido. |
 | `jornada` | `Integer` | `int` | No | — | Número de jornada a la que pertenece el partido. |
-| `id_season_division` | `Uuid` (FK `seasons_divisions.id`) | `uuid.UUID` | No | — | División de temporada del partido. La propiedad `Match.division` deduce de ella la división competitiva (`PREMIER` o `ASCEND`) sin distinguir mayúsculas; ver [conversión del nombre](../database/enums.md#11-division). |
+| `id_round` | `SmallInteger` | `int \| None` | Sí | `None` | Identificador de jornada del lado web (`rounds.id`). Gobernada por RCL-Next; el bot solo la enlaza cuando existe. |
+| `id_season_division` | `Uuid` (FK `seasons_divisions.id`) | `uuid.UUID` | No | — | División de temporada del partido (`ON DELETE CASCADE`). La propiedad `Match.division` deduce de ella la división competitiva (`PREMIER` o `ASCEND`) sin distinguir mayúsculas; ver [conversión del nombre](../database/enums.md#11-division). |
 | `team1_id` | `Uuid` (FK `teams.id`) | `uuid.UUID` | No | — | Identificador del equipo local. Borrado en cascada (`CASCADE`). |
 | `team2_id` | `Uuid` (FK `teams.id`) | `uuid.UUID` | No | — | Identificador del equipo visitante. Borrado en cascada (`CASCADE`). |
 | `discord_channel_id` | `BigInteger` | `int \| None` | Sí | `None` | Snowflake de 64 bits del canal de Discord creado. Unicidad estricta para valores no nulos. |
@@ -85,6 +100,8 @@ class Match(Base, UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin):
 | `status` | `Enum(MatchStatus, native_enum=True)` | `MatchStatus` | No | `SCHEDULED` | Estado del ciclo de vida operativo del enfrentamiento. |
 | `stream_url` | `Text` | `str \| None` | Sí | `None` | URL de la retransmisión grabada o VOD del partido. |
 | `stream_url_live` | `String(255)` | `str \| None` | Sí | `None` | URL del directo o emisión en vivo del partido. |
+| `mvp_player_id` | `Uuid` (FK `players.id`) | `uuid.UUID \| None` | Sí | `None` | Jugador MVP de la serie gestionado por RCL-Next (`ON DELETE SET NULL`, `matches_mvp_player_id_fkey`). |
+| `mvp_score` | `Numeric(5, 1)` | `Decimal \| None` | Sí | `None` | Puntuación del MVP de la serie gestionada por RCL-Next. |
 | `created_at` | `DateTime(timezone=True)` | `datetime` | No | `now(UTC)` | Fecha de creación del registro. |
 | `updated_at` | `DateTime(timezone=True)` | `datetime` | No | `now()` (`UpdatedAtMixin`) | Fecha de última modificación. |
 
@@ -110,7 +127,7 @@ Definidos en `src/liga_bot/models/enums.py`:
 
 ### 1.3 Relaciones y Carga Eager Asíncrona
 
-El modelo `Match` define dos relaciones bidireccionales con la entidad `Team`:
+El modelo `Match` define dos relaciones bidireccionales con la entidad `Team` (además de `season_division`, `casters` y `caster_cards` en `src/liga_bot/models/match.py:117-153`):
 
 ```python
 team1: Mapped[Team] = relationship(
@@ -131,16 +148,26 @@ La estrategia de carga `lazy="selectin"` ejecuta una consulta SQL secundaria por
 
 ### 1.4 Restricciones DDL e Índices
 
-El modelo declara restricciones a nivel de tabla en `__table_args__` (`src/liga_bot/models/match.py:79-84`):
+El modelo declara la clave foránea de MVP en la definición de `Match.mvp_player_id` (`src/liga_bot/models/match.py:103-111`, y como `sa.ForeignKeyConstraint` en `alembic/versions/0000_initial_shared_tables.py:578-583`) y las restricciones e índices a nivel de tabla en `__table_args__` (`src/liga_bot/models/match.py:154-175`):
 
-1. **`UniqueConstraint("jornada", "team1_id", "team2_id", name="uq_matches_jornada_teams")`**:  
+1. **`ForeignKey("players.id", name="matches_mvp_player_id_fkey", ondelete="SET NULL")`** (en `Match.mvp_player_id`):  
+   Vincula el jugador MVP de la serie con `players.id`; si se elimina el jugador, el partido conserva su resultado con `mvp_player_id = NULL`.
+2. **`UniqueConstraint("jornada", "team1_id", "team2_id", name="uq_matches_jornada_teams")`**:  
    Garantiza que no puedan coexistir dos registros con el mismo enfrentamiento directo en una misma jornada.
-2. **`CheckConstraint("team1_id != team2_id", name="ck_matches_distinct_teams")`**:  
+3. **`CheckConstraint("team1_id != team2_id", name="ck_matches_distinct_teams")`**:  
    Garantiza a nivel de base de datos que un equipo no pueda ser programado contra sí mismo.
-3. **`Index("ix_matches_jornada", "jornada")`**:  
+4. **`CheckConstraint("mvp_score IS NULL OR mvp_score >= 0", name=conv("matches_mvp_score_nonnegative_check"))`**:  
+   Impide almacenar una puntuación de MVP negativa.
+5. **`CheckConstraint("mvp_player_id IS NULL OR mvp_score IS NOT NULL", name=conv("matches_mvp_player_score_check"))`**:  
+   Garantiza que todo partido con `mvp_player_id` asignado tenga una `mvp_score` no nula.
+6. **`Index("ix_matches_jornada", "jornada")`**:  
    Optimiza las consultas de listado de partidos filtradas por jornada.
-4. **`Index("ix_matches_status", "status")`**:  
+7. **`Index("ix_matches_status", "status")`**:  
    Optimiza las consultas de supervisión operativa y estados pendientes.
+8. **`Index("ix_matches_id_season_division", "id_season_division")`**:  
+   Optimiza el filtrado de partidos por división de temporada.
+9. **`Index("matches_round_mvp_score_idx", "id_season_division", "id_round", mvp_score.desc().nulls_last(), postgresql_where=text("status = 'completed' AND mvp_player_id IS NOT NULL"))`**:  
+   Índice parcial para rankings de MVP por división y jornada en partidos completados.
 
 ---
 
