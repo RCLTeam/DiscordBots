@@ -11,6 +11,7 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.sql.elements import conv
 
 from alembic import op
 
@@ -50,7 +51,9 @@ def upgrade() -> None:
     # Escenario de base de datos local o de pruebas limpia:
     # 1. Creación de tipos ENUM nativos si el dialecto es PostgreSQL
     if bind.dialect.name == "postgresql":
-        postgresql.ENUM("viewer", "admin", "owner", name="app_role").create(bind, checkfirst=True)
+        postgresql.ENUM("viewer", "editor", "admin", "owner", name="app_role").create(
+            bind, checkfirst=True
+        )
         postgresql.ENUM(
             "top",
             "jungle",
@@ -182,7 +185,9 @@ def upgrade() -> None:
         sa.Column("avatar_hash", sa.String(length=128), nullable=True),
         sa.Column(
             "role",
-            postgresql.ENUM("viewer", "admin", "owner", name="app_role", create_type=False),
+            postgresql.ENUM(
+                "viewer", "editor", "admin", "owner", name="app_role", create_type=False
+            ),
             server_default="viewer",
             nullable=False,
         ),
@@ -515,6 +520,7 @@ def upgrade() -> None:
         "matches",
         sa.Column("id", sa.Uuid(), primary_key=True, default=uuid.uuid4, nullable=False),
         sa.Column("jornada", sa.Integer(), nullable=False),
+        sa.Column("id_round", sa.SmallInteger(), nullable=True),
         sa.Column("id_season_division", sa.Uuid(), nullable=False),
         sa.Column("team1_id", sa.Uuid(), nullable=False),
         sa.Column("team2_id", sa.Uuid(), nullable=False),
@@ -536,6 +542,8 @@ def upgrade() -> None:
         ),
         sa.Column("stream_url", sa.Text(), nullable=True),
         sa.Column("stream_url_live", sa.String(length=255), nullable=True),
+        sa.Column("mvp_player_id", sa.Uuid(), nullable=True),
+        sa.Column("mvp_score", sa.Numeric(precision=5, scale=1), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -567,14 +575,39 @@ def upgrade() -> None:
             name="fk_matches_team2_id",
             ondelete="CASCADE",
         ),
+        sa.ForeignKeyConstraint(
+            ["mvp_player_id"],
+            ["players.id"],
+            name="matches_mvp_player_id_fkey",
+            ondelete="SET NULL",
+        ),
         sa.UniqueConstraint("discord_channel_id", name="uq_matches_discord_channel_id"),
         sa.UniqueConstraint("jornada", "team1_id", "team2_id", name="uq_matches_jornada_teams"),
         sa.CheckConstraint("team1_id != team2_id", name="ck_matches_distinct_teams"),
+        sa.CheckConstraint(
+            "mvp_score IS NULL OR mvp_score >= 0",
+            name=conv("matches_mvp_score_nonnegative_check"),
+        ),
+        sa.CheckConstraint(
+            "mvp_player_id IS NULL OR mvp_score IS NOT NULL",
+            name=conv("matches_mvp_player_score_check"),
+        ),
     )
     op.create_index("ix_matches_jornada", "matches", ["jornada"], unique=False)
     op.create_index("ix_matches_status", "matches", ["status"], unique=False)
     op.create_index(
         "ix_matches_id_season_division", "matches", ["id_season_division"], unique=False
+    )
+    op.create_index(
+        "matches_round_mvp_score_idx",
+        "matches",
+        [
+            "id_season_division",
+            "id_round",
+            sa.literal_column("mvp_score DESC NULLS LAST"),
+        ],
+        unique=False,
+        postgresql_where=sa.text("status = 'completed' AND mvp_player_id IS NOT NULL"),
     )
 
     # 3. Inserción de semillas por defecto para testing/local
@@ -662,6 +695,6 @@ def downgrade() -> None:
                     "partners",
                 ),
             ),
-            ("app_role", ("viewer", "admin", "owner")),
+            ("app_role", ("viewer", "editor", "admin", "owner")),
         ]:
             postgresql.ENUM(*enum_values, name=enum_name).drop(bind, checkfirst=True)
