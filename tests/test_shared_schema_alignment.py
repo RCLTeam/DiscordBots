@@ -13,7 +13,9 @@ from importlib import util
 from pathlib import Path
 
 import pytest
+from alembic.autogenerate import compare_metadata
 from alembic.config import Config
+from alembic.migration import MigrationContext
 from sqlalchemy import Date, DateTime, inspect, select, text
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import IntegrityError
@@ -22,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 import liga_bot.models  # noqa: F401
 import liga_bot.models.roster  # noqa: F401
 from alembic import command
+from liga_bot.models.alembic_filter import include_object
 from liga_bot.models.base import Base
 from liga_bot.models.enums import AppRole, MatchStatus
 from liga_bot.models.match import Match
@@ -425,7 +428,13 @@ CREATE TABLE "editorial_articles" (
 );--> statement-breakpoint
 CREATE UNIQUE INDEX "team_memberships_unique_captain"
     ON "team_memberships" USING btree ("team_id")
-    WHERE "team_memberships"."is_captain" = true;
+    WHERE "team_memberships"."is_captain" = true;--> statement-breakpoint
+CREATE FUNCTION set_updated_at() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$;
 """,
     "0001_competitive_membership_per_season.sql": """
 LOCK TABLE seasons_divisions, teams, team_memberships
@@ -485,11 +494,59 @@ ALTER TABLE "matches" ADD CONSTRAINT "matches_mvp_player_score_check"
     "0004_editor_role.sql": """
 ALTER TYPE "public"."app_role" ADD VALUE 'editor' BEFORE 'admin';
 """,
+    "0005_crystal_ball.sql": """
+CREATE TABLE "crystal_ball_league_campaigns" (
+    "division_id" uuid PRIMARY KEY NOT NULL,
+    "opens_at" timestamp with time zone NOT NULL,
+    "closes_at" timestamp with time zone NOT NULL,
+    "finalized_at" timestamp with time zone,
+    "results" jsonb DEFAULT '{}'::jsonb NOT NULL,
+    "automatic_results" jsonb DEFAULT '{}'::jsonb NOT NULL,
+    "calculated_at" timestamp with time zone,
+    "resolved_by" varchar(32),
+    "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT "crystal_league_window_check" CHECK (
+        "crystal_ball_league_campaigns"."opens_at" < "crystal_ball_league_campaigns"."closes_at"
+    ),
+    CONSTRAINT "crystal_league_results_check" CHECK (
+        jsonb_typeof("crystal_ball_league_campaigns"."results") = 'object'
+    )
+);--> statement-breakpoint
+CREATE TABLE "crystal_ball_league_entries" (
+    "division_id" uuid NOT NULL,
+    "discord_user_id" varchar(32) NOT NULL,
+    "answers" jsonb NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT "crystal_ball_league_entries_division_id_discord_user_id_pk"
+        PRIMARY KEY("division_id","discord_user_id"),
+    CONSTRAINT "crystal_league_answers_check" CHECK (
+        jsonb_typeof("crystal_ball_league_entries"."answers") = 'object'
+    )
+);--> statement-breakpoint
+ALTER TABLE "crystal_ball_league_campaigns" ADD CONSTRAINT "crystal_campaign_division_fk"
+    FOREIGN KEY ("division_id") REFERENCES "public"."seasons_divisions"("id")
+    ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "crystal_ball_league_campaigns" ADD CONSTRAINT "crystal_campaign_resolver_fk"
+    FOREIGN KEY ("resolved_by") REFERENCES "public"."discord_users"("discord_id")
+    ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "crystal_ball_league_entries" ADD CONSTRAINT "crystal_entry_campaign_fk"
+    FOREIGN KEY ("division_id") REFERENCES "public"."crystal_ball_league_campaigns"("division_id")
+    ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "crystal_ball_league_entries" ADD CONSTRAINT "crystal_entry_user_fk"
+    FOREIGN KEY ("discord_user_id") REFERENCES "public"."discord_users"("discord_id")
+    ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "crystal_league_entries_user_idx"
+    ON "crystal_ball_league_entries" USING btree ("discord_user_id");--> statement-breakpoint
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON crystal_ball_league_campaigns
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();--> statement-breakpoint
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON crystal_ball_league_entries
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+""",
 }
 
 
 def _load_rcl_next_drizzle_statements() -> list[str]:
-    """Carga las sentencias SQL de las migraciones 0000..0004 de RCL-Next (MergeBranch).
+    """Carga las sentencias SQL de las migraciones 0000..0005 de RCL-Next (MergeBranch).
 
     Lee los ficheros reales de ``RCL-Next/packages/database/drizzle`` cuando están
     presentes en el entorno local y recurre al respaldo canónico en CI (donde solo se
@@ -553,7 +610,7 @@ async def _restore_migrated_db_state(migrated_db: AsyncEngine) -> None:
 async def test_web_mergebranch_migrations_then_discord_bot_migrations_coexist_on_pglite(
     migrated_db: AsyncEngine,
 ):
-    """Aplicar las migraciones de RCL-Next (MergeBranch 0000..0004) y después las de
+    """Aplicar las migraciones de RCL-Next (MergeBranch 0000..0005) y después las de
     DiscordBots (0000..0004) sobre la misma instancia de PGlite no lanza errores ni
     altera tablas, columnas o datos exclusivos de la web.
     """
@@ -637,6 +694,21 @@ async def test_web_mergebranch_migrations_then_discord_bot_migrations_coexist_on
                 ),
                 {"id": article_id},
             )
+            await conn.execute(
+                text(
+                    "INSERT INTO crystal_ball_league_campaigns (division_id, opens_at, closes_at) "
+                    "VALUES (:sd, now(), now() + interval '1 day')"
+                ),
+                {"sd": sd_id},
+            )
+            await conn.execute(
+                text(
+                    "INSERT INTO crystal_ball_league_entries "
+                    "(division_id, discord_user_id, answers) "
+                    "VALUES (:sd, '900000000000000001', '{\"winner\": [\"g2\"]}'::jsonb)"
+                ),
+                {"sd": sd_id},
+            )
 
             # Ejecutar todas las migraciones de DiscordBots (0000 -> 0004) sobre el esquema web
             def _run_bot_migrations(sync_conn):
@@ -658,6 +730,29 @@ async def test_web_mergebranch_migrations_then_discord_bot_migrations_coexist_on
                 )
             ).scalar_one()
             assert article_title == "Crónica J1"
+
+            crystal_answers = (
+                await conn.execute(
+                    text(
+                        "SELECT answers FROM crystal_ball_league_entries "
+                        "WHERE division_id = :sd AND discord_user_id = '900000000000000001'"
+                    ),
+                    {"sd": sd_id},
+                )
+            ).scalar_one()
+            assert crystal_answers == {"winner": ["g2"]}
+
+            def _crystal_tables_to_drop(sync_conn):
+                context = MigrationContext.configure(
+                    sync_conn, opts={"include_object": include_object}
+                )
+                return [
+                    change[1].name
+                    for change in compare_metadata(context, Base.metadata)
+                    if change[0] == "remove_table" and change[1].name.startswith("crystal_ball_")
+                ]
+
+            assert await conn.run_sync(_crystal_tables_to_drop) == []
 
             web_match_row = (
                 await conn.execute(
