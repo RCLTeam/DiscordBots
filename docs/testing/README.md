@@ -6,7 +6,7 @@
 
 ## Resumen Ejecutivo
 
-El subsistema de pruebas de `DiscordBots` proporciona una infraestructura de verificación exhaustiva, determinista y de alta fidelidad relacional. Con un total de **1.804 casos de prueba** distribuidos en **73 archivos** (72 suites de test más `tests/conftest.py`), de los que **1.798 pasan** y **6 se omiten** sin `LIGA_BOT_POSTGRES_DSN`, el conjunto valida desde la lógica pura en memoria hasta condiciones extremas de concurrencia y límites del kernel del sistema operativo.
+El subsistema de pruebas de `DiscordBots` proporciona una infraestructura de verificación exhaustiva, determinista y de alta fidelidad relacional. Con un total de **1.810 casos de prueba** distribuidos en **73 archivos** (72 suites de test más `tests/conftest.py`), de los que **1.804 pasan** y **6 se omiten** sin `LIGA_BOT_POSTGRES_DSN`, el conjunto valida desde la lógica pura en memoria hasta condiciones extremas de concurrencia y límites del kernel del sistema operativo.
 
 El stack de pruebas se ejecuta de forma hermética utilizando **PGlite** (`py-pglite[sqlalchemy]`), una compilación WebAssembly/C de PostgreSQL sobre sockets UNIX locales, eliminando la necesidad de contenedores Docker externos o servicios de base de datos remotos y garantizando compatibilidad 100% con tipos y restricciones nativas de PostgreSQL.
 
@@ -29,7 +29,7 @@ El stack de pruebas se ejecuta de forma hermética utilizando **PGlite** (`py-pg
 # Recolección e inventario de casos de prueba
 uv run pytest --collect-only -q
 
-# Ejecución completa de la suite (1.804 tests recolectados: 1.798 pasan, 6 omitidos sin LIGA_BOT_POSTGRES_DSN)
+# Ejecución completa de la suite (1.810 tests recolectados: 1.804 pasan, 6 omitidos sin LIGA_BOT_POSTGRES_DSN)
 uv run pytest
 
 # Ejecución de suites críticas de límites de entorno y resiliencia

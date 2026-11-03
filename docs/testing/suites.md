@@ -6,7 +6,7 @@
 
 ## 1. Inventario General de la Suite
 
-El repositorio `DiscordBots` cuenta con un total de **1.804 pruebas automatizadas** distribuidas a lo largo de **72 archivos de test** más el módulo raíz de fixtures (`tests/conftest.py`), sumando 73 archivos en total.
+El repositorio `DiscordBots` cuenta con un total de **1.810 pruebas automatizadas** distribuidas a lo largo de **72 archivos de test** más el módulo raíz de fixtures (`tests/conftest.py`), sumando 73 archivos en total.
 
 La recolección completa de casos de prueba con `uv run pytest --collect-only -q` toma **0.49 segundos**, y la ejecución íntegra de la suite insume aproximadamente **~41.3 segundos** en una estación Linux x86_64 estándar.
 
@@ -15,17 +15,17 @@ La recolección completa de casos de prueba con `uv run pytest --collect-only -q
 | Métrica | Valor Medido |
 |---|---|
 | **Total de Archivos de Test** | 72 archivos (`tests/test_*.py`) + `tests/conftest.py` (73 archivos en total) |
-| **Total de Casos de Prueba** | 1.804 tests recolectados: 1.798 pasan y 6 se omiten sin `LIGA_BOT_POSTGRES_DSN` (ver [suite de PostgreSQL](postgres-suite.md)) |
-| **Líneas de Código de Pruebas (LoC)** | 33.982 LoC totales (27.014 LoC netas) |
+| **Total de Casos de Prueba** | 1.810 tests recolectados: 1.804 pasan y 6 se omiten sin `LIGA_BOT_POSTGRES_DSN` (ver [suite de PostgreSQL](postgres-suite.md)) |
+| **Líneas de Código de Pruebas (LoC)** | 49.333 LoC totales (49.239 LoC en `tests/test_*.py` + 94 LoC en `tests/conftest.py`; 39.415 LoC netas) |
 | **Tiempo de Recolección (pytest collect)** | ~0.49 s |
 | **Tiempo de Ejecución Completa** | ~41.3 s |
-| **Tasa de Aprobación** | 100% (1.798 pasados, 6 omitidos sin PostgreSQL externo, 0 fallos, 0 errores) |
+| **Tasa de Aprobación** | 100% (1.804 pasados, 6 omitidos sin PostgreSQL externo, 0 fallos, 0 errores) |
 
 ---
 
 ## 2. Catálogo Exhaustivo por Nivel de la Pirámide
 
-### 2.1 Nivel 1: Unit Suites (22 archivos | 524 tests | 11.986 LoC)
+### 2.1 Nivel 1: Unit Suites (28 archivos | 656 tests | 12.690 LoC)
 
 Pruebas en memoria con mocks puros, tiempo submilisegundo por test, sin interacción con bases de datos ni sockets de red.
 
@@ -63,7 +63,7 @@ Pruebas en memoria con mocks puros, tiempo submilisegundo por test, sin interacc
 
 ---
 
-### 2.2 Nivel 2: Integration & End-to-End Suites (6 archivos | 171 tests | 5.853 LoC)
+### 2.2 Nivel 2: Integration & End-to-End Suites (8 archivos | 207 tests | 6.875 LoC)
 
 Pruebas sobre el motor real PostgreSQL (PGlite) migrado con Alembic o integración completa de flujos inter-servicio.
 
@@ -75,9 +75,9 @@ Pruebas sobre el motor real PostgreSQL (PGlite) migrado con Alembic o integraci�
 | `tests/test_bot_bridge_lifecycle.py` | 7 | 288 | Arranque conjunto de `LigaBot` y `WebsocketBridgeService`, inyección de dependencias y apagado coordinado. |
 | `tests/test_role_verification_e2e.py` | 16 | 1.152 | Flujo E2E completo: comando `/pedir-rol` -> mensaje embed a canal staff -> botón de aprobación -> asignación de rol y base de datos. |
 | `tests/test_roster_sync_e2e.py` | 9 | 1.307 | Flujo E2E de sincronización: evento Discord `on_member_update` -> sincronización de plantilla -> registro de movimiento y auditoría. |
-| `tests/test_shared_schema_alignment.py` | 14 | 90 | Modelos frente a las tablas compartidas migradas (`0000_initial_shared_tables`): columnas, tipos y nulabilidad por reflexión, `Date` en `seasons`, `updated_at` en `matches` y `teams`, y `teams.name` de 120 caracteres. |
+| `tests/test_shared_schema_alignment.py` | 30 | 824 | Modelos frente a las tablas compartidas migradas (`0000_initial_shared_tables`, `0002_match_round`, `0004_match_mvp_and_editor_role`): columnas, tipos y nulabilidad por reflexión, restricciones de temporada y MVP, orden de `app_role`, idempotencia de `0004` y coexistencia completa con las migraciones Drizzle de `RCL-Next` (`MergeBranch`) en PGlite. |
 | `tests/test_alembic_logging.py` | 1 | 30 | Aplicar las migraciones (`migrated_db`) no desactiva `liga_bot.bot` y `caplog` sigue recibiendo sus registros. |
-| **Subtotal Integration** | **171** | **5.853** | |
+| **Subtotal Integration** | **207** | **6.875** | |
 
 ---
 
@@ -96,7 +96,7 @@ Pruebas de estrés temporal, fallos de red simulados, contención de sockets y c
 
 ---
 
-### 2.4 Nivel 4: Adversarial Challenge Suites (16 archivos | 333 tests | 12.758 LoC)
+### 2.4 Nivel 4: Adversarial Challenge Suites (16 archivos | 335 tests | 12.829 LoC + `conftest.py` 94 LoC)
 
 Pruebas destructivas diseñadas para vulnerar restricciones de base de datos, corromper transacciones o exceder límites del sistema operativo.
 
@@ -118,9 +118,9 @@ Pruebas destructivas diseñadas para vulnerar restricciones de base de datos, co
 | `tests/test_adversarial_ticket_and_cli.py` | 16 | 972 | Excepciones deliberadas en semillas CLI y desbordamientos en avisos de tickets. |
 | `tests/test_adversarial_cog_boundaries.py` | 20 | 830 | Límites perimetrales de cogs (`TeamsCog` y `TicketsCog`). |
 | `tests/test_adversarial_cogs.py` | 14 | 878 | Comportamientos ante fallos de permisos perimetrales y guild desincronizado. |
-| `tests/conftest.py` | - | 80 | Módulo raíz de fixtures globales: sesión PGlite, mocks de Discord, factory de sesiones y limpieza de tablas. |
-| **Subtotal Adversarial** | **335** | **12.829** | |
-| **TOTAL GENERAL** | **1.138** | **33.982** | **49 archivos de test (33.902 LoC) + conftest.py (80 LoC) = 50 archivos** |
+| `tests/conftest.py` | - | 94 | Módulo raíz de fixtures globales: sesión PGlite, mocks de Discord, factory de sesiones y limpieza de tablas. |
+| **Subtotal Adversarial** | **335** | **12.829** | **16 archivos de test (12.829 LoC) + `conftest.py` (94 LoC)** |
+| **TOTAL GENERAL (Repositorio)** | **1.810** | **49.333** | **72 archivos de test (49.239 LoC) + `conftest.py` (94 LoC) = 73 archivos** |
 
 ---
 
@@ -153,7 +153,7 @@ Para mantener la uniformidad en una base de código de más de 33.000 líneas de
 # Recolección rápida de casos sin ejecución (verificar conteo)
 uv run pytest --collect-only -q
 
-# Ejecución completa de toda la suite (1.804 tests)
+# Ejecución completa de toda la suite (1.810 tests)
 uv run pytest
 
 # Ejecución con resumen compacto mostrando porcentaje de avance

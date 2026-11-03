@@ -59,7 +59,7 @@ class Base(DeclarativeBase):
 
 ### 1.4 Alineación con las tablas compartidas
 
-Las tablas compartidas las crea la migración `alembic/versions/0000_initial_shared_tables.py` en las bases de datos locales y de tests (en producción ya existen y la migración no hace nada), reproduciendo el esquema de RCL-Next. Los modelos describen esas tablas con las mismas columnas, tipos y nulabilidad: `tests/test_shared_schema_alignment.py` lo comprueba tabla a tabla por reflexión sobre la base de datos migrada. No compara valores por defecto ni nombres de índices o restricciones.
+Las tablas compartidas las crea la migración `alembic/versions/0000_initial_shared_tables.py` en las bases de datos limpias locales y de tests (en producción ya existen y la migración las omite), reproduciendo el esquema de RCL-Next, mientras que `0002_match_round.py` y `0004_match_mvp_and_editor_role.py` aseguran de forma defensiva e idempotente `id_round`, `mvp_player_id`, `mvp_score`, sus restricciones/índice parcial y el valor `'editor'` en `app_role` sin sobrescribir los objetos ya creados por RCL-Next. Los modelos describen esas tablas con las mismas columnas, tipos y nulabilidad: `tests/test_shared_schema_alignment.py` comprueba tabla a tabla la paridad de columnas, tipos y nulabilidad por reflexión, las restricciones declaradas y migradas, y la coexistencia completa de migraciones `RCL-Next` (`MergeBranch`) -> `DiscordBots` sobre PGlite.
 
 `Season` (`seasons`, en `src/liga_bot/models/roster.py`) declara `starts_on` y `ends_on` como `Date` (`Mapped[date | None]`), igual que la tabla.
 
@@ -79,7 +79,7 @@ Representa la identidad base de un usuario de Discord autenticado en el ecosiste
 | `username` | `String(64)` | `varchar(64)` | No | — | Nombre de usuario en Discord. |
 | `global_name` | `String(64)` | `varchar(64)` | Sí | `None` | Nombre global o apodo visible. |
 | `avatar_hash` | `String(128)` | `varchar(128)` | Sí | `None` | Hash del avatar en CDN de Discord. |
-| `role` | `Enum(AppRole)` | `app_role` | No | `AppRole.VIEWER` / `'viewer'` | Nivel de privilegio (`viewer`, `admin` u `owner`). |
+| `role` | `Enum(AppRole)` | `app_role` | No | `AppRole.VIEWER` / `'viewer'` | Nivel de privilegio (`viewer`, `editor`, `admin` u `owner`). |
 | `created_at` | `DateTime(timezone=True)` | `timestamptz` | No | `func.now()` | Fecha de creación del registro. |
 | `updated_at` | `DateTime(timezone=True)` | `timestamptz` | No | `func.now()` (`onupdate=func.now()`) | Fecha de última modificación. |
 
@@ -144,10 +144,11 @@ Representa un club o equipo participante en las competiciones de la liga.
 - `ForeignKeyConstraint(["season_division_id", "season_name"], ["seasons_divisions.id", "seasons_divisions.season_name"], name="teams_season_division_season_fkey", onupdate="CASCADE", ondelete="CASCADE")`: ata el equipo a la temporada de su división. El `ON UPDATE CASCADE` propaga el renombrado de la temporada.
 - `Index("ix_teams_season_division_id", "season_division_id")`: Filtrado indexado por división de temporada.
 
-**Relaciones ORM:**
-- `home_matches: Mapped[list[Match]]`: Partidos en los que compite como local (`team1`), con `cascade="all, delete-orphan"`, `passive_deletes=True` y `lazy="selectin"`.
-- `away_matches: Mapped[list[Match]]`: Partidos en los que compite como visitante (`team2`), con `cascade="all, delete-orphan"`, `passive_deletes=True` y `lazy="selectin"`.
-- `memberships: Mapped[list[TeamMembership]]`: Plantilla activa de jugadores y cuerpo técnico (`back_populates="team"`, `cascade="all, delete-orphan"`, `passive_deletes=True`).
+**Relaciones ORM (`src/liga_bot/models/team.py:66-86` y `src/liga_bot/models/roster.py:517-529`):**
+- `season_division: Mapped[SeasonDivision]`: División de temporada del equipo (`lazy="joined"`, `foreign_keys=[season_division_id]`).
+- `home_matches: Mapped[list[Match]]`: Partidos en los que compite como local (`team1`), con `foreign_keys="[Match.team1_id]"`, `back_populates="team1"`, `passive_deletes=True` y `lazy="select"`.
+- `away_matches: Mapped[list[Match]]`: Partidos en los que compite como visitante (`team2`), con `foreign_keys="[Match.team2_id]"`, `back_populates="team2"`, `passive_deletes=True` y `lazy="select"`.
+- `memberships: Mapped[list[TeamMembership]]`: Plantilla activa de jugadores y cuerpo técnico (`back_populates="team"`, `cascade="all, delete-orphan"`, `passive_deletes=True`, `foreign_keys="[TeamMembership.team_id]"`).
 - `movements: Mapped[list[RosterMovement]]`: Historial cronológico de cambios de plantilla (`back_populates="team"`, `cascade="all, delete-orphan"`, `passive_deletes=True`).
 
 ---
@@ -262,7 +263,7 @@ Monitorea la actividad de los canales de soporte (tickets) para disparar avisos 
 
 ### 2.8 `Match` (`matches`)
 *Archivo fuente:* `src/liga_bot/models/match.py`  
-*Gobernanza:* Compartida con RCL-Next (creada en local y en tests por `0000_initial_shared_tables.py`; `0002_match_round.py` solo añade `id_round` cuando falta).
+*Gobernanza:* Compartida con RCL-Next (creada en local y en tests por `0000_initial_shared_tables.py`; `0002_match_round.py` asegura `id_round` cuando falta y `0004_match_mvp_and_editor_role.py` asegura `mvp_player_id`, `mvp_score`, su clave foránea, restricciones `CHECK` e índice parcial).
 
 Representa un enfrentamiento competitivo programado entre dos clubes dentro de una jornada.
 
@@ -270,26 +271,37 @@ Representa un enfrentamiento competitivo programado entre dos clubes dentro de u
 |---|---|---|:---:|---|---|
 | `id` | `Uuid` | `uuid` | No | `uuid.uuid4` (PK Mixin) | Clave primaria universal v4. |
 | `jornada` | `Integer` | `integer` | No | — | Número ordinal de la jornada competitiva. |
-| `id_season_division` | `Uuid` | `uuid` | No | — | FK a `seasons_divisions.id` (`ON DELETE CASCADE`). La propiedad `Match.division` deduce de ella la división en la que se disputa el partido; ver [conversión del nombre](./enums.md#11-division). |
-| `team1_id` | `Uuid` | `uuid` | No | — | FK a `teams.id` (`ON DELETE CASCADE`) del equipo local. |
-| `team2_id` | `Uuid` | `uuid` | No | — | FK a `teams.id` (`ON DELETE CASCADE`) del visitante. |
+| `id_round` | `SmallInteger` | `smallint` | Sí | `None` | Identificador de jornada del lado web (`rounds.id`). Gobernada por RCL-Next; el bot solo la enlaza cuando existe. |
+| `id_season_division` | `Uuid` | `uuid` | No | — | FK a `seasons_divisions.id` (`ON DELETE CASCADE`, `fk_matches_id_season_division`). La propiedad `Match.division` deduce de ella la división en la que se disputa el partido; ver [conversión del nombre](./enums.md#11-division). |
+| `team1_id` | `Uuid` | `uuid` | No | — | FK a `teams.id` (`ON DELETE CASCADE`, `fk_matches_team1_id`) del equipo local. |
+| `team2_id` | `Uuid` | `uuid` | No | — | FK a `teams.id` (`ON DELETE CASCADE`, `fk_matches_team2_id`) del visitante. |
 | `discord_channel_id` | `BigInteger` | `bigint` | Sí | `None` (Unique) | Canal de texto privado asignado al partido. |
 | `scheduled_at` | `DateTime(timezone=True)` | `timestamptz` | Sí | `None` | Fecha y hora programada de la partida. |
 | `status` | `Enum(MatchStatus)` | `match_status` | No | `SCHEDULED` / `'scheduled'` | Estado operativo (`SCHEDULED`, `LIVE`, `COMPLETED`, `CANCELLED`, `FORFEIT`). |
 | `stream_url` | `Text` | `text` | Sí | `None` | URL de la retransmisión grabada o VOD del partido. |
 | `stream_url_live` | `String(255)` | `varchar(255)` | Sí | `None` | URL del directo o retransmisión en vivo del partido (Twitch, YouTube Live, etc.). |
+| `mvp_player_id` | `Uuid` | `uuid` | Sí | `None` | FK a `players.id` (`ON DELETE SET NULL`, `matches_mvp_player_id_fkey`). Jugador MVP de la serie gestionado por RCL-Next. |
+| `mvp_score` | `Numeric(5, 1)` | `numeric(5, 1)` | Sí | `None` | Puntuación del MVP de la serie gestionada por RCL-Next. |
 | `created_at` | `DateTime(timezone=True)` | `timestamptz` | No | `func.now()` (Timestamp Mixin) | Fecha de creación del emparejamiento. |
 | `updated_at` | `DateTime(timezone=True)` | `timestamptz` | No | `func.now()` (`onupdate=func.now()`, UpdatedAt Mixin) | Fecha de última modificación; en producción la actualiza el trigger `set_updated_at` de RCL-Next. |
 
 **Restricciones DDL e Índices:**
+- `ForeignKey("players.id", name="matches_mvp_player_id_fkey", ondelete="SET NULL")` (en `Match.mvp_player_id`, `src/liga_bot/models/match.py:103-111`, y `sa.ForeignKeyConstraint` en `0000_initial_shared_tables.py:578-583`): Vincula el jugador MVP de la serie con `players.id`; si el jugador se elimina, conserva el partido poniendo `mvp_player_id` a `NULL`.
 - `UniqueConstraint("jornada", "team1_id", "team2_id", name="uq_matches_jornada_teams")`: Impide duplicar el mismo enfrentamiento en una misma jornada.
 - `CheckConstraint("team1_id != team2_id", name="ck_matches_distinct_teams")`: Valida a nivel de base de datos que un equipo no pueda enfrentarse a sí mismo.
+- `CheckConstraint("mvp_score IS NULL OR mvp_score >= 0", name=conv("matches_mvp_score_nonnegative_check"))`: Impide puntuaciones negativas de MVP.
+- `CheckConstraint("mvp_player_id IS NULL OR mvp_score IS NOT NULL", name=conv("matches_mvp_player_score_check"))`: Exige que todo partido con `mvp_player_id` asignado tenga una `mvp_score` no nula.
 - `Index("ix_matches_jornada", "jornada")`: Optimiza listados por fecha competitiva.
 - `Index("ix_matches_status", "status")`: Acelera la búsqueda de partidos pendientes o con canales activos.
+- `Index("ix_matches_id_season_division", "id_season_division")`: Optimiza el filtrado de partidos por división de temporada.
+- `Index("matches_round_mvp_score_idx", "id_season_division", "id_round", mvp_score.desc().nulls_last(), postgresql_where=text("status = 'completed' AND mvp_player_id IS NOT NULL"))`: Índice parcial para rankings de MVP por división y jornada en partidos completados.
 
-**Relaciones ORM:**
-- `team1: Mapped[Team]`: Equipo local (`back_populates="home_matches"`, `lazy="selectin"`).
-- `team2: Mapped[Team]`: Equipo visitante (`back_populates="away_matches"`, `lazy="selectin"`).
+**Relaciones ORM (`src/liga_bot/models/match.py:117-153`):**
+- `season_division: Mapped[SeasonDivision]`: División de temporada asociada (`foreign_keys=[id_season_division]`, `lazy="joined"`).
+- `team1: Mapped[Team]`: Equipo local (`foreign_keys=[team1_id]`, `back_populates="home_matches"`, `lazy="selectin"`).
+- `team2: Mapped[Team]`: Equipo visitante (`foreign_keys=[team2_id]`, `back_populates="away_matches"`, `lazy="selectin"`).
+- `casters: Mapped[list[MatchCaster]]`: Asignaciones de casters y streamers del partido (`back_populates="match"`, `cascade="all, delete-orphan"`, `passive_deletes=True`, `lazy="selectin"`).
+- `caster_cards: Mapped[list[MatchCasterCard]]`: Tarjetas publicadas en el panel de casters (`back_populates="match"`, `cascade="all, delete-orphan"`, `passive_deletes=True`, `lazy="selectin"`).
 
 ---
 
@@ -331,5 +343,5 @@ Registro de auditoría transaccional para operaciones críticas y cambios de est
 | `RosterMovement` | `roster_movements` | `Uuid` | `teams.id` (CASCADE), `discord_users.discord_id` (CASCADE), `actor_id` (SET NULL) | Ledger append-only |
 | `RoleRequest` | `role_requests` | `Integer` (Autoincrement) | Ninguna | Snowflakes en `user_id`, `canal_id`, `staff_id` |
 | `TicketNotice` | `ticket_notices` | `Uuid` | Ninguna | Unique `discord_channel_id` |
-| `Match` | `matches` | `Uuid` | `team1_id -> teams.id` (CASCADE), `team2_id -> teams.id` (CASCADE) | Check `team1_id != team2_id`, Unique (`jornada`, `team1_id`, `team2_id`), Unique `discord_channel_id` |
+| `Match` | `matches` | `Uuid` | `id_season_division -> seasons_divisions.id` (CASCADE), `team1_id -> teams.id` (CASCADE), `team2_id -> teams.id` (CASCADE), `mvp_player_id -> players.id` (SET NULL) | Check `team1_id != team2_id`, Checks `matches_mvp_score_nonnegative_check` y `matches_mvp_player_score_check`, Unique (`jornada`, `team1_id`, `team2_id`), Unique `discord_channel_id`, Índice parcial `matches_round_mvp_score_idx` |
 | `AuditLog` | `audit_logs` | `Uuid` | `actor_discord_user_id -> discord_users.discord_id` (SET NULL) | Snapshots `JSONB` (`before`, `after`) |

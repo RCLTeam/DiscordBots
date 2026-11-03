@@ -15,32 +15,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from liga_bot.models import Base, Division, Match, MatchStatus, Team, TicketNotice
-
-# Conjunto canónico de tablas compartidas gobernadas por RCL-Next
-SHARED_TABLES: set[str] = {
-    "teams",
-    "matches",
-    "seasons",
-    "divisions",
-    "seasons_divisions",
-    "discord_users",
-    "players",
-    "team_memberships",
-    "roster_movements",
-    "audit_logs",
-}
-
-
-def include_object(object, name: str | None, type_: str, reflected: bool, compare_to) -> bool:
-    """Excluye tablas compartidas gobernadas por RCL-Next de las migraciones y comparación."""
-    if type_ == "table" and name in SHARED_TABLES:
-        return False
-    table = getattr(object, "table", None)
-    if table is not None:
-        table_name = getattr(table, "name", None)
-        if table_name in SHARED_TABLES:
-            return False
-    return True
+from liga_bot.models.alembic_filter import SHARED_TABLES, WEB_ONLY_TABLES, include_object
 
 
 @pytest_asyncio.fixture
@@ -76,8 +51,9 @@ class TestMetadataAndParity:
         assert expected_tables.issubset(set(Base.metadata.tables.keys()))
 
     def test_include_object_filters_shared_tables(self):
-        """Verifica que include_object excluya correctamente las 10 tablas compartidas."""
-        for table_name in SHARED_TABLES:
+        """Verifica que include_object excluya las tablas gobernadas por RCL-Next."""
+        assert len(SHARED_TABLES) == 10
+        for table_name in SHARED_TABLES | WEB_ONLY_TABLES:
             assert include_object(None, table_name, "table", False, None) is False
             assert include_object(None, table_name, "table", True, None) is False
 

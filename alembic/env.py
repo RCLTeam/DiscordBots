@@ -4,7 +4,6 @@ import sys
 from logging.config import fileConfig
 from pathlib import Path
 
-import sqlalchemy as sa
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
@@ -16,6 +15,8 @@ SRC_PATH = str(Path(__file__).resolve().parent.parent / "src")
 if SRC_PATH in sys.path:
     sys.path.remove(SRC_PATH)
 sys.path.insert(0, SRC_PATH)
+
+from liga_bot.models.alembic_filter import include_object  # noqa: E402
 
 # Importar configuración de Alembic
 config = context.config
@@ -54,41 +55,6 @@ except ImportError:
             target_metadata = Base.metadata
         except ImportError:
             target_metadata = None
-
-# Tablas compartidas cuya gobernanza pertenece exclusivamente a RCL-Next (Drizzle ORM).
-# Quedan estrictamente excluidas de las migraciones y autogenerate de Alembic en DiscordBots.
-SHARED_TABLES: set[str] = {
-    "teams",
-    "matches",
-    "seasons",
-    "divisions",
-    "seasons_divisions",
-    "discord_users",
-    "players",
-    "team_memberships",
-    "roster_movements",
-    "audit_logs",
-}
-
-
-def include_object(
-    object,
-    name: str | None,
-    type_: str,
-    reflected: bool,
-    compare_to,
-) -> bool:
-    """Excluye tablas compartidas de RCL-Next y objetos asociados de Alembic."""
-    if type_ == "table" and name in SHARED_TABLES:
-        return False
-    if isinstance(object, sa.Table) and getattr(object, "name", None) in SHARED_TABLES:
-        return False
-    table = getattr(object, "table", None)
-    if table is not None:
-        table_name = getattr(table, "name", None)
-        if table_name in SHARED_TABLES:
-            return False
-    return True
 
 
 def get_database_url() -> str:

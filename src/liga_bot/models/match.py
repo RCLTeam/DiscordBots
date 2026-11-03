@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
@@ -14,13 +15,16 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     SmallInteger,
     String,
     Text,
     UniqueConstraint,
     Uuid,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.sql.elements import conv
 
 from liga_bot.models.base import Base, TimestampMixin, UpdatedAtMixin, UUIDPrimaryKeyMixin
 from liga_bot.models.enums import (
@@ -95,6 +99,20 @@ class Match(Base, UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin):
         String(255),
         nullable=True,
     )
+    # Jugador MVP y puntuación de serie gestionados por RCL-Next:
+    mvp_player_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey(
+            "players.id",
+            name="matches_mvp_player_id_fkey",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+    )
+    mvp_score: Mapped[Decimal | None] = mapped_column(
+        Numeric(5, 1),
+        nullable=True,
+    )
 
     # Relación con la división de temporada
     season_division: Mapped[SeasonDivision] = relationship(
@@ -136,9 +154,24 @@ class Match(Base, UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin):
     __table_args__ = (
         UniqueConstraint("jornada", "team1_id", "team2_id", name="uq_matches_jornada_teams"),
         CheckConstraint("team1_id != team2_id", name="ck_matches_distinct_teams"),
+        CheckConstraint(
+            "mvp_score IS NULL OR mvp_score >= 0",
+            name=conv("matches_mvp_score_nonnegative_check"),
+        ),
+        CheckConstraint(
+            "mvp_player_id IS NULL OR mvp_score IS NOT NULL",
+            name=conv("matches_mvp_player_score_check"),
+        ),
         Index("ix_matches_jornada", "jornada"),
         Index("ix_matches_status", "status"),
         Index("ix_matches_id_season_division", "id_season_division"),
+        Index(
+            "matches_round_mvp_score_idx",
+            "id_season_division",
+            "id_round",
+            mvp_score.desc().nulls_last(),
+            postgresql_where=text("status = 'completed' AND mvp_player_id IS NOT NULL"),
+        ),
     )
 
     def __init__(

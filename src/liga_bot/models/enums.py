@@ -112,6 +112,7 @@ class AppRole(str, enum.Enum):
     """Rol de aplicación en la plataforma RCL (alineado con app_role en RCL-Next)."""
 
     VIEWER = "viewer"
+    EDITOR = "editor"
     ADMIN = "admin"
     OWNER = "owner"
 
